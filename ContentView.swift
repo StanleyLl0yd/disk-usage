@@ -1,6 +1,25 @@
 import SwiftUI
 import AppKit
 
+enum SortOption: String, CaseIterable, Identifiable {
+    case sizeDescending
+    case sizeAscending
+    case name
+
+    var id: Self { self }
+
+    var localizedTitle: String {
+        switch self {
+        case .sizeDescending:
+            return String(localized: "sort.sizeDescending", defaultValue: "Size ↓")
+        case .sizeAscending:
+            return String(localized: "sort.sizeAscending", defaultValue: "Size ↑")
+        case .name:
+            return String(localized: "sort.name", defaultValue: "Name")
+        }
+    }
+}
+
 func formatBytes(_ bytes: Int64) -> String {
     let units = ["B", "KB", "MB", "GB", "TB"]
     var value = Double(bytes)
@@ -25,6 +44,20 @@ func formatPercent(part: Int64, total: Int64) -> String {
 struct ContentView: View {
     @StateObject var viewModel: DiskScannerViewModel
     @State private var navigationStack: [URL] = []
+    @State private var sortOption: SortOption = .sizeDescending
+
+    private var sortedItems: [FolderUsage] {
+        switch sortOption {
+        case .sizeDescending:
+            return viewModel.items.sorted { $0.size > $1.size }
+        case .sizeAscending:
+            return viewModel.items.sorted { $0.size < $1.size }
+        case .name:
+            return viewModel.items.sorted {
+                $0.url.path.localizedCaseInsensitiveCompare($1.url.path) == .orderedAscending
+            }
+        }
+    }
 
     var body: some View {
         VStack(spacing: 8) {
@@ -73,13 +106,13 @@ struct ContentView: View {
         HStack(spacing: 12) {
             Text(viewModel.status)
                 .font(.caption)
-            .foregroundColor(.secondary)
+                .foregroundColor(.secondary)
 
             Spacer()
 
             Picker(
                 String(localized: "picker.sort", defaultValue: "Sort"),
-                selection: $viewModel.sortOption
+                selection: $sortOption
             ) {
                 ForEach(SortOption.allCases) { option in
                     Text(option.localizedTitle).tag(option)
@@ -125,7 +158,7 @@ struct ContentView: View {
 
     private var listView: some View {
         List {
-            if viewModel.sortedItems().isEmpty && !viewModel.isScanning {
+            if sortedItems.isEmpty && !viewModel.isScanning {
                 Section {
                     Text(
                         String(
@@ -144,7 +177,7 @@ struct ContentView: View {
                         defaultValue: "Largest Items"
                     )
                 ) {
-                    ForEach(viewModel.sortedItems()) { item in
+                    ForEach(sortedItems) { item in
                         Button {
                             openFolder(item.url)
                         } label: {
@@ -169,10 +202,15 @@ struct ContentView: View {
                                         .monospacedDigit()
                                         .font(.body)
 
-                                    Text(formatPercent(part: item.size, total: viewModel.totalSize))
-                                        .monospacedDigit()
-                                        .font(.caption2)
-                                        .foregroundColor(.secondary)
+                                    Text(
+                                        formatPercent(
+                                            part: item.size,
+                                            total: viewModel.totalSize
+                                        )
+                                    )
+                                    .monospacedDigit()
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
                                 }
                             }
                             .contentShape(Rectangle())
@@ -220,7 +258,6 @@ struct ContentView: View {
 
     private func goBack() {
         guard !viewModel.isScanning else { return }
-
         guard !navigationStack.isEmpty else { return }
 
         navigationStack.removeLast()
@@ -228,7 +265,6 @@ struct ContentView: View {
         if let last = navigationStack.last {
             viewModel.scanFolder(at: last)
         } else {
-            // по умолчанию — дом
             viewModel.scanHome()
         }
     }

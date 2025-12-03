@@ -1,26 +1,9 @@
 import Foundation
 import Combine
 
-enum SortOption: String, CaseIterable, Identifiable {
-    case sizeDescending
-    case sizeAscending
-    case name
-
-    var id: Self { self }
-
-    var localizedTitle: String {
-        switch self {
-        case .sizeDescending:
-            return String(localized: "sort.sizeDescending", defaultValue: "Size ↓")
-        case .sizeAscending:
-            return String(localized: "sort.sizeAscending", defaultValue: "Size ↑")
-        case .name:
-            return String(localized: "sort.name", defaultValue: "Name")
-        }
-    }
-}
-
+@MainActor
 final class DiskScannerViewModel: ObservableObject {
+
     // MARK: - Published state
 
     @Published private(set) var items: [FolderUsage] = []
@@ -28,7 +11,6 @@ final class DiskScannerViewModel: ObservableObject {
     @Published private(set) var status: String
     @Published private(set) var restrictedTopFolders: [String] = []
     @Published private(set) var currentTargetDescription: String
-    @Published var sortOption: SortOption = .sizeDescending
     @Published private(set) var totalSize: Int64 = 0
 
     // MARK: - Dependencies
@@ -86,19 +68,6 @@ final class DiskScannerViewModel: ObservableObject {
         )
     }
 
-    func sortedItems() -> [FolderUsage] {
-        switch sortOption {
-        case .sizeDescending:
-            return items.sorted { $0.size > $1.size }
-        case .sizeAscending:
-            return items.sorted { $0.size < $1.size }
-        case .name:
-            return items.sorted {
-                $0.url.path.localizedCaseInsensitiveCompare($1.url.path) == .orderedAscending
-            }
-        }
-    }
-
     // MARK: - Private
 
     private func scan(
@@ -109,7 +78,6 @@ final class DiskScannerViewModel: ObservableObject {
     ) {
         guard !isScanning else { return }
 
-        // отменяем предыдущий скан, если он ещё идёт
         currentTask?.cancel()
 
         isScanning = true
@@ -128,18 +96,21 @@ final class DiskScannerViewModel: ObservableObject {
                 defaultValue: "Scanning folder… This may take a while."
               )
 
-        currentTask = Task { [weak self] in
-            guard let self else { return }
+        let url = rootUrl
+        let group = groupByRoot
+        let service = self.service
 
-            // тяжёлая работа – в сервисе
-            let result = await self.service.scanDisk(
-                at: rootUrl,
-                groupByRoot: groupByRoot
+        currentTask = Task.detached { [weak self] in
+            let result = await service.scanDisk(
+                at: url,
+                groupByRoot: group
             )
 
             guard !Task.isCancelled else { return }
 
             await MainActor.run {
+                guard let self else { return }
+
                 self.items = result.items
                 self.totalSize = result.items.reduce(0) { $0 + $1.size }
                 self.restrictedTopFolders = Array(result.restrictedTopFolders).sorted()
