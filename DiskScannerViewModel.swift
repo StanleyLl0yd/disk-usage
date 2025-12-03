@@ -4,8 +4,6 @@ import Combine
 @MainActor
 final class DiskScannerViewModel: ObservableObject {
 
-    // MARK: - Published state
-
     @Published private(set) var items: [FolderUsage] = []
     @Published private(set) var isScanning: Bool = false
     @Published private(set) var status: String
@@ -13,15 +11,9 @@ final class DiskScannerViewModel: ObservableObject {
     @Published private(set) var currentTargetDescription: String
     @Published private(set) var totalSize: Int64 = 0
 
-    // MARK: - Dependencies
-
-    private let service: DiskUsageServiceProtocol
     private var currentTask: Task<Void, Never>?
 
-    // MARK: - Init
-
-    init(service: DiskUsageServiceProtocol) {
-        self.service = service
+    init() {
         self.status = String(
             localized: "status.initial",
             defaultValue: "Choose a folder or start a scan."
@@ -32,8 +24,6 @@ final class DiskScannerViewModel: ObservableObject {
         )
     }
 
-    // MARK: - Public API
-
     func scanRoot() {
         let description = String(
             localized: "target.root",
@@ -43,7 +33,6 @@ final class DiskScannerViewModel: ObservableObject {
         scan(
             at: URL(fileURLWithPath: "/"),
             description: description,
-            groupByRoot: true,
             isSystemWideScan: true
         )
     }
@@ -54,7 +43,6 @@ final class DiskScannerViewModel: ObservableObject {
         scan(
             at: home,
             description: home.path,
-            groupByRoot: false,
             isSystemWideScan: false
         )
     }
@@ -63,17 +51,13 @@ final class DiskScannerViewModel: ObservableObject {
         scan(
             at: folder,
             description: folder.path,
-            groupByRoot: false,
             isSystemWideScan: false
         )
     }
 
-    // MARK: - Private
-
     private func scan(
         at rootUrl: URL,
         description: String,
-        groupByRoot: Bool,
         isSystemWideScan: Bool
     ) {
         guard !isScanning else { return }
@@ -97,26 +81,21 @@ final class DiskScannerViewModel: ObservableObject {
               )
 
         let url = rootUrl
-        let group = groupByRoot
-        let service = self.service
 
-        currentTask = Task.detached { [weak self] in
-            let result = await service.scanDisk(
-                at: url,
-                groupByRoot: group
-            )
+        currentTask = Task.detached(priority: .userInitiated) {
+            let result = DiskUsageService.scanTree(at: url)
 
-            guard !Task.isCancelled else { return }
+            if Task.isCancelled { return }
 
-            await MainActor.run {
+            await MainActor.run { [weak self] in
                 guard let self else { return }
 
-                self.items = result.items
-                self.totalSize = result.items.reduce(0) { $0 + $1.size }
+                self.items = result.root.children
+                self.totalSize = result.root.size
                 self.restrictedTopFolders = Array(result.restrictedTopFolders).sorted()
                 self.isScanning = false
 
-                if result.items.isEmpty {
+                if self.items.isEmpty {
                     self.status = String(
                         localized: "status.finished.empty",
                         defaultValue: "Scan finished. No data found or no access."
@@ -126,13 +105,13 @@ final class DiskScannerViewModel: ObservableObject {
                         localized: "status.finished.count",
                         defaultValue: "Scan finished. Items found: %lld."
                     )
-                    self.status = String(format: format, Int64(result.items.count))
+                    self.status = String(format: format, Int64(self.items.count))
                 } else {
                     let format = String(
                         localized: "status.finished.countWithRestricted",
                         defaultValue: "Scan finished. Items found: %lld. Some folders are not accessible."
                     )
-                    self.status = String(format: format, Int64(result.items.count))
+                    self.status = String(format: format, Int64(self.items.count))
                 }
             }
         }

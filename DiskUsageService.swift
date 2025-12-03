@@ -1,102 +1,163 @@
 import Foundation
 
-protocol DiskUsageServiceProtocol {
-    func scanDisk(
-        at rootUrl: URL,
-        groupByRoot: Bool
-    ) async -> (items: [FolderUsage], restrictedTopFolders: Set<String>)
-}
+struct DiskUsageService {
 
-final class DiskUsageService: DiskUsageServiceProtocol {
-    func scanDisk(
-        at rootUrl: URL,
-        groupByRoot: Bool
-    ) async -> (items: [FolderUsage], restrictedTopFolders: Set<String>) {
-        // heavy CPU/IO — выполнится в фоне, так как вызывается не с MainActor
+    // Внутренний узел дерева для накопления размеров
+    private final class Node {
+        let path: String
+        var size: Int64 = 0
+        var children: [String: Node] = [:]
+
+        init(path: String) {
+            self.path = path
+        }
+    }
+
+    static func scanTree(
+        at rootUrl: URL
+    ) -> (root: FolderUsage, restrictedTopFolders: Set<String>) {
+
         let fm = FileManager.default
-        let keys: [URLResourceKey] = [
-            .isRegularFileKey,
-            .totalFileAllocatedSizeKey,
-            .fileAllocatedSizeKey
-        ]
+        let rootPath = rootUrl.standardizedFileURL.path
+        let rootNode = Node(path: rootPath)
 
-        var sizes: [String: Int64] = [:]
         var restrictedTop: Set<String> = []
 
         let options: FileManager.DirectoryEnumerationOptions = [
             .skipsPackageDescendants
-            // при желании: .skipsHiddenFiles
+            // .skipsHiddenFiles при желании
         ]
-
-        let keySet = Set(keys)
-        let baseComponents = rootUrl.pathComponents
 
         if let enumerator = fm.enumerator(
             at: rootUrl,
-            includingPropertiesForKeys: keys,
+            includingPropertiesForKeys: [
+                .isRegularFileKey,
+                .totalFileAllocatedSizeKey,
+                .fileAllocatedSizeKey
+            ],
             options: options,
             errorHandler: { url, error in
-                let components = url.pathComponents
-                let topKey: String
-
-                if groupByRoot {
-                    if components.count > 1 {
-                        topKey = "/" + components[1]
-                    } else {
-                        topKey = "/"
-                    }
-                } else {
-                    if components.count > baseComponents.count {
-                        let childComponent = components[baseComponents.count]
-                        topKey = rootUrl.appendingPathComponent(childComponent).path
-                    } else {
-                        topKey = rootUrl.path
-                    }
-                }
-
-                restrictedTop.insert(topKey)
+                let top = topLevelPath(for: url, under: rootUrl)
+                restrictedTop.insert(top)
                 NSLog("DiskUsageService: no access to \(url.path): \(error.localizedDescription)")
                 return true
             }
         ) {
-            for case let url as URL in enumerator {
+            for case let fileUrl as URL in enumerator {
                 do {
-                    let values = try url.resourceValues(forKeys: keySet)
+                    let values = try fileUrl.resourceValues(forKeys: [
+                        .isRegularFileKey,
+                        .totalFileAllocatedSizeKey,
+                        .fileAllocatedSizeKey
+                    ])
                     guard values.isRegularFile == true else { continue }
 
                     let rawSize = values.totalFileAllocatedSize ?? values.fileAllocatedSize ?? 0
                     let fileSize = Int64(rawSize)
                     guard fileSize > 0 else { continue }
 
-                    let components = url.pathComponents
-                    let topKey: String
-
-                    if groupByRoot {
-                        if components.count > 1 {
-                            topKey = "/" + components[1]
-                        } else {
-                            topKey = "/"
-                        }
-                    } else {
-                        if components.count > baseComponents.count {
-                            let childComponent = components[baseComponents.count]
-                            topKey = rootUrl.appendingPathComponent(childComponent).path
-                        } else {
-                            topKey = rootUrl.path
-                        }
-                    }
-
-                    sizes[topKey, default: 0] += fileSize
+                    // Папка, в которой лежит файл
+                    let folderUrl = fileUrl.deletingLastPathComponent()
+                    addSize(
+                        fileSize,
+                        forFolder: folderUrl,
+                        underRoot: rootUrl,
+                        rootNode: rootNode
+                    )
                 } catch {
                     continue
                 }
             }
         }
 
-        let items = sizes.map { key, size in
-            FolderUsage(url: URL(fileURLWithPath: key), size: size)
+        let rootUsage = makeFolderUsage(from: rootNode)
+        return (root: rootUsage, restrictedTopFolders: restrictedTop)
+    }
+
+    // MARK: - Helpers
+
+    private static func addSize(
+        _ size: Int64,
+        forFolder folderUrl: URL,
+        underRoot rootUrl: URL,
+        rootNode: Node
+    ) {
+        let rootPath = rootUrl.standardizedFileURL.path
+        let folderPath = folderUrl.standardizedFileURL.path
+
+        // относительный путь папки относительно корня
+        let relative: String
+        if rootPath == "/" {
+            relative = String(folderPath.dropFirst(1))          // убираем начальный /
+        } else if folderPath.hasPrefix(rootPath) {
+            let start = folderPath.index(folderPath.startIndex, offsetBy: rootPath.count)
+            var rel = String(folderPath[start...])
+            if rel.hasPrefix("/") { rel.removeFirst() }
+            relative = rel
+        } else {
+            // вне корня – пропускаем
+            return
         }
 
-        return (items, restrictedTop)
+        let components = relative.split(separator: "/", omittingEmptySubsequences: true)
+        var nodesOnPath: [Node] = [rootNode]
+        var current = rootNode
+
+        // создаём / берём узлы по пути
+        for componentSub in components {
+            let component = String(componentSub)
+            if let child = current.children[component] {
+                current = child
+            } else {
+                let childPath: String
+                if current.path == "/" {
+                    childPath = "/" + component
+                } else {
+                    childPath = (current.path as NSString).appendingPathComponent(component)
+                }
+                let child = Node(path: childPath)
+                current.children[component] = child
+                current = child
+            }
+            nodesOnPath.append(current)
+        }
+
+        // размер файла добавляем ко всем узлам по пути (root + все подпапки)
+        for node in nodesOnPath {
+            node.size += size
+        }
+    }
+
+    private static func makeFolderUsage(from node: Node) -> FolderUsage {
+        let children = node.children.values
+            .sorted { $0.path < $1.path }
+            .map { makeFolderUsage(from: $0) }
+
+        return FolderUsage(
+            url: URL(fileURLWithPath: node.path),
+            size: node.size,
+            children: children
+        )
+    }
+
+    private static func topLevelPath(for url: URL, under root: URL) -> String {
+        let rootPath = root.standardizedFileURL.path
+        let components = url.pathComponents
+        let baseComponents = root.pathComponents
+
+        if rootPath == "/" {
+            if components.count > 1 {
+                return "/" + components[1]
+            } else {
+                return "/"
+            }
+        } else {
+            if components.count > baseComponents.count {
+                let childComponent = components[baseComponents.count]
+                return root.appendingPathComponent(childComponent).path
+            } else {
+                return root.path
+            }
+        }
     }
 }

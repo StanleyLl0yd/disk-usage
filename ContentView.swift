@@ -41,22 +41,47 @@ func formatPercent(part: Int64, total: Int64) -> String {
     return String(format: "%.1f %%", p)
 }
 
+private func compare(_ lhs: FolderUsage, _ rhs: FolderUsage, option: SortOption) -> Bool {
+    switch option {
+    case .sizeDescending:
+        if lhs.size == rhs.size {
+            return lhs.url.path.localizedCaseInsensitiveCompare(rhs.url.path) == .orderedAscending
+        }
+        return lhs.size > rhs.size
+    case .sizeAscending:
+        if lhs.size == rhs.size {
+            return lhs.url.path.localizedCaseInsensitiveCompare(rhs.url.path) == .orderedAscending
+        }
+        return lhs.size < rhs.size
+    case .name:
+        return lhs.url.path.localizedCaseInsensitiveCompare(rhs.url.path) == .orderedAscending
+    }
+}
+
+private func sortTree(_ node: FolderUsage, option: SortOption) -> FolderUsage {
+    let sortedChildren = node.children.map { child in
+        sortTree(child, option: option)
+    }.sorted { a, b in
+        compare(a, b, option: option)
+    }
+
+    return FolderUsage(
+        id: node.id,
+        url: node.url,
+        size: node.size,
+        children: sortedChildren
+    )
+}
+
 struct ContentView: View {
     @StateObject var viewModel: DiskScannerViewModel
-    @State private var navigationStack: [URL] = []
     @State private var sortOption: SortOption = .sizeDescending
 
     private var sortedItems: [FolderUsage] {
-        switch sortOption {
-        case .sizeDescending:
-            return viewModel.items.sorted { $0.size > $1.size }
-        case .sizeAscending:
-            return viewModel.items.sorted { $0.size < $1.size }
-        case .name:
-            return viewModel.items.sorted {
-                $0.url.path.localizedCaseInsensitiveCompare($1.url.path) == .orderedAscending
+        viewModel.items.map { sortTree($0, option: sortOption) }
+            .sorted { a, b in
+                compare(a, b, option: sortOption)
             }
-        }
     }
 
     var body: some View {
@@ -87,18 +112,6 @@ struct ContentView: View {
                 .foregroundColor(.secondary)
 
             Spacer()
-
-            if !navigationStack.isEmpty {
-                Button {
-                    goBack()
-                } label: {
-                    Label(
-                        String(localized: "button.back", defaultValue: "Back"),
-                        systemImage: "chevron.left"
-                    )
-                }
-                .disabled(viewModel.isScanning)
-            }
         }
     }
 
@@ -122,7 +135,6 @@ struct ContentView: View {
             .frame(maxWidth: 320)
 
             Button {
-                navigationStack = []
                 viewModel.scanHome()
             } label: {
                 Label(
@@ -133,7 +145,6 @@ struct ContentView: View {
             .disabled(viewModel.isScanning)
 
             Button {
-                navigationStack = []
                 viewModel.scanRoot()
             } label: {
                 Label(
@@ -177,45 +188,11 @@ struct ContentView: View {
                         defaultValue: "Largest Items"
                     )
                 ) {
-                    ForEach(sortedItems) { item in
-                        Button {
-                            openFolder(item.url)
-                        } label: {
-                            HStack(spacing: 8) {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(
-                                        item.url.lastPathComponent.isEmpty
-                                        ? item.url.path
-                                        : item.url.lastPathComponent
-                                    )
-                                    .font(.body)
-
-                                    Text(item.url.path)
-                                        .font(.caption2)
-                                        .foregroundColor(.secondary)
-                                }
-
-                                Spacer()
-
-                                VStack(alignment: .trailing, spacing: 2) {
-                                    Text(formatBytes(item.size))
-                                        .monospacedDigit()
-                                        .font(.body)
-
-                                    Text(
-                                        formatPercent(
-                                            part: item.size,
-                                            total: viewModel.totalSize
-                                        )
-                                    )
-                                    .monospacedDigit()
-                                    .font(.caption2)
-                                    .foregroundColor(.secondary)
-                                }
-                            }
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
+                    OutlineGroup(
+                        sortedItems,
+                        children: \.childrenOptional
+                    ) { item in
+                        row(for: item)
                     }
                 }
             }
@@ -247,29 +224,36 @@ struct ContentView: View {
         }
     }
 
-    // MARK: - Navigation
+    private func row(for item: FolderUsage) -> some View {
+        HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(item.name)
+                    .font(.body)
 
-    private func openFolder(_ url: URL) {
-        if navigationStack.last?.path != url.path {
-            navigationStack.append(url)
+                Text(item.url.path)
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
+
+            Spacer()
+
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(formatBytes(item.size))
+                    .monospacedDigit()
+                    .font(.body)
+
+                Text(
+                    formatPercent(
+                        part: item.size,
+                        total: viewModel.totalSize
+                    )
+                )
+                .monospacedDigit()
+                .font(.caption2)
+                .foregroundColor(.secondary)
+            }
         }
-        viewModel.scanFolder(at: url)
     }
-
-    private func goBack() {
-        guard !viewModel.isScanning else { return }
-        guard !navigationStack.isEmpty else { return }
-
-        navigationStack.removeLast()
-
-        if let last = navigationStack.last {
-            viewModel.scanFolder(at: last)
-        } else {
-            viewModel.scanHome()
-        }
-    }
-
-    // MARK: - Folder picker
 
     private func chooseFolder() {
         let panel = NSOpenPanel()
@@ -286,7 +270,6 @@ struct ContentView: View {
         )
 
         if panel.runModal() == .OK, let url = panel.url {
-            navigationStack = [url]
             viewModel.scanFolder(at: url)
         }
     }
