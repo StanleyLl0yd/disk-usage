@@ -1,0 +1,257 @@
+import SwiftUI
+import AppKit
+
+func formatBytes(_ bytes: Int64) -> String {
+    let units = ["B", "KB", "MB", "GB", "TB"]
+    var value = Double(bytes)
+    var i = 0
+
+    while value > 1024.0 && i < units.count - 1 {
+        value /= 1024.0
+        i += 1
+    }
+
+    return String(format: "%.1f %@", value, units[i])
+}
+
+func formatPercent(part: Int64, total: Int64) -> String {
+    guard total > 0, part > 0 else {
+        return String(localized: "percent.zero", defaultValue: "0.0 %")
+    }
+    let p = (Double(part) / Double(total)) * 100.0
+    return String(format: "%.1f %%", p)
+}
+
+struct ContentView: View {
+    @StateObject var viewModel: DiskScannerViewModel
+    @State private var navigationStack: [URL] = []
+
+    var body: some View {
+        VStack(spacing: 8) {
+            headerView
+            controlsView
+            listView
+        }
+        .padding()
+        .frame(minWidth: 800, minHeight: 500)
+    }
+
+    private var headerView: some View {
+        HStack(spacing: 12) {
+            Text(
+                String(
+                    localized: "header.title",
+                    defaultValue: "Disk Usage"
+                )
+            )
+            .font(.title)
+            .bold()
+
+            Text(viewModel.currentTargetDescription)
+                .font(.headline)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .foregroundColor(.secondary)
+
+            Spacer()
+
+            if !navigationStack.isEmpty {
+                Button {
+                    goBack()
+                } label: {
+                    Label(
+                        String(localized: "button.back", defaultValue: "Back"),
+                        systemImage: "chevron.left"
+                    )
+                }
+                .disabled(viewModel.isScanning)
+            }
+        }
+    }
+
+    private var controlsView: some View {
+        HStack(spacing: 12) {
+            Text(viewModel.status)
+                .font(.caption)
+            .foregroundColor(.secondary)
+
+            Spacer()
+
+            Picker(
+                String(localized: "picker.sort", defaultValue: "Sort"),
+                selection: $viewModel.sortOption
+            ) {
+                ForEach(SortOption.allCases) { option in
+                    Text(option.localizedTitle).tag(option)
+                }
+            }
+            .pickerStyle(.segmented)
+            .frame(maxWidth: 320)
+
+            Button {
+                navigationStack = []
+                viewModel.scanHome()
+            } label: {
+                Label(
+                    String(localized: "button.scanHome", defaultValue: "Scan Home"),
+                    systemImage: "house"
+                )
+            }
+            .disabled(viewModel.isScanning)
+
+            Button {
+                navigationStack = []
+                viewModel.scanRoot()
+            } label: {
+                Label(
+                    String(localized: "button.scanRoot", defaultValue: "Scan Disk (/)"),
+                    systemImage: "internaldrive"
+                )
+            }
+            .disabled(viewModel.isScanning)
+
+            Button {
+                chooseFolder()
+            } label: {
+                Label(
+                    String(localized: "button.chooseFolder", defaultValue: "Choose Folder…"),
+                    systemImage: "folder"
+                )
+            }
+            .disabled(viewModel.isScanning)
+        }
+        .padding(.top, 4)
+    }
+
+    private var listView: some View {
+        List {
+            if viewModel.sortedItems().isEmpty && !viewModel.isScanning {
+                Section {
+                    Text(
+                        String(
+                            localized: "empty.message",
+                            defaultValue: "No data to display. Choose a folder or start a scan."
+                        )
+                    )
+                    .font(.body)
+                    .foregroundColor(.secondary)
+                    .padding(.vertical, 20)
+                }
+            } else {
+                Section(
+                    String(
+                        localized: "section.largestItems",
+                        defaultValue: "Largest Items"
+                    )
+                ) {
+                    ForEach(viewModel.sortedItems()) { item in
+                        Button {
+                            openFolder(item.url)
+                        } label: {
+                            HStack(spacing: 8) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(
+                                        item.url.lastPathComponent.isEmpty
+                                        ? item.url.path
+                                        : item.url.lastPathComponent
+                                    )
+                                    .font(.body)
+
+                                    Text(item.url.path)
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                }
+
+                                Spacer()
+
+                                VStack(alignment: .trailing, spacing: 2) {
+                                    Text(formatBytes(item.size))
+                                        .monospacedDigit()
+                                        .font(.body)
+
+                                    Text(formatPercent(part: item.size, total: viewModel.totalSize))
+                                        .monospacedDigit()
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+
+            if !viewModel.restrictedTopFolders.isEmpty {
+                Section(
+                    String(
+                        localized: "section.restricted",
+                        defaultValue: "Folders Without Access"
+                    )
+                ) {
+                    ForEach(viewModel.restrictedTopFolders, id: \.self) { path in
+                        Text(path)
+                            .foregroundColor(.secondary)
+                            .font(.caption)
+                    }
+
+                    Text(
+                        String(
+                            localized: "restricted.hint",
+                            defaultValue: "For a more complete analysis, you can grant the app Full Disk Access in System Settings → Privacy & Security. Do this only if you trust the app."
+                        )
+                    )
+                    .font(.footnote)
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+    }
+
+    // MARK: - Navigation
+
+    private func openFolder(_ url: URL) {
+        if navigationStack.last?.path != url.path {
+            navigationStack.append(url)
+        }
+        viewModel.scanFolder(at: url)
+    }
+
+    private func goBack() {
+        guard !viewModel.isScanning else { return }
+
+        guard !navigationStack.isEmpty else { return }
+
+        navigationStack.removeLast()
+
+        if let last = navigationStack.last {
+            viewModel.scanFolder(at: last)
+        } else {
+            // по умолчанию — дом
+            viewModel.scanHome()
+        }
+    }
+
+    // MARK: - Folder picker
+
+    private func chooseFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.prompt = String(
+            localized: "panel.choose",
+            defaultValue: "Choose"
+        )
+        panel.message = String(
+            localized: "panel.message",
+            defaultValue: "Choose a folder to analyze disk usage."
+        )
+
+        if panel.runModal() == .OK, let url = panel.url {
+            navigationStack = [url]
+            viewModel.scanFolder(at: url)
+        }
+    }
+}
