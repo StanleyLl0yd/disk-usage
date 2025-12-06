@@ -20,17 +20,22 @@ enum SortOption: String, CaseIterable, Identifiable {
     }
 }
 
+// MARK: - Константы (избегаем повторных аллокаций)
+
+private let sizeUnits = ["B", "KB", "MB", "GB", "TB"]
+
+// MARK: - Форматирование
+
 func formatBytes(_ bytes: Int64) -> String {
-    let units = ["B", "KB", "MB", "GB", "TB"]
     var value = Double(bytes)
     var i = 0
 
-    while value > 1024.0 && i < units.count - 1 {
+    while value > 1024.0 && i < sizeUnits.count - 1 {
         value /= 1024.0
         i += 1
     }
 
-    return String(format: "%.1f %@", value, units[i])
+    return String(format: "%.1f %@", value, sizeUnits[i])
 }
 
 func formatPercent(part: Int64, total: Int64) -> String {
@@ -41,56 +46,47 @@ func formatPercent(part: Int64, total: Int64) -> String {
     return String(format: "%.1f %%", p)
 }
 
+// MARK: - Сортировка
+
 private func compare(_ lhs: FolderUsage, _ rhs: FolderUsage, option: SortOption) -> Bool {
+    let nameComparison = { lhs.url.path.localizedCaseInsensitiveCompare(rhs.url.path) == .orderedAscending }
+    
     switch option {
     case .sizeDescending:
-        if lhs.size == rhs.size {
-            return lhs.url.path.localizedCaseInsensitiveCompare(rhs.url.path) == .orderedAscending
-        }
-        return lhs.size > rhs.size
+        return lhs.size != rhs.size ? lhs.size > rhs.size : nameComparison()
     case .sizeAscending:
-        if lhs.size == rhs.size {
-            return lhs.url.path.localizedCaseInsensitiveCompare(rhs.url.path) == .orderedAscending
-        }
-        return lhs.size < rhs.size
+        return lhs.size != rhs.size ? lhs.size < rhs.size : nameComparison()
     case .name:
-        return lhs.url.path.localizedCaseInsensitiveCompare(rhs.url.path) == .orderedAscending
+        return nameComparison()
     }
 }
 
 private func sortTree(_ node: FolderUsage, option: SortOption) -> FolderUsage {
-    let sortedChildren = node.children.map { child in
-        sortTree(child, option: option)
-    }.sorted { a, b in
-        compare(a, b, option: option)
-    }
+    let sortedChildren = node.children
+        .map { sortTree($0, option: option) }
+        .sorted { compare($0, $1, option: option) }
 
     return FolderUsage(
-        id: node.id,
         url: node.url,
         size: node.size,
         children: sortedChildren
     )
 }
 
+// MARK: - ContentView
+
 struct ContentView: View {
     @StateObject var viewModel: DiskScannerViewModel
     @State private var sortOption: SortOption = .sizeDescending
-
-    // Упрощённая сортировка без кэша
-    private var sortedItems: [FolderUsage] {
-        viewModel.items.map { sortTree($0, option: sortOption) }
-            .sorted { a, b in
-                compare(a, b, option: sortOption)
-            }
-    }
+    
+    // Кэш отсортированных элементов
+    @State private var sortedItemsCache: [FolderUsage] = []
 
     var body: some View {
         VStack(spacing: 8) {
             headerView
             controlsView
             
-            // Простой прогресс без счётчика файлов
             if viewModel.isScanning {
                 ProgressView()
                     .progressViewStyle(.linear)
@@ -101,7 +97,27 @@ struct ContentView: View {
         }
         .padding()
         .frame(minWidth: 800, minHeight: 500)
+        // Обновляем кэш только при изменении данных или сортировки
+        .onChange(of: viewModel.items) { _, newItems in
+            updateSortedCache(items: newItems, option: sortOption)
+        }
+        .onChange(of: sortOption) { _, newOption in
+            updateSortedCache(items: viewModel.items, option: newOption)
+        }
+        .onAppear {
+            updateSortedCache(items: viewModel.items, option: sortOption)
+        }
     }
+    
+    // MARK: - Кэширование сортировки
+    
+    private func updateSortedCache(items: [FolderUsage], option: SortOption) {
+        sortedItemsCache = items
+            .map { sortTree($0, option: option) }
+            .sorted { compare($0, $1, option: option) }
+    }
+
+    // MARK: - Subviews
 
     private var headerView: some View {
         HStack(spacing: 12) {
@@ -174,7 +190,6 @@ struct ContentView: View {
             }
             .disabled(viewModel.isScanning)
             
-            // Кнопка отмены
             if viewModel.isScanning {
                 Button {
                     viewModel.cancelScan()
@@ -191,7 +206,7 @@ struct ContentView: View {
 
     private var listView: some View {
         List {
-            if sortedItems.isEmpty && !viewModel.isScanning {
+            if sortedItemsCache.isEmpty && !viewModel.isScanning {
                 Section {
                     Text(
                         String(
@@ -210,9 +225,8 @@ struct ContentView: View {
                         defaultValue: "Largest Items"
                     )
                 ) {
-                    // Простой OutlineGroup без DisclosureGroup
                     OutlineGroup(
-                        sortedItems,
+                        sortedItemsCache,
                         children: \.childrenOptional
                     ) { item in
                         row(for: item)

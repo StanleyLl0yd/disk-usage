@@ -1,13 +1,14 @@
 import Foundation
 
 struct FolderUsage: Identifiable, Hashable {
-    let id: UUID
     let url: URL
     let size: Int64
     let children: [FolderUsage]
 
-    init(id: UUID = UUID(), url: URL, size: Int64, children: [FolderUsage] = []) {
-        self.id = id
+    // Используем path как id — бесплатно, без аллокаций UUID
+    var id: String { url.path }
+
+    init(url: URL, size: Int64, children: [FolderUsage] = []) {
         self.url = url
         self.size = size
         self.children = children
