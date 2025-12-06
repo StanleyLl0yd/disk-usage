@@ -92,14 +92,14 @@ final class DiskScannerViewModel: ObservableObject {
         let url = rootUrl
 
         currentTask = Task.detached(priority: .userInitiated) {
-            // Простое сканирование без параллелизма и прогресс-репортов
+            // Простое сканирование без прогресс-репортов
             let result = DiskUsageService.scanTree(at: url)
 
             if Task.isCancelled { return }
 
             await MainActor.run { [weak self] in
-                guard let self = self else { return }
-                
+                guard let self else { return }
+
                 self.items = result.root.children
                 self.totalSize = result.root.size
                 self.restrictedTopFolders = Array(result.restrictedTopFolders).sorted()

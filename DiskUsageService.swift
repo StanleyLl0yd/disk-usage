@@ -2,7 +2,7 @@ import Foundation
 
 struct DiskUsageService {
 
-    // Внутренний узел дерева для накопления размеров
+    // Tree node for accumulating folder sizes
     private final class Node {
         let path: String
         var size: Int64 = 0
@@ -42,12 +42,12 @@ struct DiskUsageService {
             }
         ) {
             for case let fileUrl as URL in enumerator {
-                // Проверка отмены Task
+                // Check if scan was cancelled
                 if Task.isCancelled {
                     break
                 }
                 
-                // КРИТИЧНО: autoreleasepool для освобождения памяти
+                // Use autoreleasepool to prevent memory buildup during long scans
                 autoreleasepool {
                     guard let values = try? fileUrl.resourceValues(forKeys: [
                         .isRegularFileKey,
@@ -61,7 +61,6 @@ struct DiskUsageService {
                     let fileSize = Int64(rawSize)
                     guard fileSize > 0 else { return }
 
-                    // Папка, в которой лежит файл
                     let folderUrl = fileUrl.deletingLastPathComponent()
                     addSize(
                         fileSize,
@@ -79,6 +78,7 @@ struct DiskUsageService {
 
     // MARK: - Helpers
 
+    // Add file size to all parent folders up to root
     private static func addSize(
         _ size: Int64,
         forFolder folderUrl: URL,
@@ -88,7 +88,7 @@ struct DiskUsageService {
         let rootPath = rootUrl.standardizedFileURL.path
         let folderPath = folderUrl.standardizedFileURL.path
 
-        // относительный путь папки относительно корня
+        // Calculate relative path from root
         let relative: String
         if rootPath == "/" {
             relative = String(folderPath.dropFirst(1))
@@ -105,7 +105,7 @@ struct DiskUsageService {
         var nodesOnPath: [Node] = [rootNode]
         var current = rootNode
 
-        // создаём / берём узлы по пути
+        // Create or traverse nodes along the path
         for componentSub in components {
             let component = String(componentSub)
             if let child = current.children[component] {
@@ -124,12 +124,13 @@ struct DiskUsageService {
             nodesOnPath.append(current)
         }
 
-        // размер файла добавляем ко всем узлам по пути
+        // Add size to all nodes in the path (accumulate up to root)
         for node in nodesOnPath {
             node.size += size
         }
     }
 
+    // Convert internal tree structure to FolderUsage model
     private static func makeFolderUsage(from node: Node) -> FolderUsage {
         let children = node.children.values
             .sorted { $0.path < $1.path }
@@ -142,6 +143,7 @@ struct DiskUsageService {
         )
     }
 
+    // Get top-level folder path for restricted access tracking
     private static func topLevelPath(for url: URL, under root: URL) -> String {
         let rootPath = root.standardizedFileURL.path
         let components = url.pathComponents

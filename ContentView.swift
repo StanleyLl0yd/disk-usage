@@ -20,18 +20,17 @@ enum SortOption: String, CaseIterable, Identifiable {
     }
 }
 
-// УЛУЧШЕНИЕ 8: Использовать ByteCountFormatter для локализации
-private let byteFormatter: ByteCountFormatter = {
-    let formatter = ByteCountFormatter()
-    formatter.allowedUnits = [.useAll]
-    formatter.countStyle = .file
-    formatter.includesUnit = true
-    formatter.isAdaptive = true
-    return formatter
-}()
-
 func formatBytes(_ bytes: Int64) -> String {
-    byteFormatter.string(fromByteCount: bytes)
+    let units = ["B", "KB", "MB", "GB", "TB"]
+    var value = Double(bytes)
+    var i = 0
+
+    while value > 1024.0 && i < units.count - 1 {
+        value /= 1024.0
+        i += 1
+    }
+
+    return String(format: "%.1f %@", value, units[i])
 }
 
 func formatPercent(part: Int64, total: Int64) -> String {
@@ -78,6 +77,7 @@ struct ContentView: View {
     @StateObject var viewModel: DiskScannerViewModel
     @State private var sortOption: SortOption = .sizeDescending
 
+    // Упрощённая сортировка без кэша
     private var sortedItems: [FolderUsage] {
         viewModel.items.map { sortTree($0, option: sortOption) }
             .sorted { a, b in
@@ -90,7 +90,7 @@ struct ContentView: View {
             headerView
             controlsView
             
-            // Простой прогресс без счётчика
+            // Простой прогресс без счётчика файлов
             if viewModel.isScanning {
                 ProgressView()
                     .progressViewStyle(.linear)
@@ -210,7 +210,7 @@ struct ContentView: View {
                         defaultValue: "Largest Items"
                     )
                 ) {
-                    // Простой OutlineGroup
+                    // Простой OutlineGroup без DisclosureGroup
                     OutlineGroup(
                         sortedItems,
                         children: \.childrenOptional
@@ -247,7 +247,6 @@ struct ContentView: View {
         }
     }
 
-    // Простой row без визуализации и контекстного меню
     private func row(for item: FolderUsage) -> some View {
         HStack(spacing: 8) {
             VStack(alignment: .leading, spacing: 2) {
