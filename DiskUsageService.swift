@@ -17,20 +17,23 @@ struct DiskUsageService {
     
     private final class Node {
         let path: String
+        let isFile: Bool
         var size: Int64 = 0
         var children: [String: Node]
 
-        init(path: String, expectedChildren: Int = 4) {
+        init(path: String, isFile: Bool = false, expectedChildren: Int = 4) {
             self.path = path
-            // Pre-allocate dictionary capacity for typical folder structure
-            self.children = Dictionary(minimumCapacity: expectedChildren)
+            self.isFile = isFile
+            self.children = isFile ? [:] : Dictionary(minimumCapacity: expectedChildren)
         }
     }
     
     // MARK: - Batch Item
     
     private struct FileInfo {
+        let filePath: String
         let folderPath: String
+        let fileName: String
         let size: Int64
     }
 
@@ -42,7 +45,7 @@ struct DiskUsageService {
 
         let fm = FileManager.default
         let rootPath = rootUrl.standardizedFileURL.path
-        let rootNode = Node(path: rootPath, expectedChildren: 16)
+        let rootNode = Node(path: rootPath, isFile: false, expectedChildren: 16)
 
         var restrictedTop: Set<String> = []
         
@@ -64,7 +67,6 @@ struct DiskUsageService {
                 return true
             }
         ) {
-            // Process files in batches to reduce autoreleasepool overhead
             autoreleasepool {
                 for case let fileUrl as URL in enumerator {
                     if Task.isCancelled { break }
@@ -78,10 +80,18 @@ struct DiskUsageService {
                     let fileSize = Int64(rawSize)
                     guard fileSize > 0 else { continue }
 
+                    let standardizedUrl = fileUrl.standardizedFileURL
+                    let filePath = standardizedUrl.path
                     let folderPath = fileUrl.deletingLastPathComponent().standardizedFileURL.path
-                    batch.append(FileInfo(folderPath: folderPath, size: fileSize))
+                    let fileName = standardizedUrl.lastPathComponent
                     
-                    // Process batch when full
+                    batch.append(FileInfo(
+                        filePath: filePath,
+                        folderPath: folderPath,
+                        fileName: fileName,
+                        size: fileSize
+                    ))
+                    
                     if batch.count >= batchSize {
                         processBatch(batch, rootPath: rootPath, rootNode: rootNode)
                         batch.removeAll(keepingCapacity: true)
@@ -89,7 +99,6 @@ struct DiskUsageService {
                 }
             }
             
-            // Process remaining items
             if !batch.isEmpty {
                 processBatch(batch, rootPath: rootPath, rootNode: rootNode)
             }
@@ -107,24 +116,25 @@ struct DiskUsageService {
         rootNode: Node
     ) {
         for fileInfo in batch {
-            addSize(
-                fileInfo.size,
-                folderPath: fileInfo.folderPath,
+            addFile(
+                fileInfo,
                 rootPath: rootPath,
                 rootNode: rootNode
             )
         }
     }
 
-    // MARK: - Size Accumulation
+    // MARK: - File Addition
 
-    private static func addSize(
-        _ size: Int64,
-        folderPath: String,
+    private static func addFile(
+        _ fileInfo: FileInfo,
         rootPath: String,
         rootNode: Node
     ) {
-        // Calculate relative path from root
+        let folderPath = fileInfo.folderPath
+        let size = fileInfo.size
+        
+        // Calculate relative path from root to folder
         let relative: String
         if rootPath == "/" {
             relative = String(folderPath.dropFirst(1))
@@ -137,17 +147,13 @@ struct DiskUsageService {
             return
         }
 
-        // Use Substring to avoid allocations during split
         let components = relative.split(separator: "/", omittingEmptySubsequences: true)
         
         // Add size to root
         rootNode.size += size
         
-        guard !components.isEmpty else { return }
-        
+        // Navigate/create folder path
         var current = rootNode
-
-        // Create or traverse nodes along the path, accumulating size
         for componentSub in components {
             let component = String(componentSub)
             
@@ -159,22 +165,31 @@ struct DiskUsageService {
                 if current.path == "/" {
                     childPath = "/" + component
                 } else {
-                    // Faster than NSString.appendingPathComponent for simple cases
                     childPath = current.path + "/" + component
                 }
-                child = Node(path: childPath)
+                child = Node(path: childPath, isFile: false)
                 current.children[component] = child
             }
             
             child.size += size
             current = child
         }
+        
+        // Add file as leaf node in the folder
+        let fileName = fileInfo.fileName
+        if let existingFile = current.children[fileName] {
+            // File already exists (shouldn't happen, but handle it)
+            existingFile.size += size
+        } else {
+            let fileNode = Node(path: fileInfo.filePath, isFile: true)
+            fileNode.size = size
+            current.children[fileName] = fileNode
+        }
     }
 
     // MARK: - Tree Conversion
 
     private static func makeFolderUsage(from node: Node) -> FolderUsage {
-        // Sort and convert children
         let sortedChildren = node.children.values
             .sorted { $0.path.localizedStandardCompare($1.path) == .orderedAscending }
         
@@ -182,7 +197,6 @@ struct DiskUsageService {
         if sortedChildren.isEmpty {
             children = []
         } else {
-            // Pre-allocate array capacity
             var result = [FolderUsage]()
             result.reserveCapacity(sortedChildren.count)
             for child in sortedChildren {
@@ -194,7 +208,8 @@ struct DiskUsageService {
         return FolderUsage(
             url: URL(fileURLWithPath: node.path),
             size: node.size,
-            children: children
+            children: children,
+            isFile: node.isFile
         )
     }
 
