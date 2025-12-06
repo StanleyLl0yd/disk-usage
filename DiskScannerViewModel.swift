@@ -10,6 +10,12 @@ final class DiskScannerViewModel: ObservableObject {
     @Published private(set) var restrictedTopFolders: [String] = []
     @Published private(set) var currentTargetDescription: String
     @Published private(set) var totalSize: Int64 = 0
+    
+    // УЛУЧШЕНИЕ 1: Прогресс сканирования
+    @Published private(set) var filesScanned: Int = 0
+    
+    // УЛУЧШЕНИЕ 9: Опция параллельного сканирования (по умолчанию выключено)
+    @Published var useParallelScanning: Bool = false
 
     private var currentTask: Task<Void, Never>?
 
@@ -21,6 +27,17 @@ final class DiskScannerViewModel: ObservableObject {
         self.currentTargetDescription = String(
             localized: "target.none",
             defaultValue: "not selected"
+        )
+    }
+
+    // УЛУЧШЕНИЕ 2: Отмена сканирования
+    func cancelScan() {
+        currentTask?.cancel()
+        isScanning = false
+        filesScanned = 0
+        status = String(
+            localized: "status.cancelled",
+            defaultValue: "Scan cancelled."
         )
     }
 
@@ -69,6 +86,7 @@ final class DiskScannerViewModel: ObservableObject {
         items = []
         restrictedTopFolders = []
         totalSize = 0
+        filesScanned = 0
 
         status = isSystemWideScan
             ? String(
@@ -82,14 +100,37 @@ final class DiskScannerViewModel: ObservableObject {
 
         let url = rootUrl
 
-        currentTask = Task.detached(priority: .userInitiated) {
-            let result = DiskUsageService.scanTree(at: url)
+        currentTask = Task.detached(priority: .userInitiated) { [weak self] in
+            guard let self = self else { return }
+            
+            // УЛУЧШЕНИЕ 9: Выбор между параллельным и последовательным сканированием
+            let result: (root: FolderUsage, restrictedTopFolders: Set<String>)
+            
+            let useParallel = await self.useParallelScanning
+            
+            if useParallel && url.path == "/" {
+                // Параллельное сканирование только для корневой директории
+                result = await DiskUsageService.scanTreeParallel(at: url) { count in
+                    Task { @MainActor [weak self] in
+                        self?.updateProgress(count)
+                    }
+                }
+            } else {
+                // Обычное сканирование
+                result = await Task.detached {
+                    DiskUsageService.scanTree(at: url) { count in
+                        Task { @MainActor [weak self] in
+                            self?.updateProgress(count)
+                        }
+                    }
+                }.value
+            }
 
             if Task.isCancelled { return }
 
             await MainActor.run { [weak self] in
-                guard let self else { return }
-
+                guard let self = self else { return }
+                
                 self.items = result.root.children
                 self.totalSize = result.root.size
                 self.restrictedTopFolders = Array(result.restrictedTopFolders).sorted()
@@ -115,5 +156,11 @@ final class DiskScannerViewModel: ObservableObject {
                 }
             }
         }
+    }
+    
+    // УЛУЧШЕНИЕ: Отдельный метод для обновления прогресса
+    @MainActor
+    func updateProgress(_ count: Int) {
+        self.filesScanned = count
     }
 }
