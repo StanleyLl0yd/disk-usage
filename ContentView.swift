@@ -77,33 +77,12 @@ private func sortTree(_ node: FolderUsage, option: SortOption) -> FolderUsage {
 struct ContentView: View {
     @StateObject var viewModel: DiskScannerViewModel
     @State private var sortOption: SortOption = .sizeDescending
-    // УЛУЧШЕНИЕ 3: Кэш для сортировки
-    @State private var sortCache: [SortOption: [FolderUsage]] = [:]
-    // УЛУЧШЕНИЕ 14: Debouncing для сортировки
-    @State private var sortDebounceTask: DispatchWorkItem?
-    // Текущие отсортированные элементы
-    @State private var currentSortedItems: [FolderUsage] = []
 
     private var sortedItems: [FolderUsage] {
-        currentSortedItems
-    }
-    
-    // Вычисление сортировки
-    private func computeSortedItems() {
-        // Проверяем кэш
-        if let cached = sortCache[sortOption] {
-            currentSortedItems = cached
-            return
-        }
-        
-        // Вычисляем и кэшируем
-        let sorted = viewModel.items.map { sortTree($0, option: sortOption) }
+        viewModel.items.map { sortTree($0, option: sortOption) }
             .sorted { a, b in
                 compare(a, b, option: sortOption)
             }
-        
-        sortCache[sortOption] = sorted
-        currentSortedItems = sorted
     }
 
     var body: some View {
@@ -111,48 +90,17 @@ struct ContentView: View {
             headerView
             controlsView
             
-            // УЛУЧШЕНИЕ 1: Прогресс-бар при сканировании
+            // Простой прогресс без счётчика
             if viewModel.isScanning {
-                VStack(spacing: 4) {
-                    HStack {
-                        Text(String(
-                            localized: "progress.scanning",
-                            defaultValue: "Scanning…"
-                        ))
-                        Spacer()
-                        Text("\(viewModel.filesScanned) files")
-                            .monospacedDigit()
-                    }
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    
-                    ProgressView()
-                        .progressViewStyle(.linear)
-                }
-                .padding(.horizontal)
+                ProgressView()
+                    .progressViewStyle(.linear)
+                    .padding(.horizontal)
             }
             
             listView
         }
         .padding()
         .frame(minWidth: 800, minHeight: 500)
-        // УЛУЧШЕНИЕ 3: Очищаем кэш и пересчитываем при изменении данных
-        .onChange(of: viewModel.items) {
-            sortCache.removeAll()
-            computeSortedItems()
-        }
-        // УЛУЧШЕНИЕ 14: Debouncing при изменении сортировки
-        .onChange(of: sortOption) {
-            sortDebounceTask?.cancel()
-            let task = DispatchWorkItem { [self] in
-                self.computeSortedItems()
-            }
-            sortDebounceTask = task
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2, execute: task)
-        }
-        .onAppear {
-            computeSortedItems()
-        }
     }
 
     private var headerView: some View {
@@ -195,20 +143,6 @@ struct ContentView: View {
             .pickerStyle(.segmented)
             .frame(maxWidth: 320)
             .disabled(viewModel.isScanning)
-            
-            // УЛУЧШЕНИЕ 9: Toggle для параллельного сканирования
-            Toggle(isOn: $viewModel.useParallelScanning) {
-                Label(
-                    String(localized: "toggle.parallelScan", defaultValue: "Parallel"),
-                    systemImage: "bolt.fill"
-                )
-            }
-            .toggleStyle(.button)
-            .disabled(viewModel.isScanning)
-            .help(String(
-                localized: "toggle.parallelScan.help",
-                defaultValue: "Use parallel scanning for faster results (experimental)"
-            ))
 
             Button {
                 viewModel.scanHome()
@@ -240,11 +174,11 @@ struct ContentView: View {
             }
             .disabled(viewModel.isScanning)
             
-            // УЛУЧШЕНИЕ 2: Кнопка отмены
+            // Кнопка отмены
             if viewModel.isScanning {
-                Button(action: {
+                Button {
                     viewModel.cancelScan()
-                }) {
+                } label: {
                     Label(
                         String(localized: "button.cancel", defaultValue: "Cancel"),
                         systemImage: "xmark.circle"
@@ -276,18 +210,12 @@ struct ContentView: View {
                         defaultValue: "Largest Items"
                     )
                 ) {
-                    // УЛУЧШЕНИЕ 7: Lazy loading для больших списков
-                    ForEach(sortedItems) { item in
-                        DisclosureGroup {
-                            OutlineGroup(
-                                item.children,
-                                children: \.childrenOptional
-                            ) { child in
-                                row(for: child)
-                            }
-                        } label: {
-                            row(for: item)
-                        }
+                    // Простой OutlineGroup
+                    OutlineGroup(
+                        sortedItems,
+                        children: \.childrenOptional
+                    ) { item in
+                        row(for: item)
                     }
                 }
             }
@@ -319,144 +247,34 @@ struct ContentView: View {
         }
     }
 
-    // УЛУЧШЕНИЕ 4 & 10: Визуализация размера + контекстное меню
+    // Простой row без визуализации и контекстного меню
     private func row(for item: FolderUsage) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 8) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(item.name)
-                        .font(.body)
+        HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(item.name)
+                    .font(.body)
 
-                    Text(item.url.path)
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
-                }
-
-                Spacer()
-
-                VStack(alignment: .trailing, spacing: 2) {
-                    Text(formatBytes(item.size))
-                        .monospacedDigit()
-                        .font(.body)
-
-                    Text(
-                        formatPercent(
-                            part: item.size,
-                            total: viewModel.totalSize
-                        )
-                    )
-                    .monospacedDigit()
+                Text(item.url.path)
                     .font(.caption2)
                     .foregroundColor(.secondary)
-                }
             }
-            
-            // Визуальный индикатор размера - выносим отдельно
-            if viewModel.totalSize > 0 {
-                ZStack(alignment: .leading) {
-                    Rectangle()
-                        .fill(Color.secondary.opacity(0.15))
-                        .frame(height: 6)
-                    
-                    Rectangle()
-                        .fill(Color.accentColor.opacity(0.7))
-                        .frame(
-                            width: max(2, CGFloat(item.size) / CGFloat(viewModel.totalSize) * 600),
-                            height: 6
-                        )
-                }
-                .cornerRadius(3)
-                .padding(.top, 6)
-            }
-        }
-        .padding(.vertical, 4)
-        // УЛУЧШЕНИЕ 10: Контекстное меню
-        .contextMenu {
-            Button(action: {
-                NSWorkspace.shared.selectFile(item.url.path, inFileViewerRootedAtPath: "")
-            }) {
-                Label(
-                    String(localized: "context.showInFinder", defaultValue: "Show in Finder"),
-                    systemImage: "folder"
+
+            Spacer()
+
+            VStack(alignment: .trailing, spacing: 2) {
+                Text(formatBytes(item.size))
+                    .monospacedDigit()
+                    .font(.body)
+
+                Text(
+                    formatPercent(
+                        part: item.size,
+                        total: viewModel.totalSize
+                    )
                 )
-            }
-            
-            Button(action: {
-                NSWorkspace.shared.open(item.url)
-            }) {
-                Label(
-                    String(localized: "context.open", defaultValue: "Open"),
-                    systemImage: "arrow.right.square"
-                )
-            }
-            
-            Divider()
-            
-            Button(action: {
-                let pasteboard = NSPasteboard.general
-                pasteboard.clearContents()
-                pasteboard.setString(item.url.path, forType: .string)
-            }) {
-                Label(
-                    String(localized: "context.copyPath", defaultValue: "Copy Path"),
-                    systemImage: "doc.on.doc"
-                )
-            }
-            
-            Divider()
-            
-            Button(role: .destructive, action: {
-                confirmDelete(item)
-            }) {
-                Label(
-                    String(localized: "context.moveToTrash", defaultValue: "Move to Trash"),
-                    systemImage: "trash"
-                )
-            }
-        }
-    }
-    
-    // УЛУЧШЕНИЕ 10: Подтверждение удаления
-    private func confirmDelete(_ item: FolderUsage) {
-        let alert = NSAlert()
-        alert.messageText = String(
-            localized: "alert.deleteTitle",
-            defaultValue: "Move to Trash?"
-        )
-        alert.informativeText = String(
-            format: String(
-                localized: "alert.deleteMessage",
-                defaultValue: "Are you sure you want to move \"%@\" to Trash? This will free up %@."
-            ),
-            item.name,
-            formatBytes(item.size)
-        )
-        alert.alertStyle = .warning
-        alert.addButton(withTitle: String(
-            localized: "alert.moveToTrash",
-            defaultValue: "Move to Trash"
-        ))
-        alert.addButton(withTitle: String(
-            localized: "alert.cancel",
-            defaultValue: "Cancel"
-        ))
-        
-        if alert.runModal() == .alertFirstButtonReturn {
-            do {
-                try FileManager.default.trashItem(at: item.url, resultingItemURL: nil)
-                // Пересканировать после удаления
-                if let parent = item.url.deletingLastPathComponent().path.isEmpty ? nil : item.url.deletingLastPathComponent() {
-                    viewModel.scanFolder(at: parent)
-                }
-            } catch {
-                let errorAlert = NSAlert()
-                errorAlert.messageText = String(
-                    localized: "alert.errorTitle",
-                    defaultValue: "Could not move to Trash"
-                )
-                errorAlert.informativeText = error.localizedDescription
-                errorAlert.alertStyle = .critical
-                errorAlert.runModal()
+                .monospacedDigit()
+                .font(.caption2)
+                .foregroundColor(.secondary)
             }
         }
     }
