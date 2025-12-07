@@ -5,8 +5,6 @@ struct TreeView: View {
     let totalSize: Int64
     let restricted: [String]
     let onDelete: (FolderUsage) -> Void
-    let onShowInFinder: (FolderUsage) -> Void
-    let onCopyPath: (FolderUsage) -> Void
     
     @State private var showRestricted = false
     
@@ -19,7 +17,7 @@ struct TreeView: View {
                 Section(String(localized: "section.items", defaultValue: "Items")) {
                     OutlineGroup(items, children: \.childrenOptional) { item in
                         ItemRow(item: item, totalSize: totalSize)
-                            .contextMenu { contextMenu(for: item) }
+                            .folderContextMenu(item) { onDelete(item) }
                     }
                 }
             }
@@ -41,31 +39,6 @@ struct TreeView: View {
                     }
                 }
             }
-        }
-    }
-    
-    // MARK: - Context Menu
-    
-    @ViewBuilder
-    private func contextMenu(for item: FolderUsage) -> some View {
-        Button {
-            onShowInFinder(item)
-        } label: {
-            Label(String(localized: "context.showInFinder", defaultValue: "Show in Finder"), systemImage: "folder")
-        }
-        
-        Button {
-            onCopyPath(item)
-        } label: {
-            Label(String(localized: "context.copyPath", defaultValue: "Copy Path"), systemImage: "doc.on.doc")
-        }
-        
-        Divider()
-        
-        Button(role: .destructive) {
-            onDelete(item)
-        } label: {
-            Label(String(localized: "context.moveToTrash", defaultValue: "Move to Trash"), systemImage: "trash")
         }
     }
 }

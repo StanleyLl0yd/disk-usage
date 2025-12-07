@@ -31,9 +31,7 @@ struct ContentView: View {
                         items: sortedItems,
                         totalSize: viewModel.totalSize,
                         restricted: viewModel.restricted,
-                        onDelete: { requestDelete($0) },
-                        onShowInFinder: { viewModel.showInFinder($0) },
-                        onCopyPath: { viewModel.copyPath($0) }
+                        onDelete: { requestDelete($0) }
                     )
                 case .sunburst:
                     SunburstView(
