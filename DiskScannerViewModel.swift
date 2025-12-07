@@ -8,6 +8,20 @@ enum TrashResult {
     case error(String)
 }
 
+/// Информация о диске
+struct DiskInfo {
+    let totalCapacity: Int64
+    let usedSpace: Int64
+    let freeSpace: Int64
+    
+    var usedPercent: Double {
+        guard totalCapacity > 0 else { return 0 }
+        return Double(usedSpace) / Double(totalCapacity) * 100
+    }
+    
+    static let empty = DiskInfo(totalCapacity: 0, usedSpace: 0, freeSpace: 0)
+}
+
 @MainActor
 final class DiskScannerViewModel: ObservableObject {
     @Published private(set) var items: [FolderUsage] = []
@@ -17,6 +31,7 @@ final class DiskScannerViewModel: ObservableObject {
     @Published private(set) var targetDescription: String
     @Published private(set) var totalSize: Int64 = 0
     @Published private(set) var progress = ScanProgress()
+    @Published private(set) var diskInfo: DiskInfo = .empty
     
     private var scanTask: Task<Void, Never>?
     private var progressTask: Task<Void, Never>?
@@ -25,6 +40,21 @@ final class DiskScannerViewModel: ObservableObject {
     init() {
         status = String(localized: "status.initial", defaultValue: "Choose a folder or start a scan.")
         targetDescription = String(localized: "target.none", defaultValue: "not selected")
+        updateDiskInfo()
+    }
+    
+    // MARK: - Disk Info
+    
+    func updateDiskInfo() {
+        do {
+            let url = URL(fileURLWithPath: "/")
+            let values = try url.resourceValues(forKeys: [.volumeTotalCapacityKey, .volumeAvailableCapacityKey])
+            let total = Int64(values.volumeTotalCapacity ?? 0)
+            let free = Int64(values.volumeAvailableCapacity ?? 0)
+            diskInfo = DiskInfo(totalCapacity: total, usedSpace: total - free, freeSpace: free)
+        } catch {
+            diskInfo = .empty
+        }
     }
     
     // MARK: - Scanning
@@ -73,6 +103,9 @@ final class DiskScannerViewModel: ObservableObject {
                 : String(format: String(localized: "status.finished", defaultValue: "Found: %@, %lld items."),
                         formatBytes(totalSize), Int64(items.count))
             progress = ScanProgress()
+            
+            // Обновляем информацию о диске после сканирования
+            updateDiskInfo()
         }
     }
     
@@ -116,6 +149,9 @@ final class DiskScannerViewModel: ObservableObject {
             // Обновляем статус
             let format = String(localized: "status.trashed", defaultValue: "Moved to Trash. Freed: %@")
             status = String(format: format, formatBytes(size))
+            
+            // Обновляем информацию о диске
+            updateDiskInfo()
             
             return .success(freedSize: size)
         } catch {

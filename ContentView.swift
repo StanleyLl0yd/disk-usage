@@ -6,7 +6,6 @@ struct ContentView: View {
     @EnvironmentObject var settings: AppSettings
     @State private var sortOption: SortOption = .sizeDesc
     @State private var sortedItems: [FolderUsage] = []
-    @State private var showRestricted = false
     
     // Для диалога удаления
     @State private var itemToDelete: FolderUsage?
@@ -18,11 +17,42 @@ struct ContentView: View {
         VStack(spacing: 8) {
             header
             controls
-            if viewModel.isScanning { ProgressPanel(progress: viewModel.progress) }
-            itemList
+            if viewModel.isScanning {
+                ProgressPanel(progress: viewModel.progress)
+            }
+            
+            // Переключение между видами
+            if sortedItems.isEmpty && !viewModel.isScanning {
+                emptyState
+            } else {
+                switch settings.viewMode {
+                case .tree:
+                    TreeView(
+                        items: sortedItems,
+                        totalSize: viewModel.totalSize,
+                        restricted: viewModel.restricted,
+                        onDelete: { requestDelete($0) },
+                        onShowInFinder: { viewModel.showInFinder($0) },
+                        onCopyPath: { viewModel.copyPath($0) }
+                    )
+                case .sunburst:
+                    SunburstView(
+                        items: sortedItems,
+                        totalSize: viewModel.totalSize,
+                        scanProgress: viewModel.isScanning ? viewModel.progress : nil,
+                        onSelect: { _ in },
+                        onDelete: { requestDelete($0) }
+                    )
+                    
+                    // Показываем restricted внизу для sunburst
+                    if !viewModel.restricted.isEmpty {
+                        restrictedBanner
+                    }
+                }
+            }
         }
         .padding()
-        .frame(minWidth: 800, minHeight: 500)
+        .frame(minWidth: 800, minHeight: 600)
         .onChange(of: viewModel.items) { _, items in updateSort(items) }
         .onChange(of: sortOption) { _, _ in updateSort(viewModel.items) }
         .alert(
@@ -79,22 +109,29 @@ struct ContentView: View {
     // MARK: - Header
     
     private var header: some View {
-        HStack(spacing: 12) {
-            Text(String(localized: "header.title", defaultValue: "Disk Usage"))
-                .font(.title).bold()
-            Text(viewModel.targetDescription)
-                .font(.headline).foregroundStyle(.secondary).lineLimit(1)
-            Spacer()
-            
-            // View mode picker (для будущего переключения Tree/Sunburst)
-            Picker("", selection: $settings.viewMode) {
-                ForEach(ViewMode.allCases) { mode in
-                    Image(systemName: mode.icon).tag(mode)
+        VStack(spacing: 8) {
+            HStack(spacing: 12) {
+                Text(String(localized: "header.title", defaultValue: "Disk Usage"))
+                    .font(.title).bold()
+                Text(viewModel.targetDescription)
+                    .font(.headline).foregroundStyle(.secondary).lineLimit(1)
+                Spacer()
+                
+                // View mode picker
+                Picker("", selection: $settings.viewMode) {
+                    ForEach(ViewMode.allCases) { mode in
+                        Image(systemName: mode.icon).tag(mode)
+                    }
                 }
+                .pickerStyle(.segmented)
+                .frame(width: 80)
+                .help(String(localized: "header.viewMode.help", defaultValue: "Switch view mode"))
             }
-            .pickerStyle(.segmented)
-            .frame(width: 80)
-            .help(String(localized: "header.viewMode.help", defaultValue: "Switch view mode"))
+            
+            // Информация о диске
+            if viewModel.diskInfo.totalCapacity > 0 {
+                DiskInfoBar(diskInfo: viewModel.diskInfo)
+            }
         }
     }
     
@@ -106,12 +143,15 @@ struct ContentView: View {
                 Text(viewModel.status).font(.caption).foregroundStyle(.secondary)
             }
             HStack(spacing: 12) {
-                Picker("", selection: $sortOption) {
-                    ForEach(SortOption.allCases) { Text($0.title).tag($0) }
+                // Сортировка только для Tree view
+                if settings.viewMode == .tree {
+                    Picker("", selection: $sortOption) {
+                        ForEach(SortOption.allCases) { Text($0.title).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(width: 200)
+                    .disabled(viewModel.isScanning)
                 }
-                .pickerStyle(.segmented)
-                .frame(width: 200)
-                .disabled(viewModel.isScanning)
                 
                 Spacer()
                 
@@ -136,60 +176,35 @@ struct ContentView: View {
         }
     }
     
-    // MARK: - List
+    // MARK: - Empty State
     
-    private var itemList: some View {
-        List {
-            if sortedItems.isEmpty && !viewModel.isScanning {
-                Text(String(localized: "empty.message", defaultValue: "No data. Start a scan."))
-                    .foregroundStyle(.secondary).padding(.vertical, 20)
-            } else {
-                Section(String(localized: "section.items", defaultValue: "Items")) {
-                    OutlineGroup(sortedItems, children: \.childrenOptional) { item in
-                        ItemRow(item: item, totalSize: viewModel.totalSize)
-                            .contextMenu { contextMenu(for: item) }
-                    }
-                }
-            }
-            
-            if !viewModel.restricted.isEmpty {
-                Section {
-                    DisclosureGroup(isExpanded: $showRestricted) {
-                        ForEach(viewModel.restricted, id: \.self) { Text($0).font(.caption).foregroundStyle(.secondary) }
-                        Text(String(localized: "restricted.hint", defaultValue: "Grant Full Disk Access in System Settings for complete analysis."))
-                            .font(.footnote).foregroundStyle(.secondary)
-                    } label: {
-                        Label("\(String(localized: "section.restricted", defaultValue: "No Access")) (\(viewModel.restricted.count))", systemImage: "lock.fill")
-                            .font(.subheadline).foregroundStyle(.secondary)
-                    }
-                }
-            }
+    private var emptyState: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "folder.badge.questionmark")
+                .font(.system(size: 48))
+                .foregroundStyle(.secondary)
+            Text(String(localized: "empty.message", defaultValue: "No data. Start a scan."))
+                .font(.title3)
+                .foregroundStyle(.secondary)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
     
-    // MARK: - Context Menu
+    // MARK: - Restricted Banner (for Sunburst)
     
-    @ViewBuilder
-    private func contextMenu(for item: FolderUsage) -> some View {
-        Button {
-            viewModel.showInFinder(item)
-        } label: {
-            Label(String(localized: "context.showInFinder", defaultValue: "Show in Finder"), systemImage: "folder")
+    private var restrictedBanner: some View {
+        HStack {
+            Image(systemName: "lock.fill")
+                .foregroundStyle(.secondary)
+            Text(String(format: String(localized: "restricted.count", defaultValue: "%d folders without access"), viewModel.restricted.count))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Spacer()
         }
-        
-        Button {
-            viewModel.copyPath(item)
-        } label: {
-            Label(String(localized: "context.copyPath", defaultValue: "Copy Path"), systemImage: "doc.on.doc")
-        }
-        
-        Divider()
-        
-        Button(role: .destructive) {
-            requestDelete(item)
-        } label: {
-            Label(String(localized: "context.moveToTrash", defaultValue: "Move to Trash"), systemImage: "trash")
-        }
+        .padding(.horizontal)
+        .padding(.vertical, 8)
+        .background(Color.secondary.opacity(0.1))
+        .cornerRadius(8)
     }
     
     private func chooseFolder() {
@@ -199,65 +214,6 @@ struct ContentView: View {
         if panel.runModal() == .OK, let url = panel.url {
             viewModel.scan(url)
         }
-    }
-}
-
-// MARK: - Item Row
-
-struct ItemRow: View {
-    let item: FolderUsage
-    let totalSize: Int64
-    
-    private var ratio: Double { totalSize > 0 ? min(Double(item.size) / Double(totalSize), 1) : 0 }
-    
-    var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: item.isFile ? "doc" : "folder")
-                .foregroundStyle(item.isFile ? .secondary : Color.accentColor)
-                .frame(width: 16)
-            
-            VStack(alignment: .leading, spacing: 2) {
-                Text(item.name).lineLimit(1)
-                Text(item.path).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
-            }
-            .frame(minWidth: 150, alignment: .leading)
-            
-            SizeBar(ratio: ratio).frame(minWidth: 60, maxWidth: 120)
-            
-            Spacer()
-            
-            VStack(alignment: .trailing, spacing: 2) {
-                Text(formatBytes(item.size)).monospacedDigit()
-                Text(formatPercent(item.size, of: totalSize)).font(.caption2).foregroundStyle(.secondary).monospacedDigit()
-            }
-            .frame(minWidth: 70, alignment: .trailing)
-        }
-        .padding(.vertical, 2)
-    }
-}
-
-// MARK: - Size Bar
-
-struct SizeBar: View {
-    let ratio: Double
-    
-    private var color: Color {
-        switch ratio {
-        case ..<0.25: .green
-        case ..<0.5:  .yellow
-        case ..<0.75: .orange
-        default:      .red
-        }
-    }
-    
-    var body: some View {
-        GeometryReader { geo in
-            ZStack(alignment: .leading) {
-                Capsule().fill(Color.secondary.opacity(0.2))
-                Capsule().fill(color).frame(width: max(geo.size.width * ratio, ratio > 0 ? 2 : 0))
-            }
-        }
-        .frame(height: 4)
     }
 }
 
@@ -284,5 +240,76 @@ struct ProgressPanel: View {
             }
         }
         .padding(.horizontal)
+    }
+}
+
+// MARK: - Disk Info Bar
+
+struct DiskInfoBar: View {
+    let diskInfo: DiskInfo
+    
+    private var usedRatio: Double {
+        guard diskInfo.totalCapacity > 0 else { return 0 }
+        return Double(diskInfo.usedSpace) / Double(diskInfo.totalCapacity)
+    }
+    
+    private var barColor: Color {
+        switch usedRatio {
+        case ..<0.7: .blue
+        case ..<0.85: .orange
+        default: .red
+        }
+    }
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            // Иконка диска
+            Image(systemName: "internaldrive.fill")
+                .font(.system(size: 14))
+                .foregroundStyle(.secondary)
+            
+            // Прогресс-бар
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule()
+                        .fill(Color.secondary.opacity(0.2))
+                    Capsule()
+                        .fill(barColor)
+                        .frame(width: geo.size.width * usedRatio)
+                }
+            }
+            .frame(height: 8)
+            .frame(maxWidth: 200)
+            
+            // Текст
+            HStack(spacing: 4) {
+                Text(formatBytes(diskInfo.usedSpace))
+                    .fontWeight(.medium)
+                Text("/")
+                    .foregroundStyle(.secondary)
+                Text(formatBytes(diskInfo.totalCapacity))
+                    .foregroundStyle(.secondary)
+                Text(String(format: "(%.0f%%)", diskInfo.usedPercent))
+                    .foregroundStyle(.secondary)
+            }
+            .font(.caption)
+            .monospacedDigit()
+            
+            Spacer()
+            
+            // Свободно
+            HStack(spacing: 4) {
+                Text(String(localized: "disk.free", defaultValue: "Free:"))
+                    .foregroundStyle(.secondary)
+                Text(formatBytes(diskInfo.freeSpace))
+                    .fontWeight(.medium)
+            }
+            .font(.caption)
+            .monospacedDigit()
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(Color.secondary.opacity(0.08))
+        .cornerRadius(6)
     }
 }
