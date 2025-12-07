@@ -4,10 +4,7 @@
 
 A native macOS app for analyzing disk space usage, built with SwiftUI.
 
-> I am developing this project in my free time and raising funds for the Apple
-> Developer Program subscription (99 USD/year) to sign, notarize, and eventually
-> publish the app on the Mac App Store. See the **Support** section if you'd
-> like to help.
+Designed to be lightweight and privacy-friendly: scanning is performed locally on your Mac.
 
 ## Features
 
@@ -17,7 +14,7 @@ A native macOS app for analyzing disk space usage, built with SwiftUI.
 - **Disk info bar** — shows total/used/free space with color-coded progress
 - **Scan options:**
   - Home folder
-  - Entire disk (/)
+  - Entire disk (`/`)
   - Custom folder
 - **File operations:**
   - Show in Finder
@@ -34,34 +31,62 @@ A native macOS app for analyzing disk space usage, built with SwiftUI.
 
 - macOS 14.0+
 - Xcode 15+
-- Full Disk Access (for scanning system folders)
+
+## Privacy & Permissions
+
+DiskUsage does not require an account.
+
+To scan protected locations (for example, parts of the system volume when selecting `/`),
+macOS may request additional permissions.
+
+If the app can’t see the sizes you expect, grant **Full Disk Access** in:
+
+System Settings → Privacy & Security → Full Disk Access
 
 ## Setup
 
 1. Open `DiskUsage.xcodeproj` in Xcode
 2. Build and run
-3. Grant Full Disk Access in System Settings → Privacy & Security → Full Disk Access
+3. If needed, grant Full Disk Access (see **Privacy & Permissions**)
 
 ## Files
 
 ```
-DiskUsageApp.swift       — App entry point
-ContentView.swift        — Main UI container
-TreeView.swift           — Tree visualization
-SunburstView.swift       — Circular visualization
-DiskScanner.swift        — File system scanner
+DiskUsageApp.swift         — App entry point
+ContentView.swift          — Main UI container
+TreeView.swift             — Tree visualization
+SunburstView.swift         — Circular visualization
+DiskScanner.swift          — File system scanner
 DiskScannerViewModel.swift — State management
-FolderUsage.swift        — Data model
-Settings.swift           — App settings model
-SettingsView.swift       — Settings UI
-Utilities.swift          — Formatting helpers
-Localizable.xcstrings    — Localization
-DiskUsage.entitlements   — App entitlements
+FolderUsage.swift          — Data model
+Settings.swift             — App settings model
+SettingsView.swift         — Settings UI
+Utilities.swift            — Formatting helpers
+Localizable.xcstrings      — Localization
+DiskUsage.entitlements     — App entitlements
 ```
 
 ## Known Issues
 
 - Sunburst hover detection needs improvement when moving between ring levels
+
+## Roadmap
+
+- Merge duplicate context menu logic.
+- Simplify tree sorting and refresh logic.
+- Extract a unified scanning state object.
+- Remove progress state management from `DiskScanner.scan`.
+- Eliminate manual size accumulation in `Node.addFile`.
+
+## Contributing
+
+Issues and pull requests are welcome.
+
+Guidelines:
+
+- Keep changes focused and well-described.
+- For UI changes, add a brief note or screenshot in the PR.
+- For larger refactors, consider opening an issue first.
 
 ## Support
 
@@ -82,3 +107,16 @@ You can support the project by:
   if you’d like to help financially.
 
 Any feedback and contributions are very welcome.
+
+## License
+
+This project is licensed under the **PolyForm Noncommercial 1.0.0** license.
+
+You may use, copy, modify, and distribute this software for **noncommercial**
+purposes only.
+
+**Commercial use is not permitted** without a separate agreement.
+If you want to use DiskUsage (or parts of it) in a commercial product, service,
+or internal company tooling, please contact me to obtain a commercial license.
+
+See the `LICENSE` file for the full text.
