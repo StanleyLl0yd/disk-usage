@@ -1,392 +1,206 @@
 import SwiftUI
 import AppKit
 
-enum SortOption: String, CaseIterable, Identifiable {
-    case sizeDescending
-    case sizeAscending
-    case name
-
-    var id: Self { self }
-
-    var localizedTitle: String {
-        switch self {
-        case .sizeDescending:
-            return String(localized: "sort.sizeDescending", defaultValue: "Size ↓")
-        case .sizeAscending:
-            return String(localized: "sort.sizeAscending", defaultValue: "Size ↑")
-        case .name:
-            return String(localized: "sort.name", defaultValue: "Name")
-        }
-    }
-}
-
-// MARK: - Константы
-
-private let sizeUnits = ["B", "KB", "MB", "GB", "TB"]
-
-// MARK: - Форматирование
-
-func formatBytes(_ bytes: Int64) -> String {
-    var value = Double(bytes)
-    var i = 0
-
-    while value > 1024.0 && i < sizeUnits.count - 1 {
-        value /= 1024.0
-        i += 1
-    }
-
-    return String(format: "%.1f %@", value, sizeUnits[i])
-}
-
-func formatPercent(part: Int64, total: Int64) -> String {
-    guard total > 0, part > 0 else {
-        return String(localized: "percent.zero", defaultValue: "0.0 %")
-    }
-    let p = (Double(part) / Double(total)) * 100.0
-    return String(format: "%.1f %%", p)
-}
-
-func sizeRatio(part: Int64, total: Int64) -> Double {
-    guard total > 0, part > 0 else { return 0 }
-    return min(Double(part) / Double(total), 1.0)
-}
-
-// MARK: - Сортировка
-
-private func compare(_ lhs: FolderUsage, _ rhs: FolderUsage, option: SortOption) -> Bool {
-    let nameComparison = { lhs.url.path.localizedCaseInsensitiveCompare(rhs.url.path) == .orderedAscending }
-    
-    switch option {
-    case .sizeDescending:
-        return lhs.size != rhs.size ? lhs.size > rhs.size : nameComparison()
-    case .sizeAscending:
-        return lhs.size != rhs.size ? lhs.size < rhs.size : nameComparison()
-    case .name:
-        return nameComparison()
-    }
-}
-
-private func sortTree(_ node: FolderUsage, option: SortOption) -> FolderUsage {
-    let sortedChildren = node.children
-        .map { sortTree($0, option: option) }
-        .sorted { compare($0, $1, option: option) }
-
-    return FolderUsage(
-        url: node.url,
-        size: node.size,
-        children: sortedChildren,
-        isFile: node.isFile
-    )
-}
-
-// MARK: - Size Bar Component
-
-struct SizeBar: View {
-    let ratio: Double
-    let height: CGFloat = 4
-    
-    private var barColor: Color {
-        switch ratio {
-        case 0..<0.25:
-            return .green
-        case 0.25..<0.5:
-            return .yellow
-        case 0.5..<0.75:
-            return .orange
-        default:
-            return .red
-        }
-    }
-    
-    var body: some View {
-        GeometryReader { geometry in
-            ZStack(alignment: .leading) {
-                RoundedRectangle(cornerRadius: height / 2)
-                    .fill(Color.secondary.opacity(0.2))
-                
-                RoundedRectangle(cornerRadius: height / 2)
-                    .fill(barColor)
-                    .frame(width: max(geometry.size.width * ratio, ratio > 0 ? 2 : 0))
-            }
-        }
-        .frame(height: height)
-    }
-}
-
-// MARK: - ContentView
-
 struct ContentView: View {
     @StateObject var viewModel: DiskScannerViewModel
-    @State private var sortOption: SortOption = .sizeDescending
-    @State private var sortedItemsCache: [FolderUsage] = []
-    @State private var isRestrictedSectionExpanded: Bool = false
-
+    @State private var sortOption: SortOption = .sizeDesc
+    @State private var sortedItems: [FolderUsage] = []
+    @State private var showRestricted = false
+    
     var body: some View {
         VStack(spacing: 8) {
-            headerView
-            controlsView
-            
-            if viewModel.isScanning {
-                ProgressView()
-                    .progressViewStyle(.linear)
-                    .padding(.horizontal)
-            }
-            
-            listView
+            header
+            controls
+            if viewModel.isScanning { ProgressPanel(progress: viewModel.progress) }
+            itemList
         }
         .padding()
         .frame(minWidth: 800, minHeight: 500)
-        .onChange(of: viewModel.items) { _, newItems in
-            updateSortedCache(items: newItems, option: sortOption)
-        }
-        .onChange(of: sortOption) { _, newOption in
-            updateSortedCache(items: viewModel.items, option: newOption)
-        }
-        .onAppear {
-            updateSortedCache(items: viewModel.items, option: sortOption)
+        .onChange(of: viewModel.items) { _, items in updateSort(items) }
+        .onChange(of: sortOption) { _, _ in updateSort(viewModel.items) }
+    }
+    
+    private func updateSort(_ items: [FolderUsage]) {
+        sortedItems = items.map { $0.sorted(by: sortOption) }.sorted {
+            switch sortOption {
+            case .sizeDesc: $0.size > $1.size
+            case .sizeAsc:  $0.size < $1.size
+            case .name:     $0.path < $1.path
+            }
         }
     }
     
-    private func updateSortedCache(items: [FolderUsage], option: SortOption) {
-        sortedItemsCache = items
-            .map { sortTree($0, option: option) }
-            .sorted { compare($0, $1, option: option) }
-    }
-
     // MARK: - Header
-
-    private var headerView: some View {
+    
+    private var header: some View {
         HStack(spacing: 12) {
-            Text(
-                String(
-                    localized: "header.title",
-                    defaultValue: "Disk Usage"
-                )
-            )
-            .font(.title)
-            .bold()
-
-            Text(viewModel.currentTargetDescription)
-                .font(.headline)
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .foregroundColor(.secondary)
-
+            Text(String(localized: "header.title", defaultValue: "Disk Usage"))
+                .font(.title).bold()
+            Text(viewModel.targetDescription)
+                .font(.headline).foregroundStyle(.secondary).lineLimit(1)
             Spacer()
         }
     }
-
+    
     // MARK: - Controls
-
-    private var controlsView: some View {
+    
+    private var controls: some View {
         VStack(alignment: .leading, spacing: 8) {
-            // Статус на отдельной строке — не обрезается
-            Text(viewModel.status)
-                .font(.caption)
-                .foregroundColor(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            
+            if !viewModel.isScanning {
+                Text(viewModel.status).font(.caption).foregroundStyle(.secondary)
+            }
             HStack(spacing: 12) {
-                Picker(selection: $sortOption) {
-                    ForEach(SortOption.allCases) { option in
-                        Text(option.localizedTitle).tag(option)
-                    }
-                } label: {
-                    EmptyView()
+                Picker("", selection: $sortOption) {
+                    ForEach(SortOption.allCases) { Text($0.title).tag($0) }
                 }
                 .pickerStyle(.segmented)
                 .frame(width: 200)
                 .disabled(viewModel.isScanning)
-
+                
                 Spacer()
-
-                Button {
-                    viewModel.scanHome()
-                } label: {
-                    Label(
-                        String(localized: "button.scanHome", defaultValue: "Scan Home"),
-                        systemImage: "house"
-                    )
-                }
-                .disabled(viewModel.isScanning)
-
-                Button {
-                    viewModel.scanRoot()
-                } label: {
-                    Label(
-                        String(localized: "button.scanRoot", defaultValue: "Scan Disk (/)"),
-                        systemImage: "internaldrive"
-                    )
-                }
-                .disabled(viewModel.isScanning)
-
-                Button {
-                    chooseFolder()
-                } label: {
-                    Label(
-                        String(localized: "button.chooseFolder", defaultValue: "Choose Folder…"),
-                        systemImage: "folder"
-                    )
-                }
-                .disabled(viewModel.isScanning)
+                
+                Button { viewModel.scanHome() } label: {
+                    Label(String(localized: "button.scanHome", defaultValue: "Scan Home"), systemImage: "house")
+                }.disabled(viewModel.isScanning)
+                
+                Button { viewModel.scanRoot() } label: {
+                    Label(String(localized: "button.scanRoot", defaultValue: "Scan Disk (/)"), systemImage: "internaldrive")
+                }.disabled(viewModel.isScanning)
+                
+                Button { chooseFolder() } label: {
+                    Label(String(localized: "button.chooseFolder", defaultValue: "Choose…"), systemImage: "folder")
+                }.disabled(viewModel.isScanning)
                 
                 if viewModel.isScanning {
-                    Button {
-                        viewModel.cancelScan()
-                    } label: {
-                        Label(
-                            String(localized: "button.cancel", defaultValue: "Cancel"),
-                            systemImage: "xmark.circle"
-                        )
-                    }
+                    Button(role: .cancel) { viewModel.cancel() } label: {
+                        Label(String(localized: "button.cancel", defaultValue: "Cancel"), systemImage: "xmark.circle")
+                    }.keyboardShortcut(.escape, modifiers: [])
                 }
             }
         }
-        .padding(.top, 4)
     }
-
+    
     // MARK: - List
-
-    private var listView: some View {
+    
+    private var itemList: some View {
         List {
-            if sortedItemsCache.isEmpty && !viewModel.isScanning {
-                Section {
-                    Text(
-                        String(
-                            localized: "empty.message",
-                            defaultValue: "No data to display. Choose a folder or start a scan."
-                        )
-                    )
-                    .font(.body)
-                    .foregroundColor(.secondary)
-                    .padding(.vertical, 20)
-                }
+            if sortedItems.isEmpty && !viewModel.isScanning {
+                Text(String(localized: "empty.message", defaultValue: "No data. Start a scan."))
+                    .foregroundStyle(.secondary).padding(.vertical, 20)
             } else {
-                Section(
-                    String(
-                        localized: "section.largestItems",
-                        defaultValue: "Largest Items"
-                    )
-                ) {
-                    OutlineGroup(
-                        sortedItemsCache,
-                        children: \.childrenOptional
-                    ) { item in
-                        row(for: item)
+                Section(String(localized: "section.items", defaultValue: "Items")) {
+                    OutlineGroup(sortedItems, children: \.childrenOptional) { item in
+                        ItemRow(item: item, totalSize: viewModel.totalSize)
                     }
                 }
             }
-
-            if !viewModel.restrictedTopFolders.isEmpty {
+            
+            if !viewModel.restricted.isEmpty {
                 Section {
-                    DisclosureGroup(
-                        isExpanded: $isRestrictedSectionExpanded
-                    ) {
-                        ForEach(viewModel.restrictedTopFolders, id: \.self) { path in
-                            Text(path)
-                                .foregroundColor(.secondary)
-                                .font(.caption)
-                        }
-
-                        Text(
-                            String(
-                                localized: "restricted.hint",
-                                defaultValue: "For a more complete analysis, you can grant the app Full Disk Access in System Settings → Privacy & Security. Do this only if you trust the app."
-                            )
-                        )
-                        .font(.footnote)
-                        .foregroundColor(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .padding(.top, 4)
+                    DisclosureGroup(isExpanded: $showRestricted) {
+                        ForEach(viewModel.restricted, id: \.self) { Text($0).font(.caption).foregroundStyle(.secondary) }
+                        Text(String(localized: "restricted.hint", defaultValue: "Grant Full Disk Access in System Settings for complete analysis."))
+                            .font(.footnote).foregroundStyle(.secondary)
                     } label: {
-                        HStack {
-                            Image(systemName: "lock.fill")
-                                .foregroundColor(.secondary)
-                            
-                            Text(
-                                String(
-                                    localized: "section.restricted",
-                                    defaultValue: "Folders Without Access"
-                                )
-                            )
-                            
-                            Text("(\(viewModel.restrictedTopFolders.count))")
-                                .foregroundColor(.secondary)
-                        }
-                        .font(.subheadline)
+                        Label("\(String(localized: "section.restricted", defaultValue: "No Access")) (\(viewModel.restricted.count))", systemImage: "lock.fill")
+                            .font(.subheadline).foregroundStyle(.secondary)
                     }
                 }
             }
         }
     }
+    
+    private func chooseFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        if panel.runModal() == .OK, let url = panel.url {
+            viewModel.scan(url)
+        }
+    }
+}
 
-    // MARK: - Row
+// MARK: - Item Row
 
-    private func row(for item: FolderUsage) -> some View {
+struct ItemRow: View {
+    let item: FolderUsage
+    let totalSize: Int64
+    
+    private var ratio: Double { totalSize > 0 ? min(Double(item.size) / Double(totalSize), 1) : 0 }
+    
+    var body: some View {
         HStack(spacing: 8) {
-            // Иконка файла или папки
             Image(systemName: item.isFile ? "doc" : "folder")
-                .foregroundColor(item.isFile ? .secondary : .accentColor)
+                .foregroundStyle(item.isFile ? .secondary : Color.accentColor)
                 .frame(width: 16)
             
-            // Имя и путь
             VStack(alignment: .leading, spacing: 2) {
-                Text(item.name)
-                    .font(.body)
-                    .lineLimit(1)
-
-                Text(item.url.path)
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
-                    .lineLimit(1)
+                Text(item.name).lineLimit(1)
+                Text(item.path).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
             }
             .frame(minWidth: 150, alignment: .leading)
-
-            // Прогресс-бар
-            SizeBar(ratio: sizeRatio(part: item.size, total: viewModel.totalSize))
-                .frame(minWidth: 60, maxWidth: 120)
-
+            
+            SizeBar(ratio: ratio).frame(minWidth: 60, maxWidth: 120)
+            
             Spacer()
-
-            // Размер и процент
+            
             VStack(alignment: .trailing, spacing: 2) {
-                Text(formatBytes(item.size))
-                    .monospacedDigit()
-                    .font(.body)
-
-                Text(
-                    formatPercent(
-                        part: item.size,
-                        total: viewModel.totalSize
-                    )
-                )
-                .monospacedDigit()
-                .font(.caption2)
-                .foregroundColor(.secondary)
+                Text(formatBytes(item.size)).monospacedDigit()
+                Text(formatPercent(item.size, of: totalSize)).font(.caption2).foregroundStyle(.secondary).monospacedDigit()
             }
             .frame(minWidth: 70, alignment: .trailing)
         }
         .padding(.vertical, 2)
     }
+}
 
-    // MARK: - Folder Picker
+// MARK: - Size Bar
 
-    private func chooseFolder() {
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = false
-        panel.canChooseDirectories = true
-        panel.allowsMultipleSelection = false
-        panel.prompt = String(
-            localized: "panel.choose",
-            defaultValue: "Choose"
-        )
-        panel.message = String(
-            localized: "panel.message",
-            defaultValue: "Choose a folder to analyze disk usage."
-        )
-
-        if panel.runModal() == .OK, let url = panel.url {
-            viewModel.scanFolder(at: url)
+struct SizeBar: View {
+    let ratio: Double
+    
+    private var color: Color {
+        switch ratio {
+        case ..<0.25: .green
+        case ..<0.5:  .yellow
+        case ..<0.75: .orange
+        default:      .red
         }
+    }
+    
+    var body: some View {
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                Capsule().fill(Color.secondary.opacity(0.2))
+                Capsule().fill(color).frame(width: max(geo.size.width * ratio, ratio > 0 ? 2 : 0))
+            }
+        }
+        .frame(height: 4)
+    }
+}
+
+// MARK: - Progress Panel
+
+struct ProgressPanel: View {
+    let progress: ScanProgress
+    
+    var body: some View {
+        VStack(spacing: 8) {
+            ProgressView().progressViewStyle(.linear)
+            HStack(spacing: 16) {
+                Label(String(format: String(localized: "progress.files", defaultValue: "%@ files"), formatNumber(progress.filesScanned)), systemImage: "doc")
+                Label(formatBytes(progress.bytesFound), systemImage: "internaldrive")
+                Spacer()
+            }
+            .font(.caption).foregroundStyle(.secondary).monospacedDigit()
+            
+            if !progress.currentFolder.isEmpty {
+                Text(progress.currentFolder)
+                    .font(.caption2).foregroundStyle(.secondary)
+                    .lineLimit(1).truncationMode(.middle)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .padding(.horizontal)
     }
 }

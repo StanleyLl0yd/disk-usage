@@ -4,9 +4,7 @@ import SwiftUI
 struct DiskUsageApp: App {
     var body: some Scene {
         WindowGroup {
-            ContentView(
-                viewModel: DiskScannerViewModel()
-            )
+            ContentView(viewModel: DiskScannerViewModel())
         }
     }
 }

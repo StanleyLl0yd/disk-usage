@@ -1,28 +1,30 @@
 import Foundation
 
-struct FolderUsage: Identifiable, Hashable {
-    let url: URL
+struct FolderUsage: Identifiable, Hashable, Sendable {
+    let path: String
     let size: Int64
-    let children: [FolderUsage]
     let isFile: Bool
+    let children: [FolderUsage]
     
-    // Используем path как id — бесплатно, без аллокаций UUID
-    var id: String { url.path }
-
-    init(url: URL, size: Int64, children: [FolderUsage] = [], isFile: Bool = false) {
-        self.url = url
+    var id: String { path }
+    var name: String { (path as NSString).lastPathComponent.isEmpty ? path : (path as NSString).lastPathComponent }
+    var childrenOptional: [FolderUsage]? { children.isEmpty ? nil : children }
+    
+    init(path: String, size: Int64, isFile: Bool = false, children: [FolderUsage] = []) {
+        self.path = path
         self.size = size
-        self.children = children
         self.isFile = isFile
+        self.children = children
     }
-
-    // Для OutlineGroup, которому нужен Optional
-    var childrenOptional: [FolderUsage]? {
-        children.isEmpty ? nil : children
-    }
-
-    var name: String {
-        let last = url.lastPathComponent
-        return last.isEmpty ? url.path : last
+    
+    func sorted(by option: SortOption) -> FolderUsage {
+        let sortedChildren = children.map { $0.sorted(by: option) }.sorted { a, b in
+            switch option {
+            case .sizeDesc: a.size != b.size ? a.size > b.size : a.path < b.path
+            case .sizeAsc:  a.size != b.size ? a.size < b.size : a.path < b.path
+            case .name:     a.path.localizedCaseInsensitiveCompare(b.path) == .orderedAscending
+            }
+        }
+        return FolderUsage(path: path, size: size, isFile: isFile, children: sortedChildren)
     }
 }

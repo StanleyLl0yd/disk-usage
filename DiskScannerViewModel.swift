@@ -3,127 +3,79 @@ import Combine
 
 @MainActor
 final class DiskScannerViewModel: ObservableObject {
-
     @Published private(set) var items: [FolderUsage] = []
-    @Published private(set) var isScanning: Bool = false
+    @Published private(set) var isScanning = false
     @Published private(set) var status: String
-    @Published private(set) var restrictedTopFolders: [String] = []
-    @Published private(set) var currentTargetDescription: String
+    @Published private(set) var restricted: [String] = []
+    @Published private(set) var targetDescription: String
     @Published private(set) var totalSize: Int64 = 0
-
-    private var currentTask: Task<Void, Never>?
-
+    @Published private(set) var progress = ScanProgress()
+    
+    private var scanTask: Task<Void, Never>?
+    private var progressTask: Task<Void, Never>?
+    private let scanner = DiskScanner()
+    
     init() {
-        self.status = String(
-            localized: "status.initial",
-            defaultValue: "Choose a folder or start a scan."
-        )
-        self.currentTargetDescription = String(
-            localized: "target.none",
-            defaultValue: "not selected"
-        )
+        status = String(localized: "status.initial", defaultValue: "Choose a folder or start a scan.")
+        targetDescription = String(localized: "target.none", defaultValue: "not selected")
     }
-
-    func cancelScan() {
-        currentTask?.cancel()
-        isScanning = false
-        status = String(
-            localized: "status.cancelled",
-            defaultValue: "Scan cancelled."
-        )
-    }
-
-    func scanRoot() {
-        let description = String(
-            localized: "target.root",
-            defaultValue: "disk (/)"
-        )
-
-        scan(
-            at: URL(fileURLWithPath: "/"),
-            description: description,
-            isSystemWideScan: true
-        )
-    }
-
+    
     func scanHome() {
-        let home = FileManager.default.homeDirectoryForCurrentUser
-
-        scan(
-            at: home,
-            description: home.path,
-            isSystemWideScan: false
-        )
+        scan(FileManager.default.homeDirectoryForCurrentUser)
     }
-
-    func scanFolder(at folder: URL) {
-        scan(
-            at: folder,
-            description: folder.path,
-            isSystemWideScan: false
-        )
+    
+    func scanRoot() {
+        scan(URL(fileURLWithPath: "/"), description: String(localized: "target.root", defaultValue: "disk (/)"))
     }
-
-    private func scan(
-        at rootUrl: URL,
-        description: String,
-        isSystemWideScan: Bool
-    ) {
+    
+    func scan(_ url: URL, description: String? = nil) {
         guard !isScanning else { return }
-
-        currentTask?.cancel()
-
+        
+        cancelTasks()
         isScanning = true
-        currentTargetDescription = description
+        targetDescription = description ?? url.path
         items = []
-        restrictedTopFolders = []
+        restricted = []
         totalSize = 0
-
-        status = isSystemWideScan
-            ? String(
-                localized: "status.scanning.system",
-                defaultValue: "Scanning the entire disk… This may take a while."
-              )
-            : String(
-                localized: "status.scanning.folder",
-                defaultValue: "Scanning folder… This may take a while."
-              )
-
-        let url = rootUrl
-
-        currentTask = Task.detached(priority: .userInitiated) {
-            // Простое сканирование без прогресс-репортов
-            let result = DiskUsageService.scanTree(at: url)
-
-            if Task.isCancelled { return }
-
-            await MainActor.run { [weak self] in
-                guard let self else { return }
-
-                self.items = result.root.children
-                self.totalSize = result.root.size
-                self.restrictedTopFolders = Array(result.restrictedTopFolders).sorted()
-                self.isScanning = false
-
-                if self.items.isEmpty {
-                    self.status = String(
-                        localized: "status.finished.empty",
-                        defaultValue: "Scan finished. No data found or no access."
-                    )
-                } else if result.restrictedTopFolders.isEmpty {
-                    let format = String(
-                        localized: "status.finished.count",
-                        defaultValue: "Scan finished. Items found: %lld."
-                    )
-                    self.status = String(format: format, Int64(self.items.count))
-                } else {
-                    let format = String(
-                        localized: "status.finished.countWithRestricted",
-                        defaultValue: "Scan finished. Items found: %lld. Some folders are not accessible."
-                    )
-                    self.status = String(format: format, Int64(self.items.count))
-                }
+        progress = ScanProgress()
+        status = String(localized: "status.scanning", defaultValue: "Scanning…")
+        
+        progressTask = Task {
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(100))
+                progress = await scanner.progress
             }
         }
+        
+        scanTask = Task {
+            let result = await scanner.scan(at: url)
+            guard !Task.isCancelled else { return }
+            
+            progressTask?.cancel()
+            progress = await scanner.progress
+            
+            items = result.root.children
+            totalSize = result.root.size
+            restricted = result.restricted
+            isScanning = false
+            
+            status = items.isEmpty
+                ? String(localized: "status.finished.empty", defaultValue: "No data found.")
+                : String(format: String(localized: "status.finished", defaultValue: "Found: %@, %lld items."),
+                        formatBytes(totalSize), Int64(items.count))
+            progress = ScanProgress()
+        }
+    }
+    
+    func cancel() {
+        cancelTasks()
+        isScanning = false
+        progress = ScanProgress()
+        status = String(localized: "status.cancelled", defaultValue: "Cancelled.")
+    }
+    
+    private func cancelTasks() {
+        scanTask?.cancel()
+        progressTask?.cancel()
     }
 }
