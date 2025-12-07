@@ -16,6 +16,8 @@
 		950FB9A42EE0C0F9003A2FC2 /* .gitignore in Resources */ = {isa = PBXBuildFile; fileRef = 950FB9A32EE0C0F4003A2FC2 /* .gitignore */; };
 		950FB9B72EE4564D003A2FC2 /* Utilities.swift in Sources */ = {isa = PBXBuildFile; fileRef = 950FB9B62EE45645003A2FC2 /* Utilities.swift */; };
 		950FB9B92EE45694003A2FC2 /* DiskScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 950FB9B82EE4568B003A2FC2 /* DiskScanner.swift */; };
+		950FB9BB2EE5A4DB003A2FC2 /* Settings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 950FB9BA2EE5A4D8003A2FC2 /* Settings.swift */; };
+		950FB9BD2EE5A4FB003A2FC2 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 950FB9BC2EE5A4F2003A2FC2 /* SettingsView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -30,6 +32,8 @@
 		950FB9B32EE4433A003A2FC2 /* DiskUsage.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = DiskUsage.entitlements; sourceTree = "<group>"; };
 		950FB9B62EE45645003A2FC2 /* Utilities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Utilities.swift; sourceTree = "<group>"; };
 		950FB9B82EE4568B003A2FC2 /* DiskScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiskScanner.swift; sourceTree = "<group>"; };
+		950FB9BA2EE5A4D8003A2FC2 /* Settings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Settings.swift; sourceTree = "<group>"; };
+		950FB9BC2EE5A4F2003A2FC2 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -51,6 +55,8 @@
 				950FB9902EE0B875003A2FC2 /* Assets.xcassets */,
 				950FB98C2EE0B874003A2FC2 /* DiskUsageApp.swift */,
 				950FB9972EE0B9C7003A2FC2 /* FolderUsage.swift */,
+				950FB9BA2EE5A4D8003A2FC2 /* Settings.swift */,
+				950FB9BC2EE5A4F2003A2FC2 /* SettingsView.swift */,
 				950FB9B82EE4568B003A2FC2 /* DiskScanner.swift */,
 				950FB9B62EE45645003A2FC2 /* Utilities.swift */,
 				950FB99B2EE0B9F8003A2FC2 /* DiskScannerViewModel.swift */,
@@ -136,9 +142,11 @@
 			buildActionMask = 2147483647;
 			files = (
 				950FB9B92EE45694003A2FC2 /* DiskScanner.swift in Sources */,
+				950FB9BD2EE5A4FB003A2FC2 /* SettingsView.swift in Sources */,
 				950FB9B72EE4564D003A2FC2 /* Utilities.swift in Sources */,
 				950FB98D2EE0B874003A2FC2 /* DiskUsageApp.swift in Sources */,
 				950FB99E2EE0BA5B003A2FC2 /* ContentView.swift in Sources */,
+				950FB9BB2EE5A4DB003A2FC2 /* Settings.swift in Sources */,
 				950FB99C2EE0B9FC003A2FC2 /* DiskScannerViewModel.swift in Sources */,
 				950FB9982EE0B9CB003A2FC2 /* FolderUsage.swift in Sources */,
 			);

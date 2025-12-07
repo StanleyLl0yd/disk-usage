@@ -3,6 +3,7 @@ import AppKit
 
 struct ContentView: View {
     @StateObject var viewModel: DiskScannerViewModel
+    @EnvironmentObject var settings: AppSettings
     @State private var sortOption: SortOption = .sizeDesc
     @State private var sortedItems: [FolderUsage] = []
     @State private var showRestricted = false
@@ -56,13 +57,21 @@ struct ContentView: View {
         }
     }
     
+    private func requestDelete(_ item: FolderUsage) {
+        if settings.confirmDelete {
+            itemToDelete = item
+            showDeleteAlert = true
+        } else {
+            deleteItem(item)
+        }
+    }
+    
     private func deleteItem(_ item: FolderUsage) {
         let result = viewModel.moveToTrash(item)
         if case .error(let message) = result {
             errorMessage = message
             showErrorAlert = true
         } else {
-            // Обновляем отсортированный список
             updateSort(viewModel.items)
         }
     }
@@ -76,6 +85,16 @@ struct ContentView: View {
             Text(viewModel.targetDescription)
                 .font(.headline).foregroundStyle(.secondary).lineLimit(1)
             Spacer()
+            
+            // View mode picker (для будущего переключения Tree/Sunburst)
+            Picker("", selection: $settings.viewMode) {
+                ForEach(ViewMode.allCases) { mode in
+                    Image(systemName: mode.icon).tag(mode)
+                }
+            }
+            .pickerStyle(.segmented)
+            .frame(width: 80)
+            .help(String(localized: "header.viewMode.help", defaultValue: "Switch view mode"))
         }
     }
     
@@ -167,8 +186,7 @@ struct ContentView: View {
         Divider()
         
         Button(role: .destructive) {
-            itemToDelete = item
-            showDeleteAlert = true
+            requestDelete(item)
         } label: {
             Label(String(localized: "context.moveToTrash", defaultValue: "Move to Trash"), systemImage: "trash")
         }
