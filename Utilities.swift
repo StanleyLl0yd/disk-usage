@@ -31,7 +31,7 @@ func formatNumber(_ number: Int64) -> String {
 
 // MARK: - Progress
 
-struct ScanProgress: Equatable, Sendable {
+struct ScanProgress: Equatable {
     var filesScanned: Int64 = 0
     var bytesFound: Int64 = 0
     var currentFolder: String = ""

@@ -43,7 +43,7 @@ final class DiskScannerViewModel: ObservableObject {
         progressTask = Task {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .milliseconds(100))
-                progress = await scanner.progress
+                progress = scanner.progress
             }
         }
         
@@ -52,7 +52,7 @@ final class DiskScannerViewModel: ObservableObject {
             guard !Task.isCancelled else { return }
             
             progressTask?.cancel()
-            progress = await scanner.progress
+            progress = scanner.progress
             
             items = result.root.children
             totalSize = result.root.size

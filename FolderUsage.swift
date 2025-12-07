@@ -1,6 +1,6 @@
 import Foundation
 
-struct FolderUsage: Identifiable, Hashable, Sendable {
+struct FolderUsage: Identifiable, Hashable {
     let path: String
     let size: Int64
     let isFile: Bool
