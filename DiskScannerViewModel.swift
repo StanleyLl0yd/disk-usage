@@ -1,5 +1,12 @@
 import Foundation
 import Combine
+import AppKit
+
+/// Результат операции удаления
+enum TrashResult {
+    case success(freedSize: Int64)
+    case error(String)
+}
 
 @MainActor
 final class DiskScannerViewModel: ObservableObject {
@@ -19,6 +26,8 @@ final class DiskScannerViewModel: ObservableObject {
         status = String(localized: "status.initial", defaultValue: "Choose a folder or start a scan.")
         targetDescription = String(localized: "target.none", defaultValue: "not selected")
     }
+    
+    // MARK: - Scanning
     
     func scanHome() {
         scan(FileManager.default.homeDirectoryForCurrentUser)
@@ -77,5 +86,40 @@ final class DiskScannerViewModel: ObservableObject {
     private func cancelTasks() {
         scanTask?.cancel()
         progressTask?.cancel()
+    }
+    
+    // MARK: - File Operations
+    
+    /// Показать в Finder
+    func showInFinder(_ item: FolderUsage) {
+        NSWorkspace.shared.selectFile(item.path, inFileViewerRootedAtPath: "")
+    }
+    
+    /// Копировать путь в буфер обмена
+    func copyPath(_ item: FolderUsage) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(item.path, forType: .string)
+    }
+    
+    /// Переместить в корзину
+    func moveToTrash(_ item: FolderUsage) -> TrashResult {
+        let url = item.url
+        let size = item.size
+        
+        do {
+            try FileManager.default.trashItem(at: url, resultingItemURL: nil)
+            
+            // Обновляем дерево — удаляем элемент и пересчитываем размеры
+            items = items.compactMap { $0.removing(path: item.path) }
+            totalSize -= size
+            
+            // Обновляем статус
+            let format = String(localized: "status.trashed", defaultValue: "Moved to Trash. Freed: %@")
+            status = String(format: format, formatBytes(size))
+            
+            return .success(freedSize: size)
+        } catch {
+            return .error(error.localizedDescription)
+        }
     }
 }

@@ -7,6 +7,12 @@ struct ContentView: View {
     @State private var sortedItems: [FolderUsage] = []
     @State private var showRestricted = false
     
+    // Для диалога удаления
+    @State private var itemToDelete: FolderUsage?
+    @State private var showDeleteAlert = false
+    @State private var showErrorAlert = false
+    @State private var errorMessage = ""
+    
     var body: some View {
         VStack(spacing: 8) {
             header
@@ -18,6 +24,26 @@ struct ContentView: View {
         .frame(minWidth: 800, minHeight: 500)
         .onChange(of: viewModel.items) { _, items in updateSort(items) }
         .onChange(of: sortOption) { _, _ in updateSort(viewModel.items) }
+        .alert(
+            String(localized: "alert.delete.title", defaultValue: "Move to Trash?"),
+            isPresented: $showDeleteAlert,
+            presenting: itemToDelete
+        ) { item in
+            Button(String(localized: "alert.cancel", defaultValue: "Cancel"), role: .cancel) {}
+            Button(String(localized: "alert.delete", defaultValue: "Move to Trash"), role: .destructive) {
+                deleteItem(item)
+            }
+        } message: { item in
+            Text(String(format: String(localized: "alert.delete.message", defaultValue: "Are you sure you want to move \"%@\" to Trash?\n\nThis will free up %@."), item.name, formatBytes(item.size)))
+        }
+        .alert(
+            String(localized: "alert.error.title", defaultValue: "Error"),
+            isPresented: $showErrorAlert
+        ) {
+            Button("OK") {}
+        } message: {
+            Text(errorMessage)
+        }
     }
     
     private func updateSort(_ items: [FolderUsage]) {
@@ -27,6 +53,17 @@ struct ContentView: View {
             case .sizeAsc:  $0.size < $1.size
             case .name:     $0.path < $1.path
             }
+        }
+    }
+    
+    private func deleteItem(_ item: FolderUsage) {
+        let result = viewModel.moveToTrash(item)
+        if case .error(let message) = result {
+            errorMessage = message
+            showErrorAlert = true
+        } else {
+            // Обновляем отсортированный список
+            updateSort(viewModel.items)
         }
     }
     
@@ -91,6 +128,7 @@ struct ContentView: View {
                 Section(String(localized: "section.items", defaultValue: "Items")) {
                     OutlineGroup(sortedItems, children: \.childrenOptional) { item in
                         ItemRow(item: item, totalSize: viewModel.totalSize)
+                            .contextMenu { contextMenu(for: item) }
                     }
                 }
             }
@@ -107,6 +145,32 @@ struct ContentView: View {
                     }
                 }
             }
+        }
+    }
+    
+    // MARK: - Context Menu
+    
+    @ViewBuilder
+    private func contextMenu(for item: FolderUsage) -> some View {
+        Button {
+            viewModel.showInFinder(item)
+        } label: {
+            Label(String(localized: "context.showInFinder", defaultValue: "Show in Finder"), systemImage: "folder")
+        }
+        
+        Button {
+            viewModel.copyPath(item)
+        } label: {
+            Label(String(localized: "context.copyPath", defaultValue: "Copy Path"), systemImage: "doc.on.doc")
+        }
+        
+        Divider()
+        
+        Button(role: .destructive) {
+            itemToDelete = item
+            showDeleteAlert = true
+        } label: {
+            Label(String(localized: "context.moveToTrash", defaultValue: "Move to Trash"), systemImage: "trash")
         }
     }
     

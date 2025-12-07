@@ -7,6 +7,7 @@ struct FolderUsage: Identifiable, Hashable {
     let children: [FolderUsage]
     
     var id: String { path }
+    var url: URL { URL(fileURLWithPath: path) }
     var name: String { (path as NSString).lastPathComponent.isEmpty ? path : (path as NSString).lastPathComponent }
     var childrenOptional: [FolderUsage]? { children.isEmpty ? nil : children }
     
@@ -26,5 +27,31 @@ struct FolderUsage: Identifiable, Hashable {
             }
         }
         return FolderUsage(path: path, size: size, isFile: isFile, children: sortedChildren)
+    }
+    
+    /// Удаляет элемент из дерева по пути и пересчитывает размеры
+    func removing(path targetPath: String) -> FolderUsage? {
+        if self.path == targetPath { return nil }
+        
+        var newChildren: [FolderUsage] = []
+        var removedSize: Int64 = 0
+        
+        for child in children {
+            if child.path == targetPath {
+                removedSize = child.size
+            } else if let updated = child.removing(path: targetPath) {
+                removedSize = child.size - updated.size
+                newChildren.append(updated)
+            } else {
+                newChildren.append(child)
+            }
+        }
+        
+        return FolderUsage(
+            path: path,
+            size: size - removedSize,
+            isFile: isFile,
+            children: newChildren
+        )
     }
 }
