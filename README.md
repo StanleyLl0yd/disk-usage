@@ -1,71 +1,67 @@
-# DiskUsage – simple disk space analyzer for macOS
+# DiskUsage
 
 **Languages:** [English](README.md) | [Русский](README.ru.md)
 
-DiskUsage is a small native macOS app written in Swift/SwiftUI.  
-It helps you quickly see which folders take up the most space on your disk.
+A native macOS app for analyzing disk space usage, built with SwiftUI.
 
-> I am developing this project in my free time and saving up for an Apple
-> Developer Program subscription (99 USD/year) to sign, notarize and eventually
-> publish the app on the Mac App Store.  
-> See the “Support” section below if you’d like to help.
-
----
+> I am developing this project in my free time and raising funds for the Apple
+> Developer Program subscription (99 USD/year) to sign, notarize, and eventually
+> publish the app on the Mac App Store. See the **Support** section if you'd
+> like to help.
 
 ## Features
 
-- Scan:
-  - your home folder;
-  - the entire disk `/` (only when explicitly requested);
-  - any custom folder via standard folder picker.
-- Group results by top-level subfolders under the selected root.
-- Drill-down navigation:
-  - click a row to go deeper into that folder;
-  - “Back” button to move up a level.
-- Show:
-  - folder size with human-readable units (B / KB / MB / GB / TB);
-  - percentage of total size under the current root;
-  - folders that cannot be accessed due to permissions.
-- Asynchronous scanning so the UI stays responsive.
-- Localization:
-  - English and Russian;
-  - English is used for all non-Russian system locales.
-
----
-
-## Tech stack
-
-- macOS, Swift 5+
-- SwiftUI
-- MVVM:
-  - `DiskScannerViewModel` as the ViewModel;
-  - `DiskUsageService` as the scanning service.
-- Swift Concurrency:
-  - background scanning with `Task.detached`;
-  - UI updates on `MainActor` only.
-- Localization via String Catalog (`Localizable.xcstrings`).
-
----
+- **Two visualization modes:**
+  - Tree view — hierarchical list with expandable folders
+  - Sunburst view — circular chart (DaisyDisk-style)
+- **Disk info bar** — shows total/used/free space with color-coded progress
+- **Scan options:**
+  - Home folder
+  - Entire disk (/)
+  - Custom folder
+- **File operations:**
+  - Show in Finder
+  - Copy path
+  - Move to Trash (with size recalculation)
+- **Settings:**
+  - Default view mode
+  - Language (System/English/Russian)
+  - Confirm before delete
+  - Show hidden files
+- **Full localization:** English & Russian
 
 ## Requirements
 
-- macOS 14+ (Sonoma) / 15+ (Sequoia) recommended.
-- Xcode 16 / 26.1.1 or newer.
+- macOS 14.0+
+- Xcode 15+
+- Full Disk Access (for scanning system folders)
 
----
+## Setup
 
-## Roadmap
+1. Open `DiskUsage.xcodeproj` in Xcode
+2. Build and run
+3. Grant Full Disk Access in System Settings → Privacy & Security → Full Disk Access
 
-- Progress indicator while scanning.
-- Simple visual charts for largest folders.
-- More options:
-  - include/exclude hidden files;
-  - include/exclude certain system areas;
-  - minimum size threshold for displayed items.
-- Accessibility improvements (VoiceOver, keyboard navigation).
-- Sandbox and permissions polish for Mac App Store builds.
+## Files
 
----
+```
+DiskUsageApp.swift       — App entry point
+ContentView.swift        — Main UI container
+TreeView.swift           — Tree visualization
+SunburstView.swift       — Circular visualization
+DiskScanner.swift        — File system scanner
+DiskScannerViewModel.swift — State management
+FolderUsage.swift        — Data model
+Settings.swift           — App settings model
+SettingsView.swift       — Settings UI
+Utilities.swift          — Formatting helpers
+Localizable.xcstrings    — Localization
+DiskUsage.entitlements   — App entitlements
+```
+
+## Known Issues
+
+- Sunburst hover detection needs improvement when moving between ring levels
 
 ## Support
 
