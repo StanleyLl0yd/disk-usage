@@ -10,7 +10,7 @@ Designed to be lightweight and privacy-friendly: scanning is performed locally o
 
 - **Two visualization modes:**
   - Tree view — hierarchical list with expandable folders
-  - Sunburst view — circular chart (DaisyDisk-style)
+  - Sunburst view — circular chart
 - **Disk info bar** — shows total/used/free space with color-coded progress
 - **Scan options:**
   - Home folder
@@ -109,6 +109,8 @@ You can support the project by:
 Any feedback and contributions are very welcome.
 
 ## License
+
+Copyright (c) 2025 **Stanley Lloyd**.
 
 This project is licensed under the **PolyForm Noncommercial 1.0.0** license.
 
