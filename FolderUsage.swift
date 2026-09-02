@@ -25,26 +25,39 @@ nonisolated struct FolderUsage: Identifiable, Hashable, Sendable {
 
     func removing(path targetPath: String) -> FolderUsage? {
         if path == targetPath { return nil }
+        guard contains(targetPath) else { return self }
 
-        var newChildren: [FolderUsage] = []
-        newChildren.reserveCapacity(children.count)
-        var removedSize: Int64 = 0
-
-        for child in children {
-            if let updated = child.removing(path: targetPath) {
-                removedSize += child.size - updated.size
-                newChildren.append(updated)
-            } else {
-                removedSize += child.size
-            }
+        guard let index = children.firstIndex(where: { child in
+            child.path == targetPath || child.contains(targetPath)
+        }) else {
+            return self
         }
 
-        guard removedSize > 0 else { return self }
+        let child = children[index]
+        var updatedChildren = children
+
+        if let updatedChild = child.removing(path: targetPath) {
+            let removedSize = child.size - updatedChild.size
+            guard removedSize > 0 else { return self }
+            updatedChildren[index] = updatedChild
+            return FolderUsage(
+                path: path,
+                size: size - removedSize,
+                isFile: isFile,
+                children: updatedChildren
+            )
+        }
+
+        updatedChildren.remove(at: index)
         return FolderUsage(
             path: path,
-            size: size - removedSize,
+            size: size - child.size,
             isFile: isFile,
-            children: newChildren
+            children: updatedChildren
         )
+    }
+
+    private func contains(_ targetPath: String) -> Bool {
+        targetPath.hasPrefix(path == "/" ? "/" : path + "/")
     }
 }
