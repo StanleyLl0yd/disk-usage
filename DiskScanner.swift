@@ -31,10 +31,7 @@ nonisolated final class DiskScanner: @unchecked Sendable {
         var entriesSinceYield = 0
         var totalFiles: Int64 = 0
         var totalBytes: Int64 = 0
-        var options: FileManager.DirectoryEnumerationOptions = [.skipsPackageDescendants]
-        if !showHiddenFiles {
-            options.insert(.skipsHiddenFiles)
-        }
+        let options: FileManager.DirectoryEnumerationOptions = showHiddenFiles ? [] : [.skipsHiddenFiles]
 
         let enumerator = FileManager.default.enumerator(
             at: rootURL,
@@ -70,7 +67,6 @@ nonisolated final class DiskScanner: @unchecked Sendable {
                     size: fileSize,
                     rootPath: rootPath
                 )
-
                 totalFiles += 1
                 totalBytes += fileSize
 
@@ -93,7 +89,6 @@ nonisolated final class DiskScanner: @unchecked Sendable {
     private static func topLevelPath(_ url: URL, under root: URL) -> String {
         let components = url.pathComponents
         let baseCount = root.pathComponents.count
-
         if root.path == "/" {
             return components.count > 1 ? "/" + components[1] : "/"
         }
@@ -126,7 +121,6 @@ nonisolated private final class Node {
 
         self.size += size
         var current = self
-
         for component in relative.split(separator: "/") {
             let name = String(component)
             let child = current.children[name] ?? {
@@ -151,13 +145,11 @@ nonisolated private final class Node {
         let childNames = children.keys.sorted()
         var result: [FolderUsage] = []
         result.reserveCapacity(childNames.count)
-
         for name in childNames {
             if let child = children.removeValue(forKey: name) {
                 result.append(child.toFolderUsage())
             }
         }
-
         return FolderUsage(path: path, size: size, isFile: isFile, children: result)
     }
 }
