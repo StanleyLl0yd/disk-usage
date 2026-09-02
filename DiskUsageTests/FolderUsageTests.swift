@@ -25,6 +25,21 @@ final class FolderUsageTests: XCTestCase {
         XCTAssertEqual(root.removing(path: "/root/missing"), root)
     }
 
+    func testRemovingUsesPathComponentBoundaries() {
+        let aFile = FolderUsage(path: "/root/a/file", size: 10, isFile: true)
+        let abFile = FolderUsage(path: "/root/ab/file", size: 20, isFile: true)
+        let a = FolderUsage(path: "/root/a", size: 10, children: [aFile])
+        let ab = FolderUsage(path: "/root/ab", size: 20, children: [abFile])
+        let root = FolderUsage(path: "/root", size: 30, children: [a, ab])
+
+        let updated = root.removing(path: abFile.path)
+
+        XCTAssertEqual(updated?.size, 10)
+        XCTAssertEqual(updated?.children[0], a)
+        XCTAssertEqual(updated?.children[1].path, ab.path)
+        XCTAssertTrue(updated?.children[1].children.isEmpty == true)
+    }
+
     func testSizeSortUsesPathAsDeterministicTieBreaker() {
         let b = FolderUsage(path: "/root/b", size: 10)
         let a = FolderUsage(path: "/root/a", size: 10)
