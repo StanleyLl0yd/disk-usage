@@ -385,3 +385,11 @@ When behavior, permissions, minimum system requirements, settings, or user-visib
 For a full repository audit, cleanup, optimization, simplification, or deep-refactoring task, read and follow `docs/agent/AUDIT_REFACTOR.md` in full before editing.
 
 The DiskUsage-specific correctness, privacy, filesystem-safety, and macOS-security rules in this file remain mandatory throughout that process and take precedence over generic simplification goals.
+
+## App icon source artwork
+
+- When the project owner provides a new app icon as a PNG and identifies it as the app icon, treat that exact PNG as the canonical source artwork.
+- Keep that source as the original raster PNG. Do not trace, vectorize, redraw, restyle, recreate, or convert it to SVG, vector PDF, Android VectorDrawable, SF Symbol, or any other vector representation unless the project owner explicitly requests it.
+- Do not overwrite, recompress, optimize in place, or otherwise rewrite the canonical PNG. Keep the uploaded source unchanged.
+- Platform-required derivatives may be generated only as raster derivatives of that PNG. Resizing and required raster packaging/container formats such as PNG size variants, ICO, or ICNS are allowed, but the visible artwork must remain unchanged: no cropping, padding, color changes, removed details, or other design edits unless explicitly requested.
+- If an older icon in another format is currently canonical, keep it until the project owner explicitly supplies a replacement PNG as the new app icon. Once supplied, that PNG becomes the canonical source and the asset pipeline should derive required icons from it rather than converting it to a vector source.
