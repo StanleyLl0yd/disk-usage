@@ -1,15 +1,99 @@
 import SwiftUI
+import Combine
+
+enum ViewMode: String, CaseIterable, Identifiable {
+    case tree
+    case sunburst
+
+    var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .tree: String(localized: "viewMode.tree", defaultValue: "Tree")
+        case .sunburst: String(localized: "viewMode.sunburst", defaultValue: "Sunburst")
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .tree: "list.bullet.indent"
+        case .sunburst: "circle.circle"
+        }
+    }
+}
+
+enum AppLanguage: String, CaseIterable, Identifiable {
+    case system
+    case en
+    case ru
+
+    var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .system: String(localized: "language.system", defaultValue: "System")
+        case .en: "English"
+        case .ru: "Русский"
+        }
+    }
+
+    var localeIdentifier: String? {
+        switch self {
+        case .system: nil
+        case .en: "en"
+        case .ru: "ru"
+        }
+    }
+}
+
+final class AppSettings: ObservableObject {
+    static let shared = AppSettings()
+
+    private let defaults = UserDefaults.standard
+
+    @Published var viewMode: ViewMode {
+        didSet { defaults.set(viewMode.rawValue, forKey: "viewMode") }
+    }
+
+    @Published var language: AppLanguage {
+        didSet { defaults.set(language.rawValue, forKey: "language") }
+    }
+
+    @Published var confirmDelete: Bool {
+        didSet { defaults.set(confirmDelete, forKey: "confirmDelete") }
+    }
+
+    @Published var showHiddenFiles: Bool {
+        didSet { defaults.set(showHiddenFiles, forKey: "showHiddenFiles") }
+    }
+
+    private init() {
+        viewMode = ViewMode(rawValue: defaults.string(forKey: "viewMode") ?? "") ?? .tree
+        language = AppLanguage(rawValue: defaults.string(forKey: "language") ?? "") ?? .system
+        confirmDelete = defaults.object(forKey: "confirmDelete") as? Bool ?? true
+        showHiddenFiles = defaults.object(forKey: "showHiddenFiles") as? Bool ?? false
+    }
+
+    func applyLanguage() {
+        if let identifier = language.localeIdentifier {
+            defaults.set([identifier], forKey: "AppleLanguages")
+        } else {
+            defaults.removeObject(forKey: "AppleLanguages")
+        }
+    }
+}
 
 struct SettingsView: View {
     @ObservedObject var settings = AppSettings.shared
     @State private var showRestartAlert = false
-    @State private var previousLanguage: AppLanguage = .system
-    
+
     var body: some View {
         Form {
-            // MARK: - Appearance
             Section {
-                Picker(String(localized: "settings.viewMode", defaultValue: "Default View"), selection: $settings.viewMode) {
+                Picker(
+                    String(localized: "settings.viewMode", defaultValue: "Default View"),
+                    selection: $settings.viewMode
+                ) {
                     ForEach(ViewMode.allCases) { mode in
                         Label(mode.title, systemImage: mode.icon).tag(mode)
                     }
@@ -18,34 +102,43 @@ struct SettingsView: View {
             } header: {
                 Text(String(localized: "settings.section.appearance", defaultValue: "Appearance"))
             }
-            
-            // MARK: - Language
+
             Section {
-                Picker(String(localized: "settings.language", defaultValue: "Language"), selection: $settings.language) {
-                    ForEach(AppLanguage.allCases) { lang in
-                        Text(lang.title).tag(lang)
+                Picker(
+                    String(localized: "settings.language", defaultValue: "Language"),
+                    selection: $settings.language
+                ) {
+                    ForEach(AppLanguage.allCases) { language in
+                        Text(language.title).tag(language)
                     }
                 }
-                .onChange(of: settings.language) { old, new in
-                    if old != new {
-                        previousLanguage = old
-                        settings.applyLanguage()
-                        showRestartAlert = true
-                    }
+                .onChange(of: settings.language) { oldValue, newValue in
+                    guard oldValue != newValue else { return }
+                    settings.applyLanguage()
+                    showRestartAlert = true
                 }
             } header: {
                 Text(String(localized: "settings.section.language", defaultValue: "Language"))
             } footer: {
-                Text(String(localized: "settings.language.hint", defaultValue: "Restart the app to apply language changes."))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                Text(
+                    String(
+                        localized: "settings.language.hint",
+                        defaultValue: "Restart the app to apply language changes."
+                    )
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
             }
-            
-            // MARK: - Behavior
+
             Section {
-                Toggle(String(localized: "settings.confirmDelete", defaultValue: "Confirm before deleting"), isOn: $settings.confirmDelete)
-                
-                Toggle(String(localized: "settings.showHidden", defaultValue: "Show hidden files"), isOn: $settings.showHiddenFiles)
+                Toggle(
+                    String(localized: "settings.confirmDelete", defaultValue: "Confirm before deleting"),
+                    isOn: $settings.confirmDelete
+                )
+                Toggle(
+                    String(localized: "settings.showHidden", defaultValue: "Show hidden files"),
+                    isOn: $settings.showHiddenFiles
+                )
             } header: {
                 Text(String(localized: "settings.section.behavior", defaultValue: "Behavior"))
             }
@@ -61,18 +154,20 @@ struct SettingsView: View {
                 restartApp()
             }
         } message: {
-            Text(String(localized: "settings.restart.message", defaultValue: "The app needs to restart to apply the new language."))
+            Text(
+                String(
+                    localized: "settings.restart.message",
+                    defaultValue: "The app needs to restart to apply the new language."
+                )
+            )
         }
     }
-    
+
     private func restartApp() {
-        let url = URL(fileURLWithPath: Bundle.main.resourcePath!)
-        let path = url.deletingLastPathComponent().deletingLastPathComponent().absoluteString
-        let task = Process()
-        task.launchPath = "/usr/bin/open"
-        task.arguments = [path]
-        task.launch()
-        
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+        process.arguments = [Bundle.main.bundleURL.path]
+        guard (try? process.run()) != nil else { return }
         NSApplication.shared.terminate(nil)
     }
 }
