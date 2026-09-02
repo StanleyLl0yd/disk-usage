@@ -14,17 +14,20 @@ A fast, privacy-first disk space analyzer for macOS built with SwiftUI.
 - Disk info bar with total/used/free space.
 - Sortable tree view with inline size bars.
 - Sunburst view for at-a-glance hotspots.
-- Settings for default view, language, delete confirmation, hidden files.
-- English & Russian localization.
+- Settings for default view, language, delete confirmation, and hidden files.
+- English and Russian localization.
 
 ## Requirements
-- macOS 14.0+
-- Xcode 15+
+- macOS 26.1+
+- Xcode 26.1+
 
 ## Setup
 1. Open `DiskUsage.xcodeproj` in Xcode.
 2. Build and run.
 3. If scanning protected areas, grant **Full Disk Access** in System Settings → Privacy & Security.
+
+## Verification
+Run the `DiskUsage` shared scheme to build the app and execute the regression tests.
 
 ## Status & Roadmap
 - Current: source-only distribution.
@@ -34,7 +37,7 @@ A fast, privacy-first disk space analyzer for macOS built with SwiftUI.
 Pull requests and issues are welcome. For UI changes, include a short note or screenshot.
 
 ## Support the Project
-Raising funds for the Apple Developer Program (USD 99/year) to ship signed/notarized builds, publish on the Mac App Store, and enable automatic updates. 
+Raising funds for the Apple Developer Program (USD 99/year) to ship signed/notarized builds, publish on the Mac App Store, and enable automatic updates.
 
 You can help by starring the repo, filing feedback/issues, opening PRs, or checking my GitHub profile/repo description for donation links if you'd like to contribute financially.
 
