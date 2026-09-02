@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - "audit/**"
+  pull_request:
+
+jobs:
+  macos:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode 26.1.1
+        run: sudo xcode-select -s /Applications/Xcode_26.1.1.app/Contents/Developer
+
+      - name: Test Debug
+        run: >-
+          xcodebuild
+          -project DiskUsage.xcodeproj
+          -scheme DiskUsage
+          -configuration Debug
+          -destination 'platform=macOS'
+          CODE_SIGNING_ALLOWED=NO
+          test
+
+      - name: Build Release
+        run: >-
+          xcodebuild
+          -project DiskUsage.xcodeproj
+          -scheme DiskUsage
+          -configuration Release
+          -destination 'platform=macOS'
+          CODE_SIGNING_ALLOWED=NO
+          build
