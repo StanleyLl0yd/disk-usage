@@ -1,6 +1,6 @@
 import Foundation
 
-private let sizeUnits = ["B", "KB", "MB", "GB", "TB"]
+nonisolated private let sizeUnits = ["B", "KB", "MB", "GB", "TB"]
 private let numberFormatter: NumberFormatter = {
     let formatter = NumberFormatter()
     formatter.numberStyle = .decimal
@@ -8,7 +8,7 @@ private let numberFormatter: NumberFormatter = {
     return formatter
 }()
 
-func formatBytes(_ bytes: Int64) -> String {
+nonisolated func formatBytes(_ bytes: Int64) -> String {
     var value = Double(bytes)
     var unitIndex = 0
     while value >= 1024 && unitIndex < sizeUnits.count - 1 {
@@ -18,7 +18,7 @@ func formatBytes(_ bytes: Int64) -> String {
     return String(format: "%.1f %@", value, sizeUnits[unitIndex])
 }
 
-func formatPercent(_ part: Int64, of total: Int64) -> String {
+nonisolated func formatPercent(_ part: Int64, of total: Int64) -> String {
     guard total > 0, part > 0 else { return "0.0 %" }
     return String(format: "%.1f %%", Double(part) / Double(total) * 100)
 }
