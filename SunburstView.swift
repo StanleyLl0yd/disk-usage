@@ -102,10 +102,12 @@ struct SunburstView: View {
             .disabled(path.isEmpty)
 
             HStack(spacing: 4) {
-                Button("/") {
+                Button {
                     withAnimation(.easeInOut(duration: 0.3)) {
                         path.removeAll()
                     }
+                } label: {
+                    Text(verbatim: "/")
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(path.isEmpty ? .primary : .secondary)
