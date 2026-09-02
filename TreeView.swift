@@ -47,10 +47,13 @@ struct TreeView: View {
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                     } label: {
-                        Label(
-                            "\(String(localized: "section.restricted", defaultValue: "No Access")) (\(restricted.count))",
-                            systemImage: "lock.fill"
-                        )
+                        Label {
+                            Text(
+                                verbatim: "\(String(localized: "section.restricted", defaultValue: "No Access")) (\(restricted.count))"
+                            )
+                        } icon: {
+                            Image(systemName: "lock.fill")
+                        }
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                     }
