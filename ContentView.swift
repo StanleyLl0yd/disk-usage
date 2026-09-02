@@ -85,7 +85,7 @@ struct ContentView: View {
             String(localized: "alert.error.title", defaultValue: "Error"),
             isPresented: $showErrorAlert
         ) {
-            Button("OK") {}
+            Button(String(localized: "alert.ok", defaultValue: "OK")) {}
         } message: {
             Text(errorMessage)
         }
