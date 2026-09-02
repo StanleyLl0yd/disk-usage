@@ -10,7 +10,7 @@ struct FolderContextMenu: ViewModifier {
     func body(content: Content) -> some View {
         content.contextMenu {
             if showHeader {
-                Text("\(item.name) — \(formatBytes(item.size))")
+                Text(verbatim: "\(item.name) — \(formatBytes(item.size))")
                 Divider()
             }
 
