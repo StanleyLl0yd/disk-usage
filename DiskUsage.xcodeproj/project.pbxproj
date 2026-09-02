@@ -76,14 +76,14 @@
 		950FB9802EE0B874003A2FC2 = {
 			isa = PBXGroup;
 			children = (
-				950FB9A02EE0BE01003A2FC2 /* DiskUsage.app */,
+				950FB9A02EE0B874003A2FC2 /* DiskUsage.app */,
 				3DAB7E54CE6A4A0214818007 /* DiskUsageTests.xctest */,
 				950FB9B32EE4433A003A2FC2 /* DiskUsage.entitlements */,
 				950FB99D2EE0BA15003A2FC2 /* ContentView.swift */,
 				950FB9B82EE4568B003A2FC2 /* DiskScanner.swift */,
 				950FB99B2EE0B9F8003A2FC2 /* DiskScannerViewModel.swift */,
 				950FB98C2EE0B874003A2FC2 /* DiskUsageApp.swift */,
-				950FB9C22EE6099A1003A2FC2 /* FolderContextMenu.swift */,
+				950FB9C22EE6099A003A2FC2 /* FolderContextMenu.swift */,
 				950FB9972EE0B9C7003A2FC2 /* FolderUsage.swift */,
 				950FB9BA2EE5A4DB003A2FC2 /* Settings.swift */,
 				950FB9BC2EE5A4F2003A2FC2 /* SettingsView.swift */,
