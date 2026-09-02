@@ -84,7 +84,7 @@ struct SettingsView: View {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
         process.arguments = [Bundle.main.bundleURL.path]
-        try? process.run()
+        guard (try? process.run()) != nil else { return }
         NSApplication.shared.terminate(nil)
     }
 }
