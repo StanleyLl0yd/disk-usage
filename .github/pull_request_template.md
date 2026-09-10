@@ -4,6 +4,8 @@
 
 ## Roadmap alignment
 
+Before implementation, follow `docs/agent/ROADMAP_WORKFLOW.md` together with `AGENTS.md` and `docs/PRODUCT_ROADMAP.md`.
+
 - [ ] This PR belongs to the current milestone in `docs/PRODUCT_ROADMAP.md`, or the project owner explicitly authorized an exception.
 - [ ] The PR does not mix unrelated roadmap milestones.
 - [ ] If this PR completes, reorders, skips, or materially changes a milestone, `docs/PRODUCT_ROADMAP.md` is updated in the same PR.
