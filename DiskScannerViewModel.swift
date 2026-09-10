@@ -92,7 +92,10 @@ final class DiskScannerViewModel: ObservableObject {
             }
         }
 
-        let workerTask = Task.detached(priority: .userInitiated) {
+        let workerTask = Task.detached(priority: .userInitiated) { () -> (
+            result: (root: FolderUsage, restricted: [String]),
+            progress: ScanProgress
+        )? in
             let result = await scanner.scan(at: url, showHiddenFiles: showHiddenFiles)
             guard !Task.isCancelled else { return nil }
             return (result: result, progress: scanner.progress)
