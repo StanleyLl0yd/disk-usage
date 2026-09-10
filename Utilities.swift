@@ -59,3 +59,44 @@ nonisolated enum SortOption: String, CaseIterable, Identifiable, Sendable {
         }
     }
 }
+
+nonisolated enum TreePresentationPreprocessor {
+    static func sorted(_ items: [FolderUsage], by option: SortOption) -> [FolderUsage]? {
+        guard !isCancelled else { return nil }
+
+        var prepared: [FolderUsage] = []
+        prepared.reserveCapacity(items.count)
+        for item in items {
+            guard let sortedItem = sorted(item, by: option) else { return nil }
+            prepared.append(sortedItem)
+        }
+
+        guard !isCancelled else { return nil }
+        return option.sorted(prepared)
+    }
+
+    private static func sorted(_ item: FolderUsage, by option: SortOption) -> FolderUsage? {
+        guard !isCancelled else { return nil }
+
+        var children: [FolderUsage] = []
+        children.reserveCapacity(item.children.count)
+        for child in item.children {
+            guard let sortedChild = sorted(child, by: option) else { return nil }
+            children.append(sortedChild)
+        }
+
+        guard !isCancelled else { return nil }
+        return FolderUsage(
+            path: item.path,
+            size: item.size,
+            isFile: item.isFile,
+            children: option.sorted(children)
+        )
+    }
+
+    private static var isCancelled: Bool {
+        withUnsafeCurrentTask { task in
+            task?.isCancelled ?? false
+        }
+    }
+}
