@@ -30,11 +30,13 @@ A fast, privacy-first disk space analyzer for macOS built with SwiftUI.
 Run the `DiskUsage` shared scheme to build the app and execute the regression tests.
 
 ## Status & Roadmap
-- Current: source-only distribution.
-- Next: further development is planned soon; new features and updates will be announced separately.
+- Current distribution: source-only.
+- Active product/UI/performance roadmap: [`docs/PRODUCT_ROADMAP.md`](docs/PRODUCT_ROADMAP.md).
+- Current roadmap milestone: **M1 — Performance and scan-result foundation**.
+- Product direction: a polished native macOS disk analyzer with a calm, minimal Zen visual language and an independent identity.
 
 ## Contributing
-Pull requests and issues are welcome. For UI changes, include a short note or screenshot.
+Pull requests and issues are welcome. Product, UI/UX, and performance changes should follow the active roadmap and repository rules in `AGENTS.md`. For UI changes, include a short note or screenshot.
 
 ## Support the Project
 Raising funds for the Apple Developer Program (USD 99/year) to ship signed/notarized builds, publish on the Mac App Store, and enable automatic updates.
