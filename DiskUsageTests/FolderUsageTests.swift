@@ -48,6 +48,21 @@ final class FolderUsageTests: XCTestCase {
         XCTAssertEqual(SortOption.sizeAsc.sorted([b, a]).map(\.path), [a.path, b.path])
     }
 
+    func testTreePresentationPreprocessorSortsEveryLevelWithoutChangingSource() {
+        let small = FolderUsage(path: "/root/a/small", size: 10, isFile: true)
+        let large = FolderUsage(path: "/root/a/large", size: 90, isFile: true)
+        let largerFolder = FolderUsage(path: "/root/a", size: 100, children: [small, large])
+        let smallerFolder = FolderUsage(path: "/root/b", size: 50)
+        let source = [smallerFolder, largerFolder]
+
+        let prepared = TreePresentationPreprocessor.sorted(source, by: .sizeDesc)
+
+        XCTAssertEqual(prepared?.map(\.path), [largerFolder.path, smallerFolder.path])
+        XCTAssertEqual(prepared?.first?.children.map(\.path), [large.path, small.path])
+        XCTAssertEqual(source.map(\.path), [smallerFolder.path, largerFolder.path])
+        XCTAssertEqual(source[1].children.map(\.path), [small.path, large.path])
+    }
+
     func testFormatBytesUsesNextUnitAtExactBoundary() {
         XCTAssertEqual(formatBytes(1024), "1.0 KB")
     }
