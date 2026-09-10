@@ -283,6 +283,36 @@ Any dependency addition must consider:
 - minimum macOS version;
 - Swift/Xcode compatibility.
 
+## Repository and CI security
+
+Repository and CI hardening are part of the product security boundary.
+
+- Keep the default branch protected and require the established build, test, CodeQL, secret-scanning, dependency-review, and CI supply-chain gates before merge.
+- Keep external GitHub Actions pinned to full immutable commit SHAs. Do not use mutable tags or branch refs such as `@main`, `@latest`, or `@vN`.
+- Keep workflow-wide permissions empty or read-only and grant write permissions only to the specific job that requires them.
+- Do not use `pull_request_target` to execute untrusted repository code.
+- Never commit secrets, signing certificates, private keys, API tokens, credentials, `.env` files, or production configuration containing credentials.
+- Keep dependency update and vulnerability review automation enabled for every dependency ecosystem actually used by the repository.
+- Preserve reproducible or locked dependency resolution when a package ecosystem requiring a lockfile is introduced.
+- Re-run the applicable security gates after dependency, CI, release, signing, entitlement, or repository-wide refactoring changes.
+
+Do not weaken or bypass a required security gate merely to make a pull request mergeable. Fix the underlying issue or explicitly review and document why the control is no longer appropriate.
+
+## Release integrity
+
+DiskUsage is currently source-only. Do not add signing, release secrets, provenance, attestation, or release-tag automation until binary distribution is intentionally introduced.
+
+When signed or notarized binary releases are introduced:
+
+- keep signing material outside the repository and logs;
+- bind each release artifact to an immutable version tag and exact source commit;
+- protect release tags against modification and deletion;
+- use least-privilege release permissions and isolate signing credentials from ordinary pull-request workflows;
+- add artifact provenance/attestation when technically supported;
+- verify signatures, notarization, and packaged artifacts before publication.
+
+A release-security change requires a dedicated review of the complete release path.
+
 ## Project and release configuration
 
 Treat the application bundle identifier as a release identity.
