@@ -67,9 +67,13 @@ Before this roadmap begins, DiskUsage already has:
 - English and Russian localization;
 - regression tests for core model/scanner behavior;
 - repository-wide audit/refactor cleanup;
-- hardened CI, CodeQL, secret scanning, dependency review, and protected `main`.
+- hardened CI, CodeQL, secret scanning, dependency review, and protected `main`;
+- Swift 6 language mode;
+- Xcode 26.6 stable as the canonical CI/toolchain baseline;
+- minimum supported macOS 14.0;
+- source-only pre-release version `0.1.0` (build `1`), with `1.0.0` reserved for R7 release readiness.
 
-This baseline should be preserved rather than rebuilt.
+The platform baseline was an explicit project-owner-approved priority before R1.2. It should be preserved rather than rebuilt.
 
 ---
 
@@ -81,7 +85,7 @@ R1 removes known presentation-path performance risks and makes completed scan in
 
 ## Scope
 
-### R1.1 Tree presentation preprocessing
+### R1.1 Tree presentation preprocessing — COMPLETE
 
 - Stop performing expensive recursive whole-tree sorting repeatedly on the main/UI path.
 - Compute presentation ordering once per relevant input/sort change, off the UI path when the work is meaningfully expensive.
@@ -420,6 +424,6 @@ These are not assumed future stages.
 
 # Current execution point
 
-The current product-development stage is **R1 — Scale, responsiveness, and truthful scan summary**.
+The current product-development stage is **R1 — Scale, responsiveness, and truthful scan summary**. R1.1 is complete; after the owner-approved platform-baseline work, the next implementation slice is **R1.2 — Sunburst presentation preprocessing**.
 
 Do not begin R2 implementation until R1 exit criteria are satisfied and the R1 work is merged, unless the project owner explicitly changes this order.

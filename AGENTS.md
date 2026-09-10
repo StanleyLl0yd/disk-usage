@@ -321,6 +321,15 @@ Do not change `PRODUCT_BUNDLE_IDENTIFIER`, signing identity, entitlements, versi
 
 The Xcode project, English README, and Russian README must agree on supported macOS and Xcode requirements.
 
+The canonical platform baseline is:
+
+- Swift 6 language mode;
+- Xcode 26.6 stable for CI and canonical verification;
+- minimum supported macOS 14.0;
+- pre-release marketing versions remain in the `0.x.y` range until R7 release readiness and an explicit binary-release decision.
+
+The current source-only project version is `0.1.0` with build number `1`. Any platform-baseline or versioning change requires explicit project-owner review and synchronized updates to the Xcode project, CI, and both READMEs.
+
 Do not silently raise the deployment target.
 
 Do not commit local Xcode user state such as `xcuserdata`.
