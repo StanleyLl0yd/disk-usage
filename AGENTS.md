@@ -423,3 +423,16 @@ The DiskUsage-specific correctness, privacy, filesystem-safety, and macOS-securi
 - Do not overwrite, recompress, optimize in place, or otherwise rewrite the canonical PNG. Keep the uploaded source unchanged.
 - Platform-required derivatives may be generated only as raster derivatives of that PNG. Resizing and required raster packaging/container formats such as PNG size variants, ICO, or ICNS are allowed, but the visible artwork must remain unchanged: no cropping, padding, color changes, removed details, or other design edits unless explicitly requested.
 - If an older icon in another format is currently canonical, keep it until the project owner explicitly supplies a replacement PNG as the new app icon. Once supplied, that PNG becomes the canonical source and the asset pipeline should derive required icons from it rather than converting it to a vector source.
+
+## Product roadmap authority
+
+`docs/ROADMAP.md` is the authoritative development sequence for product features, UX, visualization, and performance work.
+
+- Read `docs/ROADMAP.md` before starting feature, UX, visualization, or performance changes.
+- Work on the roadmap's current stage unless the project owner explicitly changes priority.
+- Do not begin a later roadmap stage while an earlier stage has unmet exit criteria, except for an explicit project-owner exception.
+- Keep each product pull request aligned with one roadmap stage and identify that stage in the pull-request description.
+- Work outside the roadmap only after an explicit product decision; update the roadmap when the decision changes planned scope or sequencing.
+- Mark a roadmap stage complete only after its exit criteria are satisfied by merged code and applicable verification.
+- Preserve DiskUsage's own Zen UI identity. Other applications may inform quality principles, but do not copy their exact layout, palette, geometry, interaction patterns, animation language, or distinctive visual details.
+- When roadmap guidance conflicts with filesystem correctness, file-operation safety, privacy, security, or release rules in this file, those higher-priority repository rules win.
