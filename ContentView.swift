@@ -42,6 +42,7 @@ struct ContentView: View {
     @StateObject var viewModel: DiskScannerViewModel
     @EnvironmentObject var settings: AppSettings
     @StateObject private var treePresentation = TreePresentationState()
+    @StateObject private var sunburstPresentation = SunburstPresentationState()
     @State private var sortOption: SortOption = .sizeDesc
     @State private var itemToDelete: FolderUsage?
     @State private var showDeleteAlert = false
@@ -72,8 +73,7 @@ struct ContentView: View {
                     )
                 case .sunburst:
                     SunburstView(
-                        items: viewModel.items,
-                        totalSize: viewModel.totalSize,
+                        state: sunburstPresentation,
                         scanProgress: viewModel.isScanning ? viewModel.progress : nil,
                         onShowInFinder: viewModel.showInFinder,
                         onCopyPath: viewModel.copyPath,
@@ -91,11 +91,24 @@ struct ContentView: View {
         .onReceive(viewModel.$items) { items in
             treePresentation.prepare(items, by: sortOption)
         }
+        .onReceive(viewModel.$items.combineLatest(viewModel.$totalSize)) { items, totalSize in
+            guard settings.viewMode == .sunburst else { return }
+            sunburstPresentation.updateSource(items, totalSize: totalSize)
+        }
         .onChange(of: sortOption) { _, option in
             treePresentation.prepare(viewModel.items, by: option)
         }
+        .onChange(of: settings.viewMode) { _, mode in
+            switch mode {
+            case .tree:
+                sunburstPresentation.cancel()
+            case .sunburst:
+                sunburstPresentation.updateSource(viewModel.items, totalSize: viewModel.totalSize)
+            }
+        }
         .onDisappear {
             treePresentation.cancel()
+            sunburstPresentation.cancel()
         }
         .alert(
             String(localized: "alert.delete.title", defaultValue: "Move to Trash?"),
