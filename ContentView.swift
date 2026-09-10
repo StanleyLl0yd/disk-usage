@@ -29,6 +29,12 @@ final class TreePresentationState: ObservableObject {
             }
         }
     }
+
+    func cancel() {
+        generation &+= 1
+        task?.cancel()
+        task = nil
+    }
 }
 
 struct ContentView: View {
@@ -81,14 +87,14 @@ struct ContentView: View {
         }
         .padding()
         .frame(minWidth: 800, minHeight: 600)
-        .onAppear {
-            treePresentation.prepare(viewModel.items, by: sortOption)
-        }
-        .onChange(of: viewModel.items) { _, items in
+        .onReceive(viewModel.$items) { items in
             treePresentation.prepare(items, by: sortOption)
         }
         .onChange(of: sortOption) { _, option in
             treePresentation.prepare(viewModel.items, by: option)
+        }
+        .onDisappear {
+            treePresentation.cancel()
         }
         .alert(
             String(localized: "alert.delete.title", defaultValue: "Move to Trash?"),
