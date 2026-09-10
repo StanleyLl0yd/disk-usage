@@ -36,6 +36,28 @@ Do not silently expand these responsibilities.
 
 In particular, do not add automatic cleanup, background deletion, duplicate-file deletion, permanent deletion, privileged helpers, network scanning, or remote file operations without an explicit product decision.
 
+## Product roadmap authority
+
+`docs/PRODUCT_ROADMAP.md` is the authoritative default plan for product, UI/UX, and performance development.
+
+Before implementing product, UI/UX, visualization, interaction, or performance work:
+
+- read the roadmap in full;
+- identify the current milestone and the smallest applicable roadmap slice;
+- keep the change within that slice unless the project owner explicitly authorizes a different scope;
+- do not begin implementation from a later milestone until the current milestone exit criteria are satisfied, unless the project owner explicitly changes the order;
+- do not mix unrelated roadmap milestones in one pull request;
+- update the roadmap in the same pull request when completing, materially re-scoping, reordering, or intentionally skipping a milestone;
+- add a significant new product feature to the roadmap before implementing it unless the project owner explicitly requests immediate implementation.
+
+Bug fixes, security fixes, CI maintenance, dependency maintenance, and small correctness work may interrupt roadmap sequencing when necessary, but they must not silently redefine product direction.
+
+The roadmap does not override the higher-priority correctness, filesystem-safety, privacy, security, or release rules in this file. If roadmap convenience conflicts with those rules, this file wins and the roadmap should be updated to reflect the safe design.
+
+DaisyDisk may be used only as a quality/clarity reference as described by the roadmap. Do not copy its distinctive visual design, artwork, palette, layout, interaction details, terminology, or other recognizable presentation.
+
+For roadmap-governed pull requests, use the repository pull-request template and record the milestone/slice being implemented. UI-facing changes should include screenshots or equivalent concrete visual verification when practical.
+
 ## Privacy
 
 DiskUsage is local-first and privacy-first.
