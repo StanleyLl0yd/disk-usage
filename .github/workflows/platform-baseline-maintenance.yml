@@ -1,0 +1,53 @@
+name: Platform Baseline Maintenance
+
+on:
+  push:
+    branches: [platform/baseline-26-6-macos14]
+    paths:
+      - .github/workflows/platform-baseline-maintenance.yml
+
+permissions: {}
+
+jobs:
+  update-project-settings:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Update project settings
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("DiskUsage.xcodeproj/project.pbxproj")
+          text = path.read_text()
+
+          replacements = (
+              ("MACOSX_DEPLOYMENT_TARGET = 26.1;", "MACOSX_DEPLOYMENT_TARGET = 14.0;", 2),
+              ("MARKETING_VERSION = 1.0;", "MARKETING_VERSION = 0.1.0;", 2),
+          )
+
+          for old, new, expected in replacements:
+              actual = text.count(old)
+              if actual != expected:
+                  raise SystemExit(f"expected {expected} occurrences of {old!r}, found {actual}")
+              text = text.replace(old, new)
+
+          path.write_text(text)
+          PY
+
+          git diff --check
+          test "$(git diff --numstat -- DiskUsage.xcodeproj/project.pbxproj | awk '{print $1 ":" $2}')" = "4:4"
+
+      - name: Commit project settings
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add DiskUsage.xcodeproj/project.pbxproj
+          git commit -m "platform: set macOS 14 and version 0.1.0"
+          git push origin HEAD:platform/baseline-26-6-macos14
