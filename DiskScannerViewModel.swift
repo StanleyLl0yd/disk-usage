@@ -30,6 +30,7 @@ final class DiskScannerViewModel: ObservableObject {
     @Published private(set) var totalSize: Int64 = 0
     @Published private(set) var progress = ScanProgress()
     @Published private(set) var diskInfo: DiskInfo = .empty
+    @Published private(set) var completedSummary: CompletedScanSummary?
     private(set) var snapshotRevision: UInt64 = 0
 
     private let settings: AppSettings
@@ -82,6 +83,7 @@ final class DiskScannerViewModel: ObservableObject {
         restricted = []
         totalSize = 0
         progress = ScanProgress()
+        completedSummary = nil
         status = String(localized: "status.scanning", defaultValue: "Scanning…")
         snapshotRevision &+= 1
         items = []
@@ -95,7 +97,7 @@ final class DiskScannerViewModel: ObservableObject {
         }
 
         let workerTask = Task.detached(priority: .userInitiated) { () -> (
-            result: (root: FolderUsage, restricted: [String]),
+            result: DiskScanResult,
             progress: ScanProgress
         )? in
             let result = await scanner.scan(at: url, showHiddenFiles: showHiddenFiles)
@@ -123,13 +125,11 @@ final class DiskScannerViewModel: ObservableObject {
         cancelTasks()
         isScanning = false
         progress = ScanProgress()
+        completedSummary = nil
         status = String(localized: "status.cancelled", defaultValue: "Cancelled.")
     }
 
-    private func finishScan(
-        _ result: (root: FolderUsage, restricted: [String]),
-        progress finalProgress: ScanProgress
-    ) {
+    private func finishScan(_ result: DiskScanResult, progress finalProgress: ScanProgress) {
         progressTask?.cancel()
         progressTask = nil
         scanTask = nil
@@ -137,19 +137,36 @@ final class DiskScannerViewModel: ObservableObject {
         totalSize = result.root.size
         restricted = result.restricted
         isScanning = false
+        completedSummary = result.summary
         snapshotRevision &+= 1
         items = result.root.children
 
-        status = items.isEmpty
-            ? String(localized: "status.finished.empty", defaultValue: "No data found.")
-            : String(
-                format: String(localized: "status.finished", defaultValue: "Found: %@, %lld items."),
-                formatBytes(totalSize),
-                Int64(items.count)
-            )
+        status = String(
+            format: String(
+                localized: "status.finished",
+                defaultValue: "Scanned: %@ · Files: %@ · Folders: %@ · Restricted: %@ · Time: %@"
+            ),
+            formatBytes(result.summary.allocatedBytes),
+            formatNumber(result.summary.filesScanned),
+            formatNumber(result.summary.foldersScanned),
+            formatNumber(Int64(result.summary.restrictedLocations)),
+            formatElapsed(result.summary.elapsed)
+        )
 
         progress = ScanProgress()
         updateDiskInfo()
+    }
+
+    private func formatElapsed(_ duration: Duration) -> String {
+        let totalSeconds = max(Int64(0), duration.components.seconds)
+        let hours = totalSeconds / 3_600
+        let minutes = (totalSeconds % 3_600) / 60
+        let seconds = totalSeconds % 60
+
+        if hours > 0 {
+            return String(format: "%lld:%02lld:%02lld", hours, minutes, seconds)
+        }
+        return String(format: "%lld:%02lld", minutes, seconds)
     }
 
     private func cancelTasks() {
@@ -175,6 +192,7 @@ final class DiskScannerViewModel: ObservableObject {
             try FileManager.default.trashItem(at: item.url, resultingItemURL: nil)
             let updatedItems = items.compactMap { $0.removing(path: item.path) }
             totalSize -= size
+            completedSummary = nil
             status = String(localized: "status.trashed", defaultValue: "Moved to Trash.")
             snapshotRevision &+= 1
             items = updatedItems

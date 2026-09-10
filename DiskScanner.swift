@@ -1,5 +1,19 @@
 import Foundation
 
+nonisolated struct CompletedScanSummary: Equatable, Sendable {
+    let allocatedBytes: Int64
+    let filesScanned: Int64
+    let foldersScanned: Int64
+    let restrictedLocations: Int
+    let elapsed: Duration
+}
+
+nonisolated struct DiskScanResult: Sendable {
+    let root: FolderUsage
+    let restricted: [String]
+    let summary: CompletedScanSummary
+}
+
 nonisolated final class DiskScanner: @unchecked Sendable {
     private let lock = NSLock()
     private var _progress = ScanProgress()
@@ -19,17 +33,20 @@ nonisolated final class DiskScanner: @unchecked Sendable {
     }
 
     private static let resourceKeys: Set<URLResourceKey> = [
-        .isRegularFileKey, .totalFileAllocatedSizeKey, .fileAllocatedSizeKey
+        .isRegularFileKey, .isDirectoryKey, .totalFileAllocatedSizeKey, .fileAllocatedSizeKey
     ]
 
-    func scan(at rootURL: URL, showHiddenFiles: Bool) async -> (root: FolderUsage, restricted: [String]) {
+    func scan(at rootURL: URL, showHiddenFiles: Bool) async -> DiskScanResult {
         updateProgress(files: 0, bytes: 0, folder: "")
 
+        let clock = ContinuousClock()
+        let startedAt = clock.now
         let rootPath = rootURL.standardizedFileURL.path
         let rootNode = Node(path: rootPath)
         var restricted = Set<String>()
         var entriesSinceYield = 0
         var totalFiles: Int64 = 0
+        var totalFolders: Int64 = 0
         var totalBytes: Int64 = 0
         let options: FileManager.DirectoryEnumerationOptions = showHiddenFiles ? [] : [.skipsHiddenFiles]
 
@@ -43,32 +60,51 @@ nonisolated final class DiskScanner: @unchecked Sendable {
         }
 
         guard let enumerator else {
-            return (FolderUsage(path: rootPath, size: 0), [rootPath])
+            let restrictedPaths = [rootPath]
+            return DiskScanResult(
+                root: FolderUsage(path: rootPath, size: 0),
+                restricted: restrictedPaths,
+                summary: CompletedScanSummary(
+                    allocatedBytes: 0,
+                    filesScanned: 0,
+                    foldersScanned: 0,
+                    restrictedLocations: restrictedPaths.count,
+                    elapsed: startedAt.duration(to: clock.now)
+                )
+            )
         }
 
         while let item = enumerator.nextObject() as? URL {
             if Task.isCancelled { break }
 
             autoreleasepool {
-                guard let values = try? item.resourceValues(forKeys: Self.resourceKeys),
-                      values.isRegularFile == true,
-                      let size = values.totalFileAllocatedSize ?? values.fileAllocatedSize,
-                      size > 0 else { return }
+                guard let values = try? item.resourceValues(forKeys: Self.resourceKeys) else { return }
 
-                let fileSize = Int64(size)
-                let filePath = item.standardizedFileURL.path
-                let folderPath = item.deletingLastPathComponent().standardizedFileURL.path
-                let fileName = (filePath as NSString).lastPathComponent
+                if values.isDirectory == true {
+                    totalFolders += 1
+                    return
+                }
 
-                rootNode.addFile(
-                    path: filePath,
-                    name: fileName,
-                    folder: folderPath,
-                    size: fileSize,
-                    rootPath: rootPath
-                )
+                guard values.isRegularFile == true else { return }
+
                 totalFiles += 1
-                totalBytes += fileSize
+                let folderPath = item.deletingLastPathComponent().standardizedFileURL.path
+
+                if let size = values.totalFileAllocatedSize ?? values.fileAllocatedSize,
+                   size > 0 {
+                    let fileSize = Int64(size)
+                    let filePath = item.standardizedFileURL.path
+                    let fileName = (filePath as NSString).lastPathComponent
+
+                    rootNode.addFile(
+                        path: filePath,
+                        name: fileName,
+                        folder: folderPath,
+                        size: fileSize,
+                        rootPath: rootPath
+                    )
+                    totalBytes += fileSize
+                }
 
                 if totalFiles % 50 == 0 {
                     updateProgress(files: totalFiles, bytes: totalBytes, folder: folderPath)
@@ -83,7 +119,18 @@ nonisolated final class DiskScanner: @unchecked Sendable {
         }
 
         updateProgress(files: totalFiles, bytes: totalBytes, folder: "")
-        return (rootNode.toFolderUsage(), restricted.sorted())
+        let restrictedPaths = restricted.sorted()
+        return DiskScanResult(
+            root: rootNode.toFolderUsage(),
+            restricted: restrictedPaths,
+            summary: CompletedScanSummary(
+                allocatedBytes: totalBytes,
+                filesScanned: totalFiles,
+                foldersScanned: totalFolders,
+                restrictedLocations: restrictedPaths.count,
+                elapsed: startedAt.duration(to: clock.now)
+            )
+        )
     }
 
     private static func topLevelPath(_ url: URL, under root: URL) -> String {
