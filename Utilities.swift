@@ -100,3 +100,122 @@ nonisolated enum TreePresentationPreprocessor {
         }
     }
 }
+
+nonisolated struct SunburstSegment: Identifiable, Equatable, Sendable {
+    let id: String
+    let item: FolderUsage
+    let level: Int
+    let startAngle: Double
+    let endAngle: Double
+    let hue: Double
+}
+
+nonisolated enum SunburstPresentationPreprocessor {
+    static func segments(
+        for items: [FolderUsage],
+        totalSize: Int64,
+        levels: Int = 4
+    ) -> [SunburstSegment]? {
+        guard !isCancelled else { return nil }
+        guard totalSize > 0, levels > 0 else { return [] }
+
+        let sorted = sortedBySize(items)
+        var result: [SunburstSegment] = []
+        var angle = 0.0
+
+        for (index, item) in sorted.enumerated() {
+            guard !isCancelled else { return nil }
+
+            let span = 360 * Double(item.size) / Double(totalSize)
+            let endAngle = angle + span
+            defer { angle = endAngle }
+            guard span >= 1 else { continue }
+
+            let hue = (Double(index) / Double(max(sorted.count, 1)) + 0.08)
+                .truncatingRemainder(dividingBy: 1)
+            result.append(
+                SunburstSegment(
+                    id: item.path + "-0",
+                    item: item,
+                    level: 0,
+                    startAngle: angle,
+                    endAngle: endAngle,
+                    hue: hue
+                )
+            )
+
+            guard build(
+                item.children,
+                totalSize: item.size,
+                level: 1,
+                levels: levels,
+                start: angle,
+                end: endAngle,
+                hue: hue,
+                result: &result
+            ) else { return nil }
+        }
+
+        return result
+    }
+
+    private static func build(
+        _ items: [FolderUsage],
+        totalSize: Int64,
+        level: Int,
+        levels: Int,
+        start: Double,
+        end: Double,
+        hue: Double,
+        result: inout [SunburstSegment]
+    ) -> Bool {
+        guard !isCancelled else { return false }
+        guard level < levels, totalSize > 0, !items.isEmpty else { return true }
+
+        var angle = start
+        for item in sortedBySize(items) {
+            guard !isCancelled else { return false }
+
+            let span = (end - start) * Double(item.size) / Double(totalSize)
+            let endAngle = angle + span
+            defer { angle = endAngle }
+            guard span >= 1 else { continue }
+
+            result.append(
+                SunburstSegment(
+                    id: "\(item.path)-\(level)",
+                    item: item,
+                    level: level,
+                    startAngle: angle,
+                    endAngle: endAngle,
+                    hue: hue
+                )
+            )
+
+            guard build(
+                item.children,
+                totalSize: item.size,
+                level: level + 1,
+                levels: levels,
+                start: angle,
+                end: endAngle,
+                hue: hue,
+                result: &result
+            ) else { return false }
+        }
+
+        return true
+    }
+
+    private static func sortedBySize(_ items: [FolderUsage]) -> [FolderUsage] {
+        items.sorted { lhs, rhs in
+            lhs.size != rhs.size ? lhs.size > rhs.size : lhs.path < rhs.path
+        }
+    }
+
+    private static var isCancelled: Bool {
+        withUnsafeCurrentTask { task in
+            task?.isCancelled ?? false
+        }
+    }
+}

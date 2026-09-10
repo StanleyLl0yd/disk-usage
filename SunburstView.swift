@@ -1,13 +1,57 @@
 import SwiftUI
+import Combine
+
+@MainActor
+final class SunburstPresentationState: ObservableObject {
+    @Published private(set) var segments: [SunburstSegment] = []
+
+    private var task: Task<Void, Never>?
+    private var generation = 0
+
+    func prepare(items: [FolderUsage], totalSize: Int64, levels: Int) {
+        generation &+= 1
+        let generation = generation
+        task?.cancel()
+        segments = []
+
+        guard !items.isEmpty, totalSize > 0 else {
+            task = nil
+            return
+        }
+
+        task = Task.detached(priority: .userInitiated) { [items, totalSize, levels] in
+            guard let prepared = SunburstPresentationPreprocessor.segments(
+                for: items,
+                totalSize: totalSize,
+                levels: levels
+            ) else { return }
+
+            await MainActor.run { [weak self] in
+                guard let self, self.generation == generation else { return }
+                self.segments = prepared
+                self.task = nil
+            }
+        }
+    }
+
+    func cancel() {
+        generation &+= 1
+        task?.cancel()
+        task = nil
+        segments = []
+    }
+}
 
 struct SunburstView: View {
     let items: [FolderUsage]
     let totalSize: Int64
+    let snapshotRevision: UInt64
     var scanProgress: ScanProgress? = nil
     let onShowInFinder: (FolderUsage) -> Void
     let onCopyPath: (FolderUsage) -> Void
     let onDelete: (FolderUsage) -> Void
 
+    @StateObject private var presentation = SunburstPresentationState()
     @State private var navigation: [String] = []
 
     private let levels = 4, center: CGFloat = 70, ring: CGFloat = 45
@@ -33,23 +77,31 @@ struct SunburstView: View {
             GeometryReader { geo in
                 let c = CGPoint(x: geo.size.width / 2, y: geo.size.height / 2)
                 ZStack {
-                    ForEach(segments(), id: \.0) { _, item, level, start, end, color in
+                    ForEach(presentation.segments) { segment in
                         let arc = Arc(
                             c: c,
-                            r1: center + CGFloat(level) * ring,
-                            r2: center + CGFloat(level + 1) * ring - 1,
-                            a1: start,
-                            a2: end
+                            r1: center + CGFloat(segment.level) * ring,
+                            r2: center + CGFloat(segment.level + 1) * ring - 1,
+                            a1: segment.startAngle,
+                            a2: segment.endAngle
                         )
+                        let color = Color(
+                            hue: segment.hue,
+                            saturation: 0.7 - Double(segment.level) * 0.08,
+                            brightness: 0.9 - Double(segment.level) * 0.12
+                        )
+
                         arc.fill(color)
                             .overlay(arc.stroke(.white.opacity(0.3), lineWidth: 0.5))
                             .onTapGesture {
-                                if !item.children.isEmpty {
-                                    withAnimation(.easeInOut(duration: 0.3)) { navigation.append(item.path) }
+                                if !segment.item.children.isEmpty {
+                                    withAnimation(.easeInOut(duration: 0.3)) {
+                                        navigation.append(segment.item.path)
+                                    }
                                 }
                             }
                             .folderContextMenu(
-                                item,
+                                segment.item,
                                 showHeader: true,
                                 onShowInFinder: onShowInFinder,
                                 onCopyPath: onCopyPath,
@@ -77,7 +129,18 @@ struct SunburstView: View {
             }
         }
         .frame(minWidth: 400, minHeight: 400)
-        .onChange(of: totalSize) { _, _ in navigation = resolvedPath.map(\.path) }
+        .onAppear {
+            preparePresentation()
+        }
+        .onChange(of: navigation) { _, _ in
+            preparePresentation()
+        }
+        .onChange(of: snapshotRevision) { _, _ in
+            reconcileNavigationAndPrepare()
+        }
+        .onDisappear {
+            presentation.cancel()
+        }
     }
 
     private var breadcrumb: some View {
@@ -117,48 +180,18 @@ struct SunburstView: View {
         .padding(.horizontal)
     }
 
-    private func segments() -> [(String, FolderUsage, Int, Double, Double, Color)] {
-        var result: [(String, FolderUsage, Int, Double, Double, Color)] = []
-        let sorted = current.items.sorted { $0.size > $1.size }
+    private func preparePresentation() {
+        let snapshot = current
+        presentation.prepare(items: snapshot.items, totalSize: snapshot.total, levels: levels)
+    }
 
-        func build(_ items: [FolderUsage], _ total: Int64, _ level: Int, _ start: Double, _ end: Double, _ hue: Double) {
-            guard level < levels, total > 0 else { return }
-            var angle = start
-            for item in items.sorted(by: { $0.size > $1.size }) {
-                let span = (end - start) * Double(item.size) / Double(total)
-                let endAngle = angle + span
-                defer { angle = endAngle }
-                guard span >= 1 else { continue }
-
-                result.append((
-                    "\(item.path)-\(level)", item, level, angle, endAngle,
-                    Color(
-                        hue: hue,
-                        saturation: 0.7 - Double(level) * 0.08,
-                        brightness: 0.9 - Double(level) * 0.12
-                    )
-                ))
-                if !item.children.isEmpty {
-                    build(item.children, item.size, level + 1, angle, endAngle, hue)
-                }
-            }
+    private func reconcileNavigationAndPrepare() {
+        let validNavigation = resolvedPath.map(\.path)
+        if validNavigation == navigation {
+            preparePresentation()
+        } else {
+            navigation = validNavigation
         }
-
-        guard current.total > 0 else { return result }
-        var angle = 0.0
-        for (index, item) in sorted.enumerated() {
-            let span = 360 * Double(item.size) / Double(current.total)
-            let endAngle = angle + span
-            defer { angle = endAngle }
-            guard span >= 1 else { continue }
-
-            let hue = (Double(index) / Double(max(sorted.count, 1)) + 0.08).truncatingRemainder(dividingBy: 1)
-            result.append((item.path + "-0", item, 0, angle, endAngle, Color(hue: hue, saturation: 0.7, brightness: 0.9)))
-            if !item.children.isEmpty {
-                build(item.children, item.size, 1, angle, endAngle, hue)
-            }
-        }
-        return result
     }
 }
 

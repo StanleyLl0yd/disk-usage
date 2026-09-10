@@ -63,6 +63,44 @@ final class FolderUsageTests: XCTestCase {
         XCTAssertEqual(source[1].children.map(\.path), [small.path, large.path])
     }
 
+    func testSunburstPresentationPreprocessorBuildsDeterministicGeometry() {
+        let childSmall = FolderUsage(path: "/root/a/small", size: 20, isFile: true)
+        let childLarge = FolderUsage(path: "/root/a/large", size: 40, isFile: true)
+        let a = FolderUsage(path: "/root/a", size: 60, children: [childSmall, childLarge])
+        let b = FolderUsage(path: "/root/b", size: 40)
+
+        let prepared = SunburstPresentationPreprocessor.segments(
+            for: [b, a],
+            totalSize: 100,
+            levels: 4
+        )
+
+        let segments = try! XCTUnwrap(prepared)
+        XCTAssertEqual(segments.map(\.item.path), [a.path, childLarge.path, childSmall.path, b.path])
+        XCTAssertEqual(segments.map(\.level), [0, 1, 1, 0])
+        XCTAssertEqual(segments[0].startAngle, 0, accuracy: 0.0001)
+        XCTAssertEqual(segments[0].endAngle, 216, accuracy: 0.0001)
+        XCTAssertEqual(segments[1].startAngle, 0, accuracy: 0.0001)
+        XCTAssertEqual(segments[1].endAngle, 144, accuracy: 0.0001)
+        XCTAssertEqual(segments[2].startAngle, 144, accuracy: 0.0001)
+        XCTAssertEqual(segments[2].endAngle, 216, accuracy: 0.0001)
+        XCTAssertEqual(segments[3].startAngle, 216, accuracy: 0.0001)
+        XCTAssertEqual(segments[3].endAngle, 360, accuracy: 0.0001)
+    }
+
+    func testSunburstPresentationPreprocessorUsesPathTieBreaker() {
+        let b = FolderUsage(path: "/root/b", size: 50)
+        let a = FolderUsage(path: "/root/a", size: 50)
+
+        let prepared = SunburstPresentationPreprocessor.segments(
+            for: [b, a],
+            totalSize: 100,
+            levels: 1
+        )
+
+        XCTAssertEqual(prepared?.map(\.item.path), [a.path, b.path])
+    }
+
     func testFormatBytesUsesNextUnitAtExactBoundary() {
         XCTAssertEqual(formatBytes(1024), "1.0 KB")
     }

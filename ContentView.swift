@@ -74,6 +74,7 @@ struct ContentView: View {
                     SunburstView(
                         items: viewModel.items,
                         totalSize: viewModel.totalSize,
+                        snapshotRevision: viewModel.snapshotRevision,
                         scanProgress: viewModel.isScanning ? viewModel.progress : nil,
                         onShowInFinder: viewModel.showInFinder,
                         onCopyPath: viewModel.copyPath,
