@@ -10,7 +10,7 @@
 		09164F04B93E700E14A4D81A /* FolderUsageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B8D41F1654CD51C1A4530EB /* FolderUsageTests.swift */; };
 		0D2D7CB139CF0C3BAD5061D9 /* DiskScannerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE120206D5311A58B609EA26 /* DiskScannerTests.swift */; };
 		950FB98D2EE0B874003A2FC2 /* DiskUsageApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 950FB98C2EE0B874003A2FC2 /* DiskUsageApp.swift */; };
-		950FB9912EE0B875003A2FC2 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 950FB9902EE0B875003A2FC2 /* Assets.xcassets */; };
+		950FB9912EE0B875003A2FC2 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 950FB9902EE0B874003A2FC2 /* Assets.xcassets */; };
 		950FB9982EE0B9CB003A2FC2 /* FolderUsage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 950FB9972EE0B9C7003A2FC2 /* FolderUsage.swift */; };
 		950FB99C2EE0B9FC003A2FC2 /* DiskScannerViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 950FB99B2EE0B9F8003A2FC2 /* DiskScannerViewModel.swift */; };
 		950FB99E2EE0BA5B003A2FC2 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 950FB99D2EE0BA15003A2FC2 /* ContentView.swift */; };
@@ -77,7 +77,7 @@
 				950FB9A02EE0B874003A2FC2 /* DiskUsage.app */,
 				3DAB7E54CE6A4A0214818007 /* DiskUsageTests.xctest */,
 				950FB9B32EE4433A003A2FC2 /* DiskUsage.entitlements */,
-				950FB99D2EE0BA15003A2FC2 /* ContentView.swift */,
+				950FB99D2EE0BA5B003A2FC2 /* ContentView.swift */,
 				950FB9B82EE4568B003A2FC2 /* DiskScanner.swift */,
 				950FB99B2EE0B9F8003A2FC2 /* DiskScannerViewModel.swift */,
 				950FB98C2EE0B874003A2FC2 /* DiskUsageApp.swift */,
@@ -249,7 +249,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = com.sl.DiskUsageTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SWIFT_VERSION = 5.0;
+				SWIFT_VERSION = 6.0;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/DiskUsage.app/Contents/MacOS/DiskUsage";
 			};
 			name = Release;
@@ -405,7 +405,7 @@
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
+				SWIFT_VERSION = 6.0;
 			};
 			name = Debug;
 		};
@@ -438,7 +438,7 @@
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
+				SWIFT_VERSION = 6.0;
 			};
 			name = Release;
 		};
@@ -450,7 +450,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				PRODUCT_BUNDLE_IDENTIFIER = com.sl.DiskUsageTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SWIFT_VERSION = 5.0;
+				SWIFT_VERSION = 6.0;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/DiskUsage.app/Contents/MacOS/DiskUsage";
 			};
 			name = Debug;
