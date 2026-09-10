@@ -75,6 +75,20 @@ Before this roadmap begins, DiskUsage already has:
 
 The platform baseline was an explicit project-owner-approved priority before R1.2. It should be preserved rather than rebuilt.
 
+## macOS support policy
+
+The minimum deployment target is a product decision, not a promise to support an old macOS release indefinitely.
+
+- Keep the oldest supported macOS version while supporting it remains low-cost and does not materially constrain product quality, UX, performance, accessibility, security, or use of appropriate current SwiftUI/AppKit APIs.
+- The default trigger to raise the minimum deployment target is the combination of both conditions: the affected macOS version is estimated to represent roughly **less than 5% of the relevant active Mac installed base**, and retaining support has developed a **meaningful compatibility cost**.
+- Meaningful compatibility cost includes API workarounds, duplicate implementation or UI paths, disproportionate testing/CI burden, degraded performance or accessibility, or blocking a materially better current-platform implementation.
+- Falling below roughly 5% by itself is not an automatic reason to drop support while compatibility remains effectively free.
+- Conversely, a significant compatibility burden should trigger an explicit support review even before the 5% threshold is reached; any exception to the default rule requires a deliberate project-owner decision.
+- Installed-base estimates must use the best reasonably reliable current evidence available at the time; do not present third-party estimates as exact Apple figures when Apple does not publish equivalent version-level data.
+- Any deployment-target change must be explicit, reviewed, verified by CI, and synchronized across the Xcode project, README requirements, roadmap, and repository platform invariants.
+
+For the current baseline, macOS 14.0 Sonoma remains supported because the project builds and tests cleanly without compatibility workarounds. It should not block adoption of materially better platform APIs later merely to preserve support for a small legacy share.
+
 ---
 
 # R1 — Scale, responsiveness, and truthful scan summary
