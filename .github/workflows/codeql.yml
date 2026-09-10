@@ -30,8 +30,8 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Select Xcode 26.1.1
-        run: sudo xcode-select -s /Applications/Xcode_26.1.1.app/Contents/Developer
+      - name: Select Xcode 26.6
+        run: sudo xcode-select -s /Applications/Xcode_26.6.app/Contents/Developer
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
