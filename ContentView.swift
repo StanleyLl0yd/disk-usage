@@ -1,11 +1,41 @@
 import SwiftUI
 import AppKit
 
+@MainActor
+final class TreePresentationState: ObservableObject {
+    @Published private(set) var items: [FolderUsage] = []
+
+    private var task: Task<Void, Never>?
+    private var generation = 0
+
+    func prepare(_ source: [FolderUsage], by option: SortOption) {
+        generation &+= 1
+        let generation = generation
+        task?.cancel()
+
+        guard !source.isEmpty else {
+            task = nil
+            items = []
+            return
+        }
+
+        task = Task.detached(priority: .userInitiated) { [source, option] in
+            guard let prepared = TreePresentationPreprocessor.sorted(source, by: option) else { return }
+
+            await MainActor.run { [weak self] in
+                guard let self, self.generation == generation else { return }
+                self.items = prepared
+                self.task = nil
+            }
+        }
+    }
+}
+
 struct ContentView: View {
     @StateObject var viewModel: DiskScannerViewModel
     @EnvironmentObject var settings: AppSettings
+    @StateObject private var treePresentation = TreePresentationState()
     @State private var sortOption: SortOption = .sizeDesc
-    @State private var sortedItems: [FolderUsage] = []
     @State private var itemToDelete: FolderUsage?
     @State private var showDeleteAlert = false
     @State private var showErrorAlert = false
@@ -26,7 +56,7 @@ struct ContentView: View {
                 switch settings.viewMode {
                 case .tree:
                     TreeView(
-                        items: sortedItems,
+                        items: treePresentation.items,
                         totalSize: viewModel.totalSize,
                         restricted: viewModel.restricted,
                         onShowInFinder: viewModel.showInFinder,
@@ -51,14 +81,14 @@ struct ContentView: View {
         }
         .padding()
         .frame(minWidth: 800, minHeight: 600)
+        .onAppear {
+            treePresentation.prepare(viewModel.items, by: sortOption)
+        }
         .onChange(of: viewModel.items) { _, items in
-            refreshSortedItems(items)
+            treePresentation.prepare(items, by: sortOption)
         }
-        .onChange(of: sortOption) { _, _ in
-            refreshSortedItems(viewModel.items)
-        }
-        .onChange(of: settings.viewMode) { _, _ in
-            refreshSortedItems(viewModel.items)
+        .onChange(of: sortOption) { _, option in
+            treePresentation.prepare(viewModel.items, by: option)
         }
         .alert(
             String(localized: "alert.delete.title", defaultValue: "Move to Trash?"),
@@ -89,14 +119,6 @@ struct ContentView: View {
         } message: {
             Text(errorMessage)
         }
-    }
-
-    private func refreshSortedItems(_ items: [FolderUsage]) {
-        guard settings.viewMode == .tree else {
-            sortedItems = []
-            return
-        }
-        sortedItems = sortOption.sorted(items.map { $0.sorted(by: sortOption) })
     }
 
     private func requestDelete(_ item: FolderUsage) {
