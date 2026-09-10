@@ -18,8 +18,9 @@ A fast, privacy-first disk space analyzer for macOS built with SwiftUI.
 - English and Russian localization.
 
 ## Requirements
-- macOS 26.1+
-- Xcode 26.1+
+- macOS 14.0+
+- Xcode 26.6+
+- Swift 6 language mode
 
 ## Setup
 1. Open `DiskUsage.xcodeproj` in Xcode.
@@ -27,11 +28,13 @@ A fast, privacy-first disk space analyzer for macOS built with SwiftUI.
 3. If scanning protected areas, grant **Full Disk Access** in System Settings → Privacy & Security.
 
 ## Verification
-Run the `DiskUsage` shared scheme to build the app and execute the regression tests.
+Run the `DiskUsage` shared scheme to build the app and execute the regression tests. CI uses Xcode 26.6 as the canonical toolchain.
 
 ## Status & Roadmap
-- Current: source-only distribution.
-- Next: further development is planned soon; new features and updates will be announced separately.
+- Current version: `0.1.0` (build `1`).
+- Distribution: source only; signed/notarized binaries are not published yet.
+- Current development stage: R1 — scale, responsiveness, and truthful scan summary. See [`docs/ROADMAP.md`](docs/ROADMAP.md).
+- Version `1.0.0` is reserved for release readiness after the planned product stages are complete and verified.
 
 ## Contributing
 Pull requests and issues are welcome. For UI changes, include a short note or screenshot.
