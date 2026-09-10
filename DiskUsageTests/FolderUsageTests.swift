@@ -63,6 +63,70 @@ final class FolderUsageTests: XCTestCase {
         XCTAssertEqual(source[1].children.map(\.path), [small.path, large.path])
     }
 
+    func testSunburstPresentationPreprocessorIsDeterministicAndDoesNotMutateSource() {
+        let zChild = FolderUsage(path: "/root/a/z", size: 25, isFile: true)
+        let aChild = FolderUsage(path: "/root/a/a", size: 25, isFile: true)
+        let folderB = FolderUsage(path: "/root/b", size: 50)
+        let folderA = FolderUsage(path: "/root/a", size: 50, children: [zChild, aChild])
+        let source = [folderB, folderA]
+
+        let prepared = SunburstPresentationPreprocessor.prepare(
+            items: source,
+            totalSize: 100,
+            navigation: []
+        )
+
+        let topLevel = prepared?.segments.filter { $0.level == 0 }
+        let nested = prepared?.segments.filter { $0.level == 1 }
+
+        XCTAssertEqual(topLevel?.map(\.path), [folderA.path, folderB.path])
+        XCTAssertEqual(nested?.map(\.path), [aChild.path, zChild.path])
+        XCTAssertEqual(topLevel?.map(\.startAngle), [0, 180])
+        XCTAssertEqual(topLevel?.map(\.endAngle), [180, 360])
+        XCTAssertEqual(source.map(\.path), [folderB.path, folderA.path])
+        XCTAssertEqual(source[1].children.map(\.path), [zChild.path, aChild.path])
+    }
+
+    func testSunburstPresentationPreprocessorResolvesNavigation() {
+        let leaf = FolderUsage(path: "/root/folder/leaf", size: 100, isFile: true)
+        let folder = FolderUsage(path: "/root/folder", size: 100, children: [leaf])
+
+        let prepared = SunburstPresentationPreprocessor.prepare(
+            items: [folder],
+            totalSize: 100,
+            navigation: [folder.path]
+        )
+
+        XCTAssertEqual(prepared?.navigation.map(\.path), [folder.path])
+        XCTAssertEqual(prepared?.total, folder.size)
+        XCTAssertEqual(prepared?.segments.map(\.path), [leaf.path])
+        XCTAssertEqual(prepared?.segments.map(\.level), [0])
+    }
+
+    func testSunburstPresentationPreprocessorPreservesDepthCapAndMinimumSpan() {
+        let deepest = FolderUsage(path: "/root/a/b/c/d", size: 100, isFile: true)
+        let levelThree = FolderUsage(path: "/root/a/b/c", size: 100, children: [deepest])
+        let levelTwo = FolderUsage(path: "/root/a/b", size: 100, children: [levelThree])
+        let levelOne = FolderUsage(path: "/root/a", size: 100, children: [levelTwo])
+        let tiny = FolderUsage(path: "/root/tiny", size: 1, isFile: true)
+        let large = FolderUsage(path: "/root/large", size: 999, isFile: true)
+
+        let depthPrepared = SunburstPresentationPreprocessor.prepare(
+            items: [levelOne],
+            totalSize: 100,
+            navigation: []
+        )
+        let filteredPrepared = SunburstPresentationPreprocessor.prepare(
+            items: [tiny, large],
+            totalSize: 1_000,
+            navigation: []
+        )
+
+        XCTAssertEqual(depthPrepared?.segments.map(\.level), [0, 1, 2, 3])
+        XCTAssertFalse(depthPrepared?.segments.contains(where: { $0.path == deepest.path }) == true)
+        XCTAssertEqual(filteredPrepared?.segments.map(\.path), [large.path])
+    }
+
     func testFormatBytesUsesNextUnitAtExactBoundary() {
         XCTAssertEqual(formatBytes(1024), "1.0 KB")
     }
