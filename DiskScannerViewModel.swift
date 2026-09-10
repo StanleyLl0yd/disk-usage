@@ -30,6 +30,7 @@ final class DiskScannerViewModel: ObservableObject {
     @Published private(set) var totalSize: Int64 = 0
     @Published private(set) var progress = ScanProgress()
     @Published private(set) var diskInfo: DiskInfo = .empty
+    private(set) var snapshotRevision: UInt64 = 0
 
     private let settings: AppSettings
     private var scanTask: Task<Void, Never>?
@@ -78,11 +79,12 @@ final class DiskScannerViewModel: ObservableObject {
 
         isScanning = true
         targetDescription = description ?? url.path
-        items = []
         restricted = []
         totalSize = 0
         progress = ScanProgress()
         status = String(localized: "status.scanning", defaultValue: "Scanning…")
+        snapshotRevision &+= 1
+        items = []
 
         progressTask = Task { [weak self] in
             while !Task.isCancelled {
@@ -132,10 +134,11 @@ final class DiskScannerViewModel: ObservableObject {
         progressTask = nil
         scanTask = nil
         progress = finalProgress
-        items = result.root.children
         totalSize = result.root.size
         restricted = result.restricted
         isScanning = false
+        snapshotRevision &+= 1
+        items = result.root.children
 
         status = items.isEmpty
             ? String(localized: "status.finished.empty", defaultValue: "No data found.")
@@ -170,9 +173,11 @@ final class DiskScannerViewModel: ObservableObject {
 
         do {
             try FileManager.default.trashItem(at: item.url, resultingItemURL: nil)
-            items = items.compactMap { $0.removing(path: item.path) }
+            let updatedItems = items.compactMap { $0.removing(path: item.path) }
             totalSize -= size
             status = String(localized: "status.trashed", defaultValue: "Moved to Trash.")
+            snapshotRevision &+= 1
+            items = updatedItems
             updateDiskInfo()
             return .success
         } catch {
