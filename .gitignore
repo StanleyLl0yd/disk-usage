@@ -6,3 +6,13 @@ xcuserdata/
 *.hmap
 *.dSYM
 *.dSYM.zip
+
+.env
+.env.*
+*.key
+*.pem
+*.p12
+*.pfx
+*.cer
+*.mobileprovision
+*.provisionprofile
