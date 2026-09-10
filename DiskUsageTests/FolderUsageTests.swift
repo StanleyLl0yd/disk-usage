@@ -104,8 +104,9 @@ final class FolderUsageTests: XCTestCase {
     }
 
     func testSunburstPresentationPreprocessorPreservesDepthCapAndMinimumSpan() {
-        let deepest = FolderUsage(path: "/root/a/b/c/d", size: 100, isFile: true)
-        let levelThree = FolderUsage(path: "/root/a/b/c", size: 100, children: [deepest])
+        let beyondDepth = FolderUsage(path: "/root/a/b/c/d/e", size: 100, isFile: true)
+        let levelFour = FolderUsage(path: "/root/a/b/c/d", size: 100, children: [beyondDepth])
+        let levelThree = FolderUsage(path: "/root/a/b/c", size: 100, children: [levelFour])
         let levelTwo = FolderUsage(path: "/root/a/b", size: 100, children: [levelThree])
         let levelOne = FolderUsage(path: "/root/a", size: 100, children: [levelTwo])
         let tiny = FolderUsage(path: "/root/tiny", size: 1, isFile: true)
@@ -123,7 +124,11 @@ final class FolderUsageTests: XCTestCase {
         )
 
         XCTAssertEqual(depthPrepared?.segments.map(\.level), [0, 1, 2, 3])
-        XCTAssertFalse(depthPrepared?.segments.contains(where: { $0.path == deepest.path }) == true)
+        XCTAssertEqual(
+            depthPrepared?.segments.map(\.path),
+            [levelOne.path, levelTwo.path, levelThree.path, levelFour.path]
+        )
+        XCTAssertFalse(depthPrepared?.segments.contains(where: { $0.path == beyondDepth.path }) == true)
         XCTAssertEqual(filteredPrepared?.segments.map(\.path), [large.path])
     }
 
