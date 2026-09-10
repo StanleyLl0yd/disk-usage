@@ -92,15 +92,24 @@ final class DiskScannerViewModel: ObservableObject {
             }
         }
 
-        scanTask = Task.detached(priority: .userInitiated) { [weak self] in
+        let workerTask = Task.detached(priority: .userInitiated) {
             let result = await scanner.scan(at: url, showHiddenFiles: showHiddenFiles)
-            guard !Task.isCancelled else { return }
-            let finalProgress = scanner.progress
+            guard !Task.isCancelled else { return nil }
+            return (result: result, progress: scanner.progress)
+        }
 
-            await MainActor.run {
-                guard let self, self.scanGeneration == generation else { return }
-                self.finishScan(result, progress: finalProgress)
+        scanTask = Task { [weak self] in
+            let output = await withTaskCancellationHandler {
+                await workerTask.value
+            } onCancel: {
+                workerTask.cancel()
             }
+
+            guard !Task.isCancelled,
+                  let output,
+                  let self,
+                  self.scanGeneration == generation else { return }
+            self.finishScan(output.result, progress: output.progress)
         }
     }
 
