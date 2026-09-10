@@ -1,0 +1,68 @@
+name: Platform Docs Maintenance
+
+on:
+  push:
+    branches: [platform/baseline-26-6-macos14]
+    paths:
+      - .github/workflows/platform-docs-maintenance.yml
+
+permissions: {}
+
+jobs:
+  update-docs:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Update platform invariants
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected one occurrence, found {count}: {old!r}")
+              p.write_text(text.replace(old, new, 1))
+
+          replace_once(
+              "AGENTS.md",
+              "The Xcode project, English README, and Russian README must agree on supported macOS and Xcode requirements.\n\nDo not silently raise the deployment target.",
+              "The Xcode project, English README, and Russian README must agree on supported macOS and Xcode requirements.\n\nThe canonical platform baseline is:\n\n- Swift 6 language mode;\n- Xcode 26.6 stable for CI and canonical verification;\n- minimum supported macOS 14.0;\n- pre-release marketing versions remain in the `0.x.y` range until R7 release readiness and an explicit binary-release decision.\n\nThe current source-only project version is `0.1.0` with build number `1`. Any platform-baseline or versioning change requires explicit project-owner review and synchronized updates to the Xcode project, CI, and both READMEs.\n\nDo not silently raise the deployment target."
+          )
+
+          replace_once(
+              "docs/ROADMAP.md",
+              "- repository-wide audit/refactor cleanup;\n- hardened CI, CodeQL, secret scanning, dependency review, and protected `main`.\n\nThis baseline should be preserved rather than rebuilt.",
+              "- repository-wide audit/refactor cleanup;\n- hardened CI, CodeQL, secret scanning, dependency review, and protected `main`;\n- Swift 6 language mode;\n- Xcode 26.6 stable as the canonical CI/toolchain baseline;\n- minimum supported macOS 14.0;\n- source-only pre-release version `0.1.0` (build `1`), with `1.0.0` reserved for R7 release readiness.\n\nThe platform baseline was an explicit project-owner-approved priority before R1.2. It should be preserved rather than rebuilt."
+          )
+
+          replace_once(
+              "docs/ROADMAP.md",
+              "### R1.1 Tree presentation preprocessing",
+              "### R1.1 Tree presentation preprocessing — COMPLETE"
+          )
+
+          replace_once(
+              "docs/ROADMAP.md",
+              "The current product-development stage is **R1 — Scale, responsiveness, and truthful scan summary**.\n\nDo not begin R2 implementation until R1 exit criteria are satisfied and the R1 work is merged, unless the project owner explicitly changes this order.",
+              "The current product-development stage is **R1 — Scale, responsiveness, and truthful scan summary**. R1.1 is complete; after the owner-approved platform-baseline work, the next implementation slice is **R1.2 — Sunburst presentation preprocessing**.\n\nDo not begin R2 implementation until R1 exit criteria are satisfied and the R1 work is merged, unless the project owner explicitly changes this order."
+          )
+          PY
+
+          git diff --check
+
+      - name: Commit documentation
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add AGENTS.md docs/ROADMAP.md
+          git commit -m "docs: codify platform baseline"
+          git push origin HEAD:platform/baseline-26-6-macos14
