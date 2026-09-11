@@ -100,6 +100,38 @@ final class DiskScannerTests: XCTestCase {
         XCTAssertNil(viewModel.completedSummary)
     }
 
+    @MainActor
+    func testSelectionReconcilePreservesPathAcrossSnapshotReplacement() {
+        let oldChild = FolderUsage(path: "/scope/child", size: 100, isFile: true)
+        let oldParent = FolderUsage(path: "/scope", size: 100, children: [oldChild])
+        let replacementChild = FolderUsage(path: "/scope/child", size: 80, isFile: true)
+        let replacementParent = FolderUsage(path: "/scope", size: 80, children: [replacementChild])
+        let selection = ItemSelectionState()
+
+        selection.select(oldChild)
+        selection.reconcile(with: [replacementParent])
+
+        XCTAssertEqual(selection.selectedPath, replacementChild.path)
+        XCTAssertEqual(selection.selectedItem(in: [replacementParent]), replacementChild)
+    }
+
+    @MainActor
+    func testSelectionReconcileClearsPathMissingFromSnapshot() {
+        let child = FolderUsage(path: "/scope/child", size: 100, isFile: true)
+        let parent = FolderUsage(path: "/scope", size: 100, children: [child])
+        let sibling = FolderUsage(path: "/other", size: 50, isFile: true)
+        let selection = ItemSelectionState()
+
+        selection.select(child)
+        selection.reconcile(with: [parent, sibling])
+        XCTAssertEqual(selection.selectedPath, child.path)
+
+        selection.reconcile(with: [sibling])
+
+        XCTAssertNil(selection.selectedPath)
+        XCTAssertNil(selection.selectedItem(in: [sibling]))
+    }
+
     private func makeTemporaryDirectory() throws -> URL {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
