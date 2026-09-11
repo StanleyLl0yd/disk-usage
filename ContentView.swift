@@ -51,10 +51,44 @@ final class TreePresentationState: ObservableObject {
     }
 }
 
+@MainActor
+final class ItemSelectionState: ObservableObject {
+    @Published var selectedPath: String?
+
+    func select(_ item: FolderUsage) {
+        selectedPath = item.path
+    }
+
+    func selectedItem(in items: [FolderUsage]) -> FolderUsage? {
+        guard let selectedPath else { return nil }
+        return find(path: selectedPath, in: items)
+    }
+
+    func reconcile(with items: [FolderUsage]) {
+        guard selectedPath != nil else { return }
+        if selectedItem(in: items) == nil {
+            selectedPath = nil
+        }
+    }
+
+    private func find(path: String, in items: [FolderUsage]) -> FolderUsage? {
+        for item in items {
+            if item.path == path {
+                return item
+            }
+            if let match = find(path: path, in: item.children) {
+                return match
+            }
+        }
+        return nil
+    }
+}
+
 struct ContentView: View {
     @StateObject var viewModel: DiskScannerViewModel
     @EnvironmentObject var settings: AppSettings
     @StateObject private var treePresentation = TreePresentationState()
+    @StateObject private var selection = ItemSelectionState()
     @State private var sortOption: SortOption = .sizeDesc
     @State private var itemToDelete: FolderUsage?
     @State private var showDeleteAlert = false
@@ -156,6 +190,7 @@ struct ContentView: View {
             }
         }
         .onReceive(viewModel.$items) { items in
+            selection.reconcile(with: items)
             treePresentation.prepare(items, by: sortOption, preservingCurrent: false)
         }
         .onChange(of: sortOption) { _, option in
@@ -217,6 +252,7 @@ struct ContentView: View {
                             items: treePresentation.items,
                             totalSize: viewModel.totalSize,
                             restricted: viewModel.restricted,
+                            selectedPath: $selection.selectedPath,
                             onShowInFinder: viewModel.showInFinder,
                             onCopyPath: viewModel.copyPath,
                             onDelete: requestDelete
@@ -233,6 +269,7 @@ struct ContentView: View {
                         items: viewModel.items,
                         totalSize: viewModel.totalSize,
                         snapshotRevision: viewModel.snapshotRevision,
+                        selectedPath: $selection.selectedPath,
                         onShowInFinder: viewModel.showInFinder,
                         onCopyPath: viewModel.copyPath,
                         onDelete: requestDelete
@@ -252,7 +289,10 @@ struct ContentView: View {
     }
 
     private func deleteItem(_ item: FolderUsage) {
-        if case .error(let message) = viewModel.moveToTrash(item) {
+        switch viewModel.moveToTrash(item) {
+        case .success:
+            selection.reconcile(with: viewModel.items)
+        case .error(let message):
             errorMessage = message
             showErrorAlert = true
         }
