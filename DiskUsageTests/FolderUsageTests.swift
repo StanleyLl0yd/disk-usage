@@ -101,7 +101,122 @@ final class FolderUsageTests: XCTestCase {
         XCTAssertEqual(prepared?.map(\.item.path), [a.path, b.path])
     }
 
+    func testSyntheticPerformanceFixturesHaveExpectedShape() throws {
+        let treeFixture = makeTreePerformanceFixture()
+        XCTAssertEqual(nodeCount(treeFixture), 4_680)
+
+        let sunburstFixture = makeSunburstPerformanceFixture()
+        XCTAssertEqual(nodeCount(sunburstFixture), 8_276)
+
+        let totalSize = sunburstFixture.reduce(Int64(0)) { $0 + $1.size }
+        let segments = try XCTUnwrap(
+            SunburstPresentationPreprocessor.segments(
+                for: sunburstFixture,
+                totalSize: totalSize,
+                levels: 4
+            )
+        )
+        XCTAssertEqual(segments.count, 84)
+        XCTAssertEqual(Set(segments.map(\.id)).count, segments.count)
+    }
+
+    func testTreePresentationPreprocessorSyntheticPerformance() {
+        let source = makeTreePerformanceFixture()
+        var prepared: [FolderUsage]?
+
+        measure(metrics: [XCTClockMetric()]) {
+            prepared = TreePresentationPreprocessor.sorted(source, by: .sizeDesc)
+        }
+
+        XCTAssertEqual(nodeCount(prepared ?? []), 4_680)
+    }
+
+    func testSunburstPresentationPreprocessorSyntheticPerformance() {
+        let source = makeSunburstPerformanceFixture()
+        let totalSize = source.reduce(Int64(0)) { $0 + $1.size }
+        var segments: [SunburstSegment]?
+
+        measure(metrics: [XCTClockMetric()]) {
+            segments = SunburstPresentationPreprocessor.segments(
+                for: source,
+                totalSize: totalSize,
+                levels: 4
+            )
+        }
+
+        XCTAssertEqual(segments?.count, 84)
+    }
+
     func testFormatBytesUsesNextUnitAtExactBoundary() {
         XCTAssertEqual(formatBytes(1024), "1.0 KB")
+    }
+
+    private func makeTreePerformanceFixture() -> [FolderUsage] {
+        (0..<8).map { rootIndex in
+            makeSyntheticNode(
+                path: "/fixture/root-\(rootIndex)",
+                branchingFactor: 8,
+                remainingDepth: 3,
+                ordinal: rootIndex + 1
+            )
+        }
+    }
+
+    private func makeSyntheticNode(
+        path: String,
+        branchingFactor: Int,
+        remainingDepth: Int,
+        ordinal: Int
+    ) -> FolderUsage {
+        guard remainingDepth > 0 else {
+            return FolderUsage(
+                path: path,
+                size: Int64((ordinal % 97) + 1),
+                isFile: true
+            )
+        }
+
+        let children = (0..<branchingFactor).map { childIndex in
+            makeSyntheticNode(
+                path: "\(path)/node-\(childIndex)",
+                branchingFactor: branchingFactor,
+                remainingDepth: remainingDepth - 1,
+                ordinal: ordinal * branchingFactor + childIndex + 1
+            )
+        }
+
+        return FolderUsage(
+            path: path,
+            size: children.reduce(Int64(0)) { $0 + $1.size },
+            children: children
+        )
+    }
+
+    private func makeSunburstPerformanceFixture() -> [FolderUsage] {
+        (0..<4).map { rootIndex in
+            let rootPath = "/sunburst/root-\(rootIndex)"
+            let children = (0..<4).map { childIndex in
+                let childPath = "\(rootPath)/child-\(childIndex)"
+                let grandchildren = (0..<4).map { grandchildIndex in
+                    let grandchildPath = "\(childPath)/group-\(grandchildIndex)"
+                    let leaves = (0..<128).map { leafIndex in
+                        FolderUsage(
+                            path: "\(grandchildPath)/leaf-\(leafIndex)",
+                            size: 1,
+                            isFile: true
+                        )
+                    }
+                    return FolderUsage(path: grandchildPath, size: 128, children: leaves)
+                }
+                return FolderUsage(path: childPath, size: 512, children: grandchildren)
+            }
+            return FolderUsage(path: rootPath, size: 2_048, children: children)
+        }
+    }
+
+    private func nodeCount(_ items: [FolderUsage]) -> Int {
+        items.reduce(0) { partialResult, item in
+            partialResult + 1 + nodeCount(item.children)
+        }
     }
 }
