@@ -4,6 +4,7 @@ struct TreeView: View {
     let items: [FolderUsage]
     let totalSize: Int64
     let restricted: [String]
+    @Binding var selectedPath: String?
     let onShowInFinder: (FolderUsage) -> Void
     let onCopyPath: (FolderUsage) -> Void
     let onDelete: (FolderUsage) -> Void
@@ -11,7 +12,7 @@ struct TreeView: View {
     @State private var showRestricted = false
 
     var body: some View {
-        List {
+        List(selection: $selectedPath) {
             if items.isEmpty {
                 Text(String(localized: "empty.message", defaultValue: "No data. Start a scan."))
                     .foregroundStyle(ZenDesign.Colors.secondaryText)
@@ -20,6 +21,7 @@ struct TreeView: View {
                 Section(String(localized: "section.items", defaultValue: "Items")) {
                     OutlineGroup(items, children: \.childrenOptional) { item in
                         ItemRow(item: item, totalSize: totalSize)
+                            .tag(item.path)
                             .folderContextMenu(
                                 item,
                                 onShowInFinder: onShowInFinder,
