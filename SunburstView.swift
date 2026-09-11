@@ -52,6 +52,7 @@ struct SunburstView: View {
     let totalSize: Int64
     let snapshotRevision: UInt64
     var scanProgress: ScanProgress? = nil
+    @Binding var selectedPath: String?
     let onShowInFinder: (FolderUsage) -> Void
     let onCopyPath: (FolderUsage) -> Void
     let onDelete: (FolderUsage) -> Void
@@ -100,6 +101,7 @@ struct SunburstView: View {
                         arc.fill(color)
                             .overlay(arc.stroke(.white.opacity(0.3), lineWidth: 0.5))
                             .onTapGesture {
+                                selectedPath = segment.item.path
                                 if !segment.item.children.isEmpty {
                                     updateNavigation {
                                         navigation.append(segment.item.path)
