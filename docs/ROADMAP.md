@@ -93,7 +93,7 @@ For the current baseline, macOS 14.0 Sonoma remains supported because the projec
 
 # R1 — Scale, responsiveness, and truthful scan summary
 
-**Status: CURRENT**
+**Status: COMPLETE**
 
 R1 removes known presentation-path performance risks and makes completed scan information accurate before the major visual redesign begins.
 
@@ -106,14 +106,14 @@ R1 removes known presentation-path performance risks and makes completed scan in
 - Preserve the authoritative `FolderUsage` model and existing sort semantics.
 - Avoid creating a second filesystem truth or mutable presentation copy that can diverge from the scan result.
 
-### R1.2 Sunburst presentation preprocessing
+### R1.2 Sunburst presentation preprocessing — COMPLETE
 
 - Stop rebuilding and recursively sorting the entire sunburst segment graph on every avoidable SwiftUI body evaluation.
 - Introduce a derived, non-authoritative presentation model or cache only where it has measurable value.
 - Keep geometry deterministic for a given scan result and navigation state.
 - Keep visualization work outside filesystem authority.
 
-### R1.3 Accurate completed-scan summary
+### R1.3 Accurate completed-scan summary — COMPLETE
 
 A completed scan should retain and present meaningful summary data instead of conflating top-level item count with scanned file count.
 
@@ -127,7 +127,7 @@ At minimum retain or derive:
 
 Wording must make clear what each number represents.
 
-### R1.4 Performance evidence
+### R1.4 Performance evidence — COMPLETE
 
 - Add the smallest practical measurements or repeatable test fixture needed to detect obvious regressions in expensive presentation transformations.
 - Prefer synthetic/temp data over real user filesystem data.
@@ -144,11 +144,13 @@ R1 is complete when:
 - Debug tests and Release build pass in CI;
 - the PR records before/after evidence for any claimed performance improvement.
 
+R1 completion evidence is preserved in the merged R1.1–R1.4 changes and in [`docs/PERFORMANCE.md`](PERFORMANCE.md), which defines the repeatable synthetic Tree and Sunburst measurement workloads and profiling procedure.
+
 ---
 
 # R2 — Zen design system and application shell
 
-**Status: NEXT AFTER R1**
+**Status: CURRENT**
 
 R2 establishes the visual system before individual views are heavily polished. The goal is consistency, not a large theme abstraction.
 
@@ -438,6 +440,6 @@ These are not assumed future stages.
 
 # Current execution point
 
-The current product-development stage is **R1 — Scale, responsiveness, and truthful scan summary**. R1.1 is complete; after the owner-approved platform-baseline work, the next implementation slice is **R1.2 — Sunburst presentation preprocessing**.
+**R1 — Scale, responsiveness, and truthful scan summary is complete.** All R1 slices are implemented and verified, including repeatable synthetic performance evidence.
 
-Do not begin R2 implementation until R1 exit criteria are satisfied and the R1 work is merged, unless the project owner explicitly changes this order.
+The current product-development stage is **R2 — Zen design system and application shell**. Begin with **R2.1 — Visual tokens** and keep R2 work focused on the shared visual language and application shell before moving to R3 selection/navigation work.
