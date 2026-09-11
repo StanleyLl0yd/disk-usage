@@ -7,6 +7,13 @@ enum TrashResult {
     case error(String)
 }
 
+enum ScanLifecycle: Equatable {
+    case initial
+    case scanning
+    case completed
+    case cancelled
+}
+
 struct DiskInfo {
     let totalCapacity: Int64
     let usedSpace: Int64
@@ -23,7 +30,7 @@ struct DiskInfo {
 @MainActor
 final class DiskScannerViewModel: ObservableObject {
     @Published private(set) var items: [FolderUsage] = []
-    @Published private(set) var isScanning = false
+    @Published private(set) var lifecycle: ScanLifecycle = .initial
     @Published private(set) var status: String
     @Published private(set) var restricted: [String] = []
     @Published private(set) var targetDescription: String
@@ -32,6 +39,10 @@ final class DiskScannerViewModel: ObservableObject {
     @Published private(set) var diskInfo: DiskInfo = .empty
     @Published private(set) var completedSummary: CompletedScanSummary?
     private(set) var snapshotRevision: UInt64 = 0
+
+    var isScanning: Bool {
+        lifecycle == .scanning
+    }
 
     private let settings: AppSettings
     private var scanTask: Task<Void, Never>?
@@ -78,7 +89,7 @@ final class DiskScannerViewModel: ObservableObject {
         let scanner = DiskScanner()
         let showHiddenFiles = settings.showHiddenFiles
 
-        isScanning = true
+        lifecycle = .scanning
         targetDescription = description ?? url.path
         restricted = []
         totalSize = 0
@@ -123,10 +134,10 @@ final class DiskScannerViewModel: ObservableObject {
     func cancel() {
         scanGeneration &+= 1
         cancelTasks()
-        isScanning = false
         progress = ScanProgress()
         completedSummary = nil
         status = String(localized: "status.cancelled", defaultValue: "Cancelled.")
+        lifecycle = .cancelled
     }
 
     private func finishScan(_ result: DiskScanResult, progress finalProgress: ScanProgress) {
@@ -136,7 +147,6 @@ final class DiskScannerViewModel: ObservableObject {
         progress = finalProgress
         totalSize = result.root.size
         restricted = result.restricted
-        isScanning = false
         completedSummary = result.summary
         snapshotRevision &+= 1
         items = result.root.children
@@ -155,6 +165,7 @@ final class DiskScannerViewModel: ObservableObject {
 
         progress = ScanProgress()
         updateDiskInfo()
+        lifecycle = .completed
     }
 
     private func formatElapsed(_ duration: Duration) -> String {

@@ -78,6 +78,28 @@ final class DiskScannerTests: XCTestCase {
         XCTAssertEqual(scanner.progress.bytesFound, result.summary.allocatedBytes)
     }
 
+    @MainActor
+    func testViewModelLifecycleTransitionsImmediatelyOnStartAndCancel() throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let viewModel = DiskScannerViewModel()
+        XCTAssertEqual(viewModel.lifecycle, .initial)
+        XCTAssertFalse(viewModel.isScanning)
+
+        viewModel.scan(root)
+        XCTAssertEqual(viewModel.lifecycle, .scanning)
+        XCTAssertTrue(viewModel.isScanning)
+        XCTAssertTrue(viewModel.items.isEmpty)
+        XCTAssertNil(viewModel.completedSummary)
+
+        viewModel.cancel()
+        XCTAssertEqual(viewModel.lifecycle, .cancelled)
+        XCTAssertFalse(viewModel.isScanning)
+        XCTAssertTrue(viewModel.items.isEmpty)
+        XCTAssertNil(viewModel.completedSummary)
+    }
+
     private func makeTemporaryDirectory() throws -> URL {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)

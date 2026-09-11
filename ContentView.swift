@@ -5,11 +5,16 @@ import Combine
 @MainActor
 final class TreePresentationState: ObservableObject {
     @Published private(set) var items: [FolderUsage] = []
+    @Published private(set) var isPreparing = false
 
     private var task: Task<Void, Never>?
     private var generation = 0
 
-    func prepare(_ source: [FolderUsage], by option: SortOption) {
+    func prepare(
+        _ source: [FolderUsage],
+        by option: SortOption,
+        preservingCurrent: Bool
+    ) {
         generation &+= 1
         let generation = generation
         task?.cancel()
@@ -17,8 +22,14 @@ final class TreePresentationState: ObservableObject {
         guard !source.isEmpty else {
             task = nil
             items = []
+            isPreparing = false
             return
         }
+
+        if !preservingCurrent {
+            items = []
+        }
+        isPreparing = true
 
         task = Task.detached(priority: .userInitiated) { [source, option] in
             guard let prepared = TreePresentationPreprocessor.sorted(source, by: option) else { return }
@@ -26,6 +37,7 @@ final class TreePresentationState: ObservableObject {
             await MainActor.run { [weak self] in
                 guard let self, self.generation == generation else { return }
                 self.items = prepared
+                self.isPreparing = false
                 self.task = nil
             }
         }
@@ -35,6 +47,7 @@ final class TreePresentationState: ObservableObject {
         generation &+= 1
         task?.cancel()
         task = nil
+        isPreparing = false
     }
 }
 
@@ -52,42 +65,22 @@ struct ContentView: View {
         VStack(spacing: ZenDesign.Spacing.small) {
             workspaceHeader
 
-            if viewModel.isScanning {
+            if viewModel.lifecycle == .scanning {
                 ProgressPanel(progress: viewModel.progress)
             }
 
-            if settings.viewMode == .tree && !viewModel.items.isEmpty {
+            if viewModel.lifecycle == .completed,
+               settings.viewMode == .tree,
+               !viewModel.items.isEmpty {
                 treeControls
             }
 
-            if viewModel.items.isEmpty && !viewModel.isScanning {
-                emptyState
-            } else {
-                switch settings.viewMode {
-                case .tree:
-                    TreeView(
-                        items: treePresentation.items,
-                        totalSize: viewModel.totalSize,
-                        restricted: viewModel.restricted,
-                        onShowInFinder: viewModel.showInFinder,
-                        onCopyPath: viewModel.copyPath,
-                        onDelete: requestDelete
-                    )
-                case .sunburst:
-                    SunburstView(
-                        items: viewModel.items,
-                        totalSize: viewModel.totalSize,
-                        snapshotRevision: viewModel.snapshotRevision,
-                        scanProgress: viewModel.isScanning ? viewModel.progress : nil,
-                        onShowInFinder: viewModel.showInFinder,
-                        onCopyPath: viewModel.copyPath,
-                        onDelete: requestDelete
-                    )
+            content
 
-                    if !viewModel.restricted.isEmpty {
-                        restrictedBanner
-                    }
-                }
+            if viewModel.lifecycle == .completed,
+               !viewModel.restricted.isEmpty,
+               viewModel.items.isEmpty || settings.viewMode == .sunburst {
+                restrictedBanner
             }
         }
         .padding(ZenDesign.Spacing.large)
@@ -163,10 +156,10 @@ struct ContentView: View {
             }
         }
         .onReceive(viewModel.$items) { items in
-            treePresentation.prepare(items, by: sortOption)
+            treePresentation.prepare(items, by: sortOption, preservingCurrent: false)
         }
         .onChange(of: sortOption) { _, option in
-            treePresentation.prepare(viewModel.items, by: option)
+            treePresentation.prepare(viewModel.items, by: option, preservingCurrent: true)
         }
         .onDisappear {
             treePresentation.cancel()
@@ -202,6 +195,53 @@ struct ContentView: View {
         }
     }
 
+    @ViewBuilder
+    private var content: some View {
+        switch viewModel.lifecycle {
+        case .initial:
+            initialState
+        case .scanning:
+            scanningState
+        case .cancelled:
+            cancelledState
+        case .completed:
+            if viewModel.items.isEmpty {
+                completedEmptyState
+            } else {
+                switch settings.viewMode {
+                case .tree:
+                    if treePresentation.items.isEmpty {
+                        preparingState
+                    } else {
+                        TreeView(
+                            items: treePresentation.items,
+                            totalSize: viewModel.totalSize,
+                            restricted: viewModel.restricted,
+                            onShowInFinder: viewModel.showInFinder,
+                            onCopyPath: viewModel.copyPath,
+                            onDelete: requestDelete
+                        )
+                        .overlay(alignment: .topTrailing) {
+                            if treePresentation.isPreparing {
+                                presentationIndicator
+                                    .padding(ZenDesign.Spacing.small)
+                            }
+                        }
+                    }
+                case .sunburst:
+                    SunburstView(
+                        items: viewModel.items,
+                        totalSize: viewModel.totalSize,
+                        snapshotRevision: viewModel.snapshotRevision,
+                        onShowInFinder: viewModel.showInFinder,
+                        onCopyPath: viewModel.copyPath,
+                        onDelete: requestDelete
+                    )
+                }
+            }
+        }
+    }
+
     private func requestDelete(_ item: FolderUsage) {
         if settings.confirmDelete {
             itemToDelete = item
@@ -234,7 +274,7 @@ struct ContentView: View {
                 }
             }
 
-            if !viewModel.isScanning {
+            if viewModel.lifecycle == .completed || viewModel.lifecycle == .cancelled {
                 Text(viewModel.status)
                     .font(ZenDesign.Typography.detail)
                     .foregroundStyle(ZenDesign.Colors.secondaryText)
@@ -262,18 +302,51 @@ struct ContentView: View {
         .padding(.horizontal, ZenDesign.Spacing.medium)
     }
 
-    private var emptyState: some View {
+    private var initialState: some View {
         VStack(spacing: ZenDesign.Spacing.large) {
             Image(systemName: "folder.badge.questionmark")
                 .font(.system(size: 48))
                 .foregroundStyle(ZenDesign.Colors.mutedText)
+            Text(String(localized: "status.initial", defaultValue: "Choose a folder or start a scan."))
+                .font(.title3)
+                .foregroundStyle(ZenDesign.Colors.secondaryText)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var scanningState: some View {
+        VStack(spacing: ZenDesign.Spacing.medium) {
+            ProgressView()
+                .controlSize(.large)
+            Text(String(localized: "status.scanning", defaultValue: "Scanning…"))
+                .font(.title3)
+                .foregroundStyle(ZenDesign.Colors.secondaryText)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var cancelledState: some View {
+        VStack(spacing: ZenDesign.Spacing.large) {
+            Image(systemName: "xmark.circle")
+                .font(.system(size: 48))
+                .foregroundStyle(ZenDesign.Colors.mutedText)
+            Text(String(localized: "status.cancelled", defaultValue: "Cancelled."))
+                .font(.title3)
+                .foregroundStyle(ZenDesign.Colors.secondaryText)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var completedEmptyState: some View {
+        VStack(spacing: ZenDesign.Spacing.large) {
+            Image(systemName: "folder")
+                .font(.system(size: 48))
+                .foregroundStyle(ZenDesign.Colors.mutedText)
             Text(
-                viewModel.completedSummary == nil
-                    ? String(localized: "empty.message", defaultValue: "No data. Start a scan.")
-                    : String(
-                        localized: "status.finished.empty",
-                        defaultValue: "No allocated-size items in this scan."
-                    )
+                String(
+                    localized: "status.finished.empty",
+                    defaultValue: "No allocated-size items in this scan."
+                )
             )
             .font(.title3)
             .foregroundStyle(ZenDesign.Colors.secondaryText)
@@ -281,22 +354,47 @@ struct ContentView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
+    private var preparingState: some View {
+        ProgressView()
+            .controlSize(.large)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var presentationIndicator: some View {
+        ProgressView()
+            .controlSize(.small)
+            .padding(ZenDesign.Spacing.small)
+            .background(ZenDesign.Colors.elevatedSurface)
+            .clipShape(RoundedRectangle(cornerRadius: ZenDesign.Radius.small, style: .continuous))
+    }
+
     private var restrictedBanner: some View {
-        HStack(spacing: ZenDesign.Spacing.small) {
-            Image(systemName: "lock.fill")
-                .foregroundStyle(ZenDesign.Colors.mutedText)
+        VStack(alignment: .leading, spacing: ZenDesign.Spacing.compact) {
+            HStack(spacing: ZenDesign.Spacing.small) {
+                Image(systemName: "lock.fill")
+                    .foregroundStyle(ZenDesign.Colors.mutedText)
+                Text(
+                    String(
+                        format: String(
+                            localized: "restricted.count",
+                            defaultValue: "%d folders without access"
+                        ),
+                        viewModel.restricted.count
+                    )
+                )
+                .font(ZenDesign.Typography.detail)
+                .foregroundStyle(ZenDesign.Colors.secondaryText)
+                Spacer()
+            }
+
             Text(
                 String(
-                    format: String(
-                        localized: "restricted.count",
-                        defaultValue: "%d folders without access"
-                    ),
-                    viewModel.restricted.count
+                    localized: "restricted.hint",
+                    defaultValue: "Grant Full Disk Access in System Settings for complete analysis."
                 )
             )
-            .font(ZenDesign.Typography.detail)
-            .foregroundStyle(ZenDesign.Colors.secondaryText)
-            Spacer()
+            .font(ZenDesign.Typography.micro)
+            .foregroundStyle(ZenDesign.Colors.mutedText)
         }
         .padding(.horizontal, ZenDesign.Spacing.medium)
         .padding(.vertical, ZenDesign.Spacing.small)
