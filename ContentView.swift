@@ -335,9 +335,9 @@ struct DiskInfoBar: View {
 
     private var barColor: Color {
         switch usedRatio {
-        case ..<0.7: .blue
-        case ..<0.85: .orange
-        default: .red
+        case ..<0.7: ZenDesign.Colors.accent
+        case ..<0.85: ZenDesign.Colors.warning
+        default: ZenDesign.Colors.destructive
         }
     }
 
@@ -345,7 +345,7 @@ struct DiskInfoBar: View {
         HStack(spacing: ZenDesign.Spacing.medium) {
             Image(systemName: "internaldrive.fill")
                 .font(.system(size: 14))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(ZenDesign.Colors.secondaryText)
 
             GeometryReader { geometry in
                 ZStack(alignment: .leading) {
@@ -358,28 +358,28 @@ struct DiskInfoBar: View {
             .frame(height: 8)
             .frame(maxWidth: 200)
 
-            HStack(spacing: 4) {
+            HStack(spacing: ZenDesign.Spacing.compact) {
                 Text(formatBytes(diskInfo.usedSpace))
                     .fontWeight(.medium)
                 Text("/")
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(ZenDesign.Colors.secondaryText)
                 Text(formatBytes(diskInfo.totalCapacity))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(ZenDesign.Colors.secondaryText)
                 Text(String(format: "(%.0f%%)", diskInfo.usedPercent))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(ZenDesign.Colors.secondaryText)
             }
-            .font(.caption)
+            .font(ZenDesign.Typography.detail)
             .monospacedDigit()
 
             Spacer()
 
-            HStack(spacing: 4) {
+            HStack(spacing: ZenDesign.Spacing.compact) {
                 Text(String(localized: "disk.free", defaultValue: "Free:"))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(ZenDesign.Colors.secondaryText)
                 Text(formatBytes(diskInfo.freeSpace))
                     .fontWeight(.medium)
             }
-            .font(.caption)
+            .font(ZenDesign.Typography.detail)
             .monospacedDigit()
         }
         .padding(.horizontal, ZenDesign.Spacing.medium)

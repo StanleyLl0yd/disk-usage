@@ -18,9 +18,9 @@ enum ZenDesign {
     }
 
     enum Colors {
-        static var primaryBackground: Color { Color(nsColor: NSColor.windowBackgroundColor) }
-        static var surface: Color { Color(nsColor: NSColor.controlBackgroundColor) }
-        static var elevatedSurface: Color { Color(nsColor: NSColor.underPageBackgroundColor) }
+        static var primaryBackground: Color { Color("ZenBackground") }
+        static var surface: Color { Color("ZenSurface") }
+        static var elevatedSurface: Color { Color("ZenElevatedSurface") }
 
         static var primaryText: Color { Color(nsColor: NSColor.labelColor) }
         static var secondaryText: Color { Color(nsColor: NSColor.secondaryLabelColor) }

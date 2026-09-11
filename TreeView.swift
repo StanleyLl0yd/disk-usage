@@ -107,21 +107,12 @@ struct ItemRow: View {
 struct SizeBar: View {
     let ratio: Double
 
-    private var color: Color {
-        switch ratio {
-        case ..<0.25: .green
-        case ..<0.5: .yellow
-        case ..<0.75: .orange
-        default: .red
-        }
-    }
-
     var body: some View {
         GeometryReader { geometry in
             ZStack(alignment: .leading) {
                 Capsule().fill(ZenDesign.Colors.separator.opacity(0.65))
                 Capsule()
-                    .fill(color)
+                    .fill(ZenDesign.Colors.accent.opacity(0.78))
                     .frame(width: max(geometry.size.width * ratio, ratio > 0 ? 2 : 0))
             }
         }
