@@ -33,7 +33,7 @@ Run the `DiskUsage` shared scheme to build the app and execute the regression te
 ## Status & Roadmap
 - Current version: `0.1.0` (build `1`).
 - Distribution: source only; signed/notarized binaries are not published yet.
-- Current development stage: R2 — Zen design system and application shell. See [`docs/ROADMAP.md`](docs/ROADMAP.md).
+- Current development stage: R3 — Unified selection, navigation, and polished Tree view. See [`docs/ROADMAP.md`](docs/ROADMAP.md).
 - Version `1.0.0` is reserved for release readiness after the planned product stages are complete and verified.
 
 ## Contributing
