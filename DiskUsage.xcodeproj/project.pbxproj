@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		09164F04B93E700E14A4D81A /* FolderUsageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B8D41F1654CD51C1A4530EB /* FolderUsageTests.swift */; };
+		A2D74C4E93F144A9B6045C11 /* ZenDesign.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7E63D8A1F204C33A851902D /* ZenDesign.swift */; };
 		0D2D7CB139CF0C3BAD5061D9 /* DiskScannerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE120206D5311A58B609EA26 /* DiskScannerTests.swift */; };
 		950FB98D2EE0B874003A2FC2 /* DiskUsageApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 950FB98C2EE0B874003A2FC2 /* DiskUsageApp.swift */; };
 		950FB9912EE0B875003A2FC2 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 950FB9902EE0B874003A2FC2 /* Assets.xcassets */; };
@@ -39,6 +40,7 @@
 		950FB98C2EE0B874003A2FC2 /* DiskUsageApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiskUsageApp.swift; sourceTree = "<group>"; };
 		950FB9902EE0B875003A2FC2 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		950FB9972EE0B9C7003A2FC2 /* FolderUsage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FolderUsage.swift; sourceTree = "<group>"; };
+		B7E63D8A1F204C33A851902D /* ZenDesign.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZenDesign.swift; sourceTree = "<group>"; };
 		950FB99B2EE0B9F8003A2FC2 /* DiskScannerViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiskScannerViewModel.swift; sourceTree = "<group>"; };
 		950FB99D2EE0BA15003A2FC2 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		950FB9A02EE0B874003A2FC2 /* DiskUsage.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DiskUsage.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -83,6 +85,7 @@
 				950FB98C2EE0B874003A2FC2 /* DiskUsageApp.swift */,
 				950FB9C22EE6099A003A2FC2 /* FolderContextMenu.swift */,
 				950FB9972EE0B9C7003A2FC2 /* FolderUsage.swift */,
+				B7E63D8A1F204C33A851902D /* ZenDesign.swift */,
 				950FB9BC2EE5A4F2003A2FC2 /* SettingsView.swift */,
 				950FB9BE2EE5B8BC003A2FC2 /* SunburstView.swift */,
 				950FB9C02EE5B8D7003A2FC2 /* TreeView.swift */,
@@ -221,6 +224,7 @@
 				950FB9B92EE45694003A2FC2 /* DiskScanner.swift in Sources */,
 				950FB9BD2EE5A4FB003A2FC2 /* SettingsView.swift in Sources */,
 				950FB9B72EE4564D003A2FC2 /* Utilities.swift in Sources */,
+				A2D74C4E93F144A9B6045C11 /* ZenDesign.swift in Sources */,
 				950FB9C32EE609A1003A2FC2 /* FolderContextMenu.swift in Sources */,
 				950FB98D2EE0B874003A2FC2 /* DiskUsageApp.swift in Sources */,
 				950FB99E2EE0BA5B003A2FC2 /* ContentView.swift in Sources */,

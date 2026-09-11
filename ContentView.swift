@@ -49,7 +49,7 @@ struct ContentView: View {
     @State private var errorMessage = ""
 
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: ZenDesign.Spacing.small) {
             header
             controls
 
@@ -87,7 +87,8 @@ struct ContentView: View {
                 }
             }
         }
-        .padding()
+        .padding(ZenDesign.Spacing.large)
+        .background(ZenDesign.Colors.primaryBackground)
         .frame(minWidth: 800, minHeight: 600)
         .onReceive(viewModel.$items) { items in
             treePresentation.prepare(items, by: sortOption)
@@ -146,14 +147,13 @@ struct ContentView: View {
     }
 
     private var header: some View {
-        VStack(spacing: 8) {
-            HStack(spacing: 12) {
+        VStack(spacing: ZenDesign.Spacing.small) {
+            HStack(spacing: ZenDesign.Spacing.medium) {
                 Text(String(localized: "header.title", defaultValue: "Disk Usage"))
-                    .font(.title)
-                    .bold()
+                    .font(ZenDesign.Typography.windowTitle)
                 Text(viewModel.targetDescription)
-                    .font(.headline)
-                    .foregroundStyle(.secondary)
+                    .font(ZenDesign.Typography.section)
+                    .foregroundStyle(ZenDesign.Colors.secondaryText)
                     .lineLimit(1)
                 Spacer()
 
@@ -174,14 +174,14 @@ struct ContentView: View {
     }
 
     private var controls: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: ZenDesign.Spacing.small) {
             if !viewModel.isScanning {
                 Text(viewModel.status)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(ZenDesign.Typography.detail)
+                    .foregroundStyle(ZenDesign.Colors.secondaryText)
             }
 
-            HStack(spacing: 12) {
+            HStack(spacing: ZenDesign.Spacing.medium) {
                 if settings.viewMode == .tree {
                     Picker("", selection: $sortOption) {
                         ForEach(SortOption.allCases) { option in
@@ -238,10 +238,10 @@ struct ContentView: View {
     }
 
     private var emptyState: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: ZenDesign.Spacing.large) {
             Image(systemName: "folder.badge.questionmark")
                 .font(.system(size: 48))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(ZenDesign.Colors.mutedText)
             Text(
                 viewModel.completedSummary == nil
                     ? String(localized: "empty.message", defaultValue: "No data. Start a scan.")
@@ -251,15 +251,15 @@ struct ContentView: View {
                     )
             )
             .font(.title3)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(ZenDesign.Colors.secondaryText)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var restrictedBanner: some View {
-        HStack {
+        HStack(spacing: ZenDesign.Spacing.small) {
             Image(systemName: "lock.fill")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(ZenDesign.Colors.mutedText)
             Text(
                 String(
                     format: String(
@@ -269,14 +269,14 @@ struct ContentView: View {
                     viewModel.restricted.count
                 )
             )
-            .font(.caption)
-            .foregroundStyle(.secondary)
+            .font(ZenDesign.Typography.detail)
+            .foregroundStyle(ZenDesign.Colors.secondaryText)
             Spacer()
         }
-        .padding(.horizontal)
-        .padding(.vertical, 8)
-        .background(Color.secondary.opacity(0.1))
-        .cornerRadius(8)
+        .padding(.horizontal, ZenDesign.Spacing.medium)
+        .padding(.vertical, ZenDesign.Spacing.small)
+        .background(ZenDesign.Colors.surface)
+        .clipShape(RoundedRectangle(cornerRadius: ZenDesign.Radius.medium, style: .continuous))
     }
 
     private func chooseFolder() {
@@ -293,11 +293,11 @@ struct ProgressPanel: View {
     let progress: ScanProgress
 
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: ZenDesign.Spacing.small) {
             ProgressView()
                 .progressViewStyle(.linear)
 
-            HStack(spacing: 16) {
+            HStack(spacing: ZenDesign.Spacing.large) {
                 Label(
                     String(
                         format: String(localized: "progress.files", defaultValue: "%@ files"),
@@ -308,20 +308,20 @@ struct ProgressPanel: View {
                 Label(formatBytes(progress.bytesFound), systemImage: "internaldrive")
                 Spacer()
             }
-            .font(.caption)
-            .foregroundStyle(.secondary)
+            .font(ZenDesign.Typography.detail)
+            .foregroundStyle(ZenDesign.Colors.secondaryText)
             .monospacedDigit()
 
             if !progress.currentFolder.isEmpty {
                 Text(progress.currentFolder)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .font(ZenDesign.Typography.micro)
+                    .foregroundStyle(ZenDesign.Colors.mutedText)
                     .lineLimit(1)
                     .truncationMode(.middle)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .padding(.horizontal)
+        .padding(.horizontal, ZenDesign.Spacing.medium)
     }
 }
 
@@ -342,14 +342,14 @@ struct DiskInfoBar: View {
     }
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: ZenDesign.Spacing.medium) {
             Image(systemName: "internaldrive.fill")
                 .font(.system(size: 14))
                 .foregroundStyle(.secondary)
 
             GeometryReader { geometry in
                 ZStack(alignment: .leading) {
-                    Capsule().fill(Color.secondary.opacity(0.2))
+                    Capsule().fill(ZenDesign.Colors.separator.opacity(0.65))
                     Capsule()
                         .fill(barColor)
                         .frame(width: geometry.size.width * usedRatio)
@@ -382,9 +382,9 @@ struct DiskInfoBar: View {
             .font(.caption)
             .monospacedDigit()
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .background(Color.secondary.opacity(0.08))
-        .cornerRadius(6)
+        .padding(.horizontal, ZenDesign.Spacing.medium)
+        .padding(.vertical, ZenDesign.Spacing.small)
+        .background(ZenDesign.Colors.surface)
+        .clipShape(RoundedRectangle(cornerRadius: ZenDesign.Radius.small, style: .continuous))
     }
 }
