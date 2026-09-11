@@ -4,6 +4,7 @@ import Combine
 @MainActor
 final class SunburstPresentationState: ObservableObject {
     @Published private(set) var segments: [SunburstSegment] = []
+    @Published private(set) var isPreparing = false
 
     private var task: Task<Void, Never>?
     private var generation = 0
@@ -16,9 +17,11 @@ final class SunburstPresentationState: ObservableObject {
 
         guard !items.isEmpty, totalSize > 0 else {
             task = nil
+            isPreparing = false
             return
         }
 
+        isPreparing = true
         task = Task.detached(priority: .userInitiated) { [items, totalSize, levels] in
             guard let prepared = SunburstPresentationPreprocessor.segments(
                 for: items,
@@ -29,6 +32,7 @@ final class SunburstPresentationState: ObservableObject {
             await MainActor.run { [weak self] in
                 guard let self, self.generation == generation else { return }
                 self.segments = prepared
+                self.isPreparing = false
                 self.task = nil
             }
         }
@@ -39,6 +43,7 @@ final class SunburstPresentationState: ObservableObject {
         task?.cancel()
         task = nil
         segments = []
+        isPreparing = false
     }
 }
 
@@ -51,6 +56,7 @@ struct SunburstView: View {
     let onCopyPath: (FolderUsage) -> Void
     let onDelete: (FolderUsage) -> Void
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @StateObject private var presentation = SunburstPresentationState()
     @State private var navigation: [String] = []
 
@@ -95,7 +101,7 @@ struct SunburstView: View {
                             .overlay(arc.stroke(.white.opacity(0.3), lineWidth: 0.5))
                             .onTapGesture {
                                 if !segment.item.children.isEmpty {
-                                    withAnimation(.easeInOut(duration: 0.3)) {
+                                    updateNavigation {
                                         navigation.append(segment.item.path)
                                     }
                                 }
@@ -129,6 +135,16 @@ struct SunburstView: View {
             }
         }
         .frame(minWidth: 400, minHeight: 400)
+        .overlay(alignment: .topTrailing) {
+            if presentation.isPreparing {
+                ProgressView()
+                    .controlSize(.small)
+                    .padding(ZenDesign.Spacing.small)
+                    .background(ZenDesign.Colors.elevatedSurface)
+                    .clipShape(RoundedRectangle(cornerRadius: ZenDesign.Radius.small, style: .continuous))
+                    .padding(ZenDesign.Spacing.small)
+            }
+        }
         .onAppear {
             preparePresentation()
         }
@@ -146,7 +162,7 @@ struct SunburstView: View {
     private var breadcrumb: some View {
         HStack(spacing: ZenDesign.Spacing.small) {
             Button {
-                withAnimation(.easeInOut(duration: 0.3)) { _ = navigation.popLast() }
+                updateNavigation { _ = navigation.popLast() }
             } label: {
                 Image(systemName: "chevron.left").font(.system(size: 14, weight: .semibold))
             }
@@ -155,7 +171,7 @@ struct SunburstView: View {
 
             HStack(spacing: ZenDesign.Spacing.compact) {
                 Button {
-                    withAnimation(.easeInOut(duration: 0.3)) { navigation.removeAll() }
+                    updateNavigation { navigation.removeAll() }
                 } label: {
                     Text(verbatim: "/")
                 }
@@ -165,7 +181,7 @@ struct SunburstView: View {
                 ForEach(Array(resolvedPath.enumerated()), id: \.element.path) { index, item in
                     Image(systemName: "chevron.right").font(.caption2).foregroundStyle(ZenDesign.Colors.mutedText)
                     Button(item.name) {
-                        withAnimation(.easeInOut(duration: 0.3)) {
+                        updateNavigation {
                             navigation = Array(navigation.prefix(index + 1))
                         }
                     }
@@ -178,6 +194,16 @@ struct SunburstView: View {
             Spacer()
         }
         .padding(.horizontal)
+    }
+
+    private func updateNavigation(_ changes: () -> Void) {
+        if reduceMotion {
+            changes()
+        } else {
+            withAnimation(.easeInOut(duration: 0.3)) {
+                changes()
+            }
+        }
     }
 
     private func preparePresentation() {
