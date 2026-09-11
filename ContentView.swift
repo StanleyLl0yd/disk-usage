@@ -50,11 +50,14 @@ struct ContentView: View {
 
     var body: some View {
         VStack(spacing: ZenDesign.Spacing.small) {
-            header
-            controls
+            workspaceHeader
 
             if viewModel.isScanning {
                 ProgressPanel(progress: viewModel.progress)
+            }
+
+            if settings.viewMode == .tree && !viewModel.items.isEmpty {
+                treeControls
             }
 
             if viewModel.items.isEmpty && !viewModel.isScanning {
@@ -90,6 +93,75 @@ struct ContentView: View {
         .padding(ZenDesign.Spacing.large)
         .background(ZenDesign.Colors.primaryBackground)
         .frame(minWidth: 800, minHeight: 600)
+        .toolbar {
+            ToolbarItem {
+                Picker(
+                    String(localized: "settings.viewMode", defaultValue: "Default View"),
+                    selection: $settings.viewMode
+                ) {
+                    ForEach(ViewMode.allCases) { mode in
+                        Label(mode.title, systemImage: mode.icon)
+                            .labelStyle(.iconOnly)
+                            .tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(width: 88)
+                .help(String(localized: "header.viewMode.help", defaultValue: "Switch view mode"))
+            }
+
+            ToolbarItem(placement: .primaryAction) {
+                if viewModel.isScanning {
+                    Button(role: .cancel) {
+                        viewModel.cancel()
+                    } label: {
+                        Label(
+                            String(localized: "button.cancel", defaultValue: "Cancel"),
+                            systemImage: "xmark.circle"
+                        )
+                    }
+                    .keyboardShortcut(.escape, modifiers: [])
+                } else {
+                    Menu {
+                        Button {
+                            viewModel.scanHome()
+                        } label: {
+                            Label(
+                                String(localized: "button.scanHome", defaultValue: "Scan Home"),
+                                systemImage: "house"
+                            )
+                        }
+
+                        Button {
+                            viewModel.scanRoot()
+                        } label: {
+                            Label(
+                                String(localized: "button.scanRoot", defaultValue: "Scan Disk (/)"),
+                                systemImage: "internaldrive"
+                            )
+                        }
+
+                        Divider()
+
+                        Button {
+                            chooseFolder()
+                        } label: {
+                            Label(
+                                String(localized: "button.chooseFolder", defaultValue: "Choose…"),
+                                systemImage: "folder"
+                            )
+                        }
+                    } label: {
+                        Image(systemName: "magnifyingglass")
+                    }
+                    .help(String(localized: "status.initial", defaultValue: "Choose a folder or start a scan."))
+                    .accessibilityLabel(
+                        Text(String(localized: "status.initial", defaultValue: "Choose a folder or start a scan."))
+                    )
+                }
+            }
+        }
         .onReceive(viewModel.$items) { items in
             treePresentation.prepare(items, by: sortOption)
         }
@@ -146,95 +218,48 @@ struct ContentView: View {
         }
     }
 
-    private var header: some View {
-        VStack(spacing: ZenDesign.Spacing.small) {
-            HStack(spacing: ZenDesign.Spacing.medium) {
-                Text(String(localized: "header.title", defaultValue: "Disk Usage"))
-                    .font(ZenDesign.Typography.windowTitle)
+    private var workspaceHeader: some View {
+        VStack(alignment: .leading, spacing: ZenDesign.Spacing.small) {
+            HStack(spacing: ZenDesign.Spacing.large) {
                 Text(viewModel.targetDescription)
                     .font(ZenDesign.Typography.section)
-                    .foregroundStyle(ZenDesign.Colors.secondaryText)
+                    .foregroundStyle(ZenDesign.Colors.primaryText)
                     .lineLimit(1)
-                Spacer()
+                    .truncationMode(.middle)
+                    .frame(maxWidth: .infinity, alignment: .leading)
 
-                Picker("", selection: $settings.viewMode) {
-                    ForEach(ViewMode.allCases) { mode in
-                        Image(systemName: mode.icon).tag(mode)
-                    }
+                if viewModel.diskInfo.totalCapacity > 0 {
+                    DiskInfoBar(diskInfo: viewModel.diskInfo)
+                        .frame(maxWidth: 520)
                 }
-                .pickerStyle(.segmented)
-                .frame(width: 80)
-                .help(String(localized: "header.viewMode.help", defaultValue: "Switch view mode"))
             }
 
-            if viewModel.diskInfo.totalCapacity > 0 {
-                DiskInfoBar(diskInfo: viewModel.diskInfo)
-            }
-        }
-    }
-
-    private var controls: some View {
-        VStack(alignment: .leading, spacing: ZenDesign.Spacing.small) {
             if !viewModel.isScanning {
                 Text(viewModel.status)
                     .font(ZenDesign.Typography.detail)
                     .foregroundStyle(ZenDesign.Colors.secondaryText)
-            }
-
-            HStack(spacing: ZenDesign.Spacing.medium) {
-                if settings.viewMode == .tree {
-                    Picker("", selection: $sortOption) {
-                        ForEach(SortOption.allCases) { option in
-                            Text(option.title).tag(option)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .frame(width: 200)
-                    .disabled(viewModel.isScanning)
-                }
-
-                Spacer()
-
-                Button {
-                    viewModel.scanHome()
-                } label: {
-                    Label(String(localized: "button.scanHome", defaultValue: "Scan Home"), systemImage: "house")
-                }
-                .disabled(viewModel.isScanning)
-
-                Button {
-                    viewModel.scanRoot()
-                } label: {
-                    Label(
-                        String(localized: "button.scanRoot", defaultValue: "Scan Disk (/)"),
-                        systemImage: "internaldrive"
-                    )
-                }
-                .disabled(viewModel.isScanning)
-
-                Button {
-                    chooseFolder()
-                } label: {
-                    Label(
-                        String(localized: "button.chooseFolder", defaultValue: "Choose…"),
-                        systemImage: "folder"
-                    )
-                }
-                .disabled(viewModel.isScanning)
-
-                if viewModel.isScanning {
-                    Button(role: .cancel) {
-                        viewModel.cancel()
-                    } label: {
-                        Label(
-                            String(localized: "button.cancel", defaultValue: "Cancel"),
-                            systemImage: "xmark.circle"
-                        )
-                    }
-                    .keyboardShortcut(.escape, modifiers: [])
-                }
+                    .lineLimit(2)
             }
         }
+        .padding(.horizontal, ZenDesign.Spacing.medium)
+        .padding(.vertical, ZenDesign.Spacing.small)
+        .background(ZenDesign.Colors.surface)
+        .clipShape(RoundedRectangle(cornerRadius: ZenDesign.Radius.medium, style: .continuous))
+    }
+
+    private var treeControls: some View {
+        HStack {
+            Picker("", selection: $sortOption) {
+                ForEach(SortOption.allCases) { option in
+                    Text(option.title).tag(option)
+                }
+            }
+            .pickerStyle(.segmented)
+            .frame(width: 200)
+
+            Spacer()
+        }
+        .padding(.horizontal, ZenDesign.Spacing.medium)
     }
 
     private var emptyState: some View {
@@ -356,7 +381,7 @@ struct DiskInfoBar: View {
                 }
             }
             .frame(height: 8)
-            .frame(maxWidth: 200)
+            .frame(maxWidth: 180)
 
             HStack(spacing: ZenDesign.Spacing.compact) {
                 Text(formatBytes(diskInfo.usedSpace))
@@ -371,8 +396,6 @@ struct DiskInfoBar: View {
             .font(ZenDesign.Typography.detail)
             .monospacedDigit()
 
-            Spacer()
-
             HStack(spacing: ZenDesign.Spacing.compact) {
                 Text(String(localized: "disk.free", defaultValue: "Free:"))
                     .foregroundStyle(ZenDesign.Colors.secondaryText)
@@ -382,9 +405,5 @@ struct DiskInfoBar: View {
             .font(ZenDesign.Typography.detail)
             .monospacedDigit()
         }
-        .padding(.horizontal, ZenDesign.Spacing.medium)
-        .padding(.vertical, ZenDesign.Spacing.small)
-        .background(ZenDesign.Colors.surface)
-        .clipShape(RoundedRectangle(cornerRadius: ZenDesign.Radius.small, style: .continuous))
     }
 }
