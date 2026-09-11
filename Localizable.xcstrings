@@ -256,14 +256,14 @@
     },
     "status.finished" : {
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Found: %@, %lld items." } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Найдено: %@, %lld элементов." } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Scanned: %@ · Files: %@ · Folders: %@ · Restricted: %@ · Time: %@" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Просканировано: %@ · Файлы: %@ · Папки: %@ · Без доступа: %@ · Время: %@" } }
       }
     },
     "status.finished.empty" : {
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "No data found." } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Данные не найдены." } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "No allocated-size items in this scan." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "В этом сканировании нет элементов с ненулевым выделенным размером." } }
       }
     },
     "status.initial" : {

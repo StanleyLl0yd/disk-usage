@@ -242,9 +242,16 @@ struct ContentView: View {
             Image(systemName: "folder.badge.questionmark")
                 .font(.system(size: 48))
                 .foregroundStyle(.secondary)
-            Text(String(localized: "empty.message", defaultValue: "No data. Start a scan."))
-                .font(.title3)
-                .foregroundStyle(.secondary)
+            Text(
+                viewModel.completedSummary == nil
+                    ? String(localized: "empty.message", defaultValue: "No data. Start a scan.")
+                    : String(
+                        localized: "status.finished.empty",
+                        defaultValue: "No allocated-size items in this scan."
+                    )
+            )
+            .font(.title3)
+            .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
