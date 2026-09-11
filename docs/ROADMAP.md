@@ -150,7 +150,7 @@ R1 completion evidence is preserved in the merged R1.1–R1.4 changes and in [`d
 
 # R2 — Zen design system and application shell
 
-**Status: CURRENT**
+**Status: COMPLETE**
 
 R2 establishes the visual system before individual views are heavily polished. The goal is consistency, not a large theme abstraction.
 
@@ -220,7 +220,7 @@ R2 is complete when the application has one coherent visual language across its 
 
 # R3 — Unified selection, navigation, and polished Tree view
 
-**Status: PLANNED**
+**Status: CURRENT**
 
 R3 turns the tree from a functional hierarchy into a first-class analysis workspace.
 
@@ -442,4 +442,6 @@ These are not assumed future stages.
 
 **R1 — Scale, responsiveness, and truthful scan summary is complete.** All R1 slices are implemented and verified, including repeatable synthetic performance evidence.
 
-The current product-development stage is **R2 — Zen design system and application shell**. Begin with **R2.1 — Visual tokens** and keep R2 work focused on the shared visual language and application shell before moving to R3 selection/navigation work.
+**R2 — Zen design system and application shell is complete.** All R2 slices are implemented and verified, and the final master exit review found no remaining visual-system gap.
+
+The current product-development stage is **R3 — Unified selection, navigation, and polished Tree view**. Begin with **R3.1 — Unified selection model** and keep R3 work focused on one shared non-filesystem-authoritative selection model before moving to item details, Tree polish, or keyboard/action consistency.
