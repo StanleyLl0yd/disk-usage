@@ -72,7 +72,7 @@ struct SunburstView: View {
     }
 
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: ZenDesign.Spacing.medium) {
             breadcrumb
             GeometryReader { geo in
                 let c = CGPoint(x: geo.size.width / 2, y: geo.size.height / 2)
@@ -110,7 +110,7 @@ struct SunburstView: View {
                     }
 
                     Circle()
-                        .fill(Color(NSColor.controlBackgroundColor))
+                        .fill(ZenDesign.Colors.surface)
                         .frame(width: center * 2, height: center * 2)
                         .position(c)
 
@@ -121,7 +121,7 @@ struct SunburstView: View {
                              ? String(localized: "sunburst.scanning", defaultValue: "scanning…")
                              : String(localized: "sunburst.scanned", defaultValue: "scanned"))
                             .font(.system(size: 11))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(ZenDesign.Colors.secondaryText)
                     }
                     .frame(width: center * 1.8)
                     .position(c)
@@ -144,7 +144,7 @@ struct SunburstView: View {
     }
 
     private var breadcrumb: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: ZenDesign.Spacing.small) {
             Button {
                 withAnimation(.easeInOut(duration: 0.3)) { _ = navigation.popLast() }
             } label: {
@@ -153,24 +153,24 @@ struct SunburstView: View {
             .buttonStyle(.bordered)
             .disabled(resolvedPath.isEmpty)
 
-            HStack(spacing: 4) {
+            HStack(spacing: ZenDesign.Spacing.compact) {
                 Button {
                     withAnimation(.easeInOut(duration: 0.3)) { navigation.removeAll() }
                 } label: {
                     Text(verbatim: "/")
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(resolvedPath.isEmpty ? .primary : .secondary)
+                .foregroundStyle(resolvedPath.isEmpty ? ZenDesign.Colors.primaryText : ZenDesign.Colors.secondaryText)
 
                 ForEach(Array(resolvedPath.enumerated()), id: \.element.path) { index, item in
-                    Image(systemName: "chevron.right").font(.caption2).foregroundStyle(.secondary)
+                    Image(systemName: "chevron.right").font(.caption2).foregroundStyle(ZenDesign.Colors.mutedText)
                     Button(item.name) {
                         withAnimation(.easeInOut(duration: 0.3)) {
                             navigation = Array(navigation.prefix(index + 1))
                         }
                     }
                     .buttonStyle(.plain)
-                    .foregroundStyle(index == resolvedPath.count - 1 ? .primary : .secondary)
+                    .foregroundStyle(index == resolvedPath.count - 1 ? ZenDesign.Colors.primaryText : ZenDesign.Colors.secondaryText)
                     .lineLimit(1)
                 }
             }

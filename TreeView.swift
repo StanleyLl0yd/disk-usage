@@ -14,7 +14,7 @@ struct TreeView: View {
         List {
             if items.isEmpty {
                 Text(String(localized: "empty.message", defaultValue: "No data. Start a scan."))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(ZenDesign.Colors.secondaryText)
                     .padding(.vertical, 20)
             } else {
                 Section(String(localized: "section.items", defaultValue: "Items")) {
@@ -35,8 +35,8 @@ struct TreeView: View {
                     DisclosureGroup(isExpanded: $showRestricted) {
                         ForEach(restricted, id: \.self) {
                             Text($0)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .font(ZenDesign.Typography.detail)
+                                .foregroundStyle(ZenDesign.Colors.secondaryText)
                         }
                         Text(
                             String(
@@ -45,7 +45,7 @@ struct TreeView: View {
                             )
                         )
                         .font(.footnote)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(ZenDesign.Colors.secondaryText)
                     } label: {
                         Label {
                             Text(
@@ -55,7 +55,7 @@ struct TreeView: View {
                             Image(systemName: "lock.fill")
                         }
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(ZenDesign.Colors.secondaryText)
                     }
                 }
             }
@@ -72,16 +72,16 @@ struct ItemRow: View {
     }
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: ZenDesign.Spacing.small) {
             Image(systemName: item.isFile ? "doc" : "folder")
-                .foregroundStyle(item.isFile ? .secondary : Color.accentColor)
+                .foregroundStyle(item.isFile ? ZenDesign.Colors.secondaryText : ZenDesign.Colors.accent)
                 .frame(width: 16)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.name).lineLimit(1)
                 Text(item.path)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .font(ZenDesign.Typography.micro)
+                    .foregroundStyle(ZenDesign.Colors.mutedText)
                     .lineLimit(1)
             }
             .frame(minWidth: 150, alignment: .leading)
@@ -94,8 +94,8 @@ struct ItemRow: View {
             VStack(alignment: .trailing, spacing: 2) {
                 Text(formatBytes(item.size)).monospacedDigit()
                 Text(formatPercent(item.size, of: totalSize))
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .font(ZenDesign.Typography.micro)
+                    .foregroundStyle(ZenDesign.Colors.mutedText)
                     .monospacedDigit()
             }
             .frame(minWidth: 70, alignment: .trailing)
@@ -119,7 +119,7 @@ struct SizeBar: View {
     var body: some View {
         GeometryReader { geometry in
             ZStack(alignment: .leading) {
-                Capsule().fill(Color.secondary.opacity(0.2))
+                Capsule().fill(ZenDesign.Colors.separator.opacity(0.65))
                 Capsule()
                     .fill(color)
                     .frame(width: max(geometry.size.width * ratio, ratio > 0 ? 2 : 0))
