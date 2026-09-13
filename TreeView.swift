@@ -72,6 +72,9 @@ struct TreeView: View {
             }
         }
         .focused($isTreeFocused)
+        .onAppear {
+            isTreeFocused = true
+        }
     }
 }
 

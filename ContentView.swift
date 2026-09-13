@@ -534,6 +534,7 @@ struct SelectedItemDetail: View {
                         systemImage: "trash"
                     )
                 }
+                .keyboardShortcut(.delete, modifiers: .command)
             }
             .buttonStyle(.bordered)
             .controlSize(.small)
