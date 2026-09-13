@@ -109,6 +109,17 @@ struct ContentView: View {
                 treeControls
             }
 
+            if viewModel.lifecycle == .completed,
+               let selectedItem = selection.selectedItem(in: viewModel.items) {
+                SelectedItemDetail(
+                    item: selectedItem,
+                    totalSize: viewModel.totalSize,
+                    onShowInFinder: viewModel.showInFinder,
+                    onCopyPath: viewModel.copyPath,
+                    onDelete: requestDelete
+                )
+            }
+
             content
 
             if viewModel.lifecycle == .completed,
@@ -449,6 +460,88 @@ struct ContentView: View {
         if panel.runModal() == .OK, let url = panel.url {
             viewModel.scan(url)
         }
+    }
+}
+
+struct SelectedItemDetail: View {
+    let item: FolderUsage
+    let totalSize: Int64
+    let onShowInFinder: (FolderUsage) -> Void
+    let onCopyPath: (FolderUsage) -> Void
+    let onDelete: (FolderUsage) -> Void
+
+    var body: some View {
+        HStack(alignment: .center, spacing: ZenDesign.Spacing.large) {
+            HStack(alignment: .top, spacing: ZenDesign.Spacing.small) {
+                Image(systemName: item.isFile ? "doc" : "folder")
+                    .foregroundStyle(item.isFile ? ZenDesign.Colors.secondaryText : ZenDesign.Colors.accent)
+                    .frame(width: 16)
+
+                VStack(alignment: .leading, spacing: ZenDesign.Spacing.compact) {
+                    Text(item.name)
+                        .font(ZenDesign.Typography.section)
+                        .foregroundStyle(ZenDesign.Colors.primaryText)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+
+                    Text(item.path)
+                        .font(ZenDesign.Typography.micro)
+                        .foregroundStyle(ZenDesign.Colors.mutedText)
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            VStack(alignment: .trailing, spacing: ZenDesign.Spacing.compact) {
+                Text(formatBytes(item.size))
+                    .font(ZenDesign.Typography.detail)
+                    .fontWeight(.medium)
+                    .foregroundStyle(ZenDesign.Colors.primaryText)
+                    .monospacedDigit()
+
+                Text(formatPercent(item.size, of: totalSize))
+                    .font(ZenDesign.Typography.micro)
+                    .foregroundStyle(ZenDesign.Colors.mutedText)
+                    .monospacedDigit()
+            }
+            .frame(minWidth: 76, alignment: .trailing)
+
+            HStack(spacing: ZenDesign.Spacing.compact) {
+                Button {
+                    onShowInFinder(item)
+                } label: {
+                    Label(
+                        String(localized: "context.showInFinder", defaultValue: "Show in Finder"),
+                        systemImage: "folder"
+                    )
+                }
+
+                Button {
+                    onCopyPath(item)
+                } label: {
+                    Label(
+                        String(localized: "context.copyPath", defaultValue: "Copy Path"),
+                        systemImage: "doc.on.doc"
+                    )
+                }
+
+                Button(role: .destructive) {
+                    onDelete(item)
+                } label: {
+                    Label(
+                        String(localized: "context.moveToTrash", defaultValue: "Move to Trash"),
+                        systemImage: "trash"
+                    )
+                }
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+        }
+        .padding(.horizontal, ZenDesign.Spacing.medium)
+        .padding(.vertical, ZenDesign.Spacing.small)
+        .background(ZenDesign.Colors.elevatedSurface)
+        .clipShape(RoundedRectangle(cornerRadius: ZenDesign.Radius.medium, style: .continuous))
     }
 }
 
