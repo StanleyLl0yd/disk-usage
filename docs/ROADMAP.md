@@ -220,7 +220,7 @@ R2 is complete when the application has one coherent visual language across its 
 
 # R3 — Unified selection, navigation, and polished Tree view
 
-**Status: CURRENT**
+**Status: COMPLETE**
 
 R3 turns the tree from a functional hierarchy into a first-class analysis workspace.
 
@@ -444,4 +444,6 @@ These are not assumed future stages.
 
 **R2 — Zen design system and application shell is complete.** All R2 slices are implemented and verified, and the final master exit review found no remaining visual-system gap.
 
-The current product-development stage is **R3 — Unified selection, navigation, and polished Tree view**. Begin with **R3.1 — Unified selection model** and keep R3 work focused on one shared non-filesystem-authoritative selection model before moving to item details, Tree polish, or keyboard/action consistency.
+**R3 — Unified selection, navigation, and polished Tree view is complete.** All R3 slices are implemented and verified, including unified selection, compact item details, polished Tree presentation, native keyboard/focus behavior, and shared authoritative actions.
+
+The next planned product-development stage is **R4 — Sunburst 2.0: DiskUsage visual identity**. R4 remains **PLANNED** and has not been started.
