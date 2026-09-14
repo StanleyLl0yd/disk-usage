@@ -107,6 +107,19 @@ nonisolated enum TreePresentationPreprocessor {
 nonisolated struct SunburstPresentation: Equatable, Sendable {
     let totalSize: Int64
     let segments: [SunburstSegment]
+    let aggregates: [SunburstAggregateSegment]
+
+    init(
+        totalSize: Int64,
+        segments: [SunburstSegment],
+        aggregates: [SunburstAggregateSegment] = []
+    ) {
+        self.totalSize = totalSize
+        self.segments = segments
+        self.aggregates = aggregates
+    }
+
+    var visualSegmentCount: Int { segments.count + aggregates.count }
 
     static let empty = SunburstPresentation(totalSize: 0, segments: [])
 }
@@ -158,7 +171,20 @@ nonisolated struct SunburstSegment: Identifiable, Equatable, Sendable {
     let canNavigate: Bool
 }
 
+nonisolated struct SunburstAggregateSegment: Identifiable, Equatable, Sendable {
+    let id: String
+    let level: Int
+    let startAngle: Double
+    let endAngle: Double
+    let size: Int64
+    let itemCount: Int
+    let fractionOfRoot: Double
+    let paletteIndex: Int
+}
+
 nonisolated enum SunburstPresentationPreprocessor {
+    private static let minimumIndividualSpan = 1.0
+
     static func presentation(
         for items: [FolderUsage],
         totalSize: Int64,
@@ -171,7 +197,12 @@ nonisolated enum SunburstPresentationPreprocessor {
 
         let sorted = sortedBySize(items)
         var result: [SunburstSegment] = []
+        var aggregates: [SunburstAggregateSegment] = []
         var angle = 0.0
+        var aggregateStart: Double?
+        var aggregateSize: Int64 = 0
+        var aggregateCount = 0
+        var aggregatePaletteIndex: Int?
 
         for (index, item) in sorted.enumerated() {
             guard !isCancelled else { return nil }
@@ -179,9 +210,19 @@ nonisolated enum SunburstPresentationPreprocessor {
             let span = 360 * Double(item.size) / Double(totalSize)
             let endAngle = angle + span
             defer { angle = endAngle }
-            guard span >= 1 else { continue }
+            guard span > 0 else { continue }
 
             let paletteIndex = index % SunburstPalette.count
+            guard span >= minimumIndividualSpan else {
+                if aggregateStart == nil {
+                    aggregateStart = angle
+                    aggregatePaletteIndex = paletteIndex
+                }
+                aggregateSize += item.size
+                aggregateCount += 1
+                continue
+            }
+
             result.append(
                 segment(
                     item: item,
@@ -195,6 +236,7 @@ nonisolated enum SunburstPresentationPreprocessor {
 
             guard build(
                 item.children,
+                parentID: item.path,
                 parentTotalSize: item.size,
                 rootTotalSize: totalSize,
                 level: 1,
@@ -202,15 +244,39 @@ nonisolated enum SunburstPresentationPreprocessor {
                 start: angle,
                 end: endAngle,
                 paletteIndex: paletteIndex,
-                result: &result
+                result: &result,
+                aggregates: &aggregates
             ) else { return nil }
         }
 
-        return SunburstPresentation(totalSize: totalSize, segments: result)
+        if let aggregateStart,
+           let aggregatePaletteIndex,
+           aggregateSize > 0,
+           aggregateCount > 0 {
+            aggregates.append(
+                aggregateSegment(
+                    id: "other:scope:0",
+                    level: 0,
+                    startAngle: aggregateStart,
+                    endAngle: 360,
+                    size: aggregateSize,
+                    itemCount: aggregateCount,
+                    rootTotalSize: totalSize,
+                    paletteIndex: aggregatePaletteIndex
+                )
+            )
+        }
+
+        return SunburstPresentation(
+            totalSize: totalSize,
+            segments: result,
+            aggregates: aggregates
+        )
     }
 
     private static func build(
         _ items: [FolderUsage],
+        parentID: String,
         parentTotalSize: Int64,
         rootTotalSize: Int64,
         level: Int,
@@ -218,19 +284,33 @@ nonisolated enum SunburstPresentationPreprocessor {
         start: Double,
         end: Double,
         paletteIndex: Int,
-        result: inout [SunburstSegment]
+        result: inout [SunburstSegment],
+        aggregates: inout [SunburstAggregateSegment]
     ) -> Bool {
         guard !isCancelled else { return false }
         guard level < levels, parentTotalSize > 0, !items.isEmpty else { return true }
 
         var angle = start
+        var aggregateStart: Double?
+        var aggregateSize: Int64 = 0
+        var aggregateCount = 0
+
         for item in sortedBySize(items) {
             guard !isCancelled else { return false }
 
             let span = (end - start) * Double(item.size) / Double(parentTotalSize)
             let endAngle = angle + span
             defer { angle = endAngle }
-            guard span >= 1 else { continue }
+            guard span > 0 else { continue }
+
+            guard span >= minimumIndividualSpan else {
+                if aggregateStart == nil {
+                    aggregateStart = angle
+                }
+                aggregateSize += item.size
+                aggregateCount += 1
+                continue
+            }
 
             result.append(
                 segment(
@@ -245,6 +325,7 @@ nonisolated enum SunburstPresentationPreprocessor {
 
             guard build(
                 item.children,
+                parentID: item.path,
                 parentTotalSize: item.size,
                 rootTotalSize: rootTotalSize,
                 level: level + 1,
@@ -252,8 +333,24 @@ nonisolated enum SunburstPresentationPreprocessor {
                 start: angle,
                 end: endAngle,
                 paletteIndex: paletteIndex,
-                result: &result
+                result: &result,
+                aggregates: &aggregates
             ) else { return false }
+        }
+
+        if let aggregateStart, aggregateSize > 0, aggregateCount > 0 {
+            aggregates.append(
+                aggregateSegment(
+                    id: "other:\(parentID):\(level)",
+                    level: level,
+                    startAngle: aggregateStart,
+                    endAngle: end,
+                    size: aggregateSize,
+                    itemCount: aggregateCount,
+                    rootTotalSize: rootTotalSize,
+                    paletteIndex: paletteIndex
+                )
+            )
         }
 
         return true
@@ -276,6 +373,28 @@ nonisolated enum SunburstPresentationPreprocessor {
             fractionOfRoot: Double(item.size) / Double(rootTotalSize),
             paletteIndex: paletteIndex,
             canNavigate: !item.children.isEmpty
+        )
+    }
+
+    private static func aggregateSegment(
+        id: String,
+        level: Int,
+        startAngle: Double,
+        endAngle: Double,
+        size: Int64,
+        itemCount: Int,
+        rootTotalSize: Int64,
+        paletteIndex: Int
+    ) -> SunburstAggregateSegment {
+        SunburstAggregateSegment(
+            id: id,
+            level: level,
+            startAngle: startAngle,
+            endAngle: endAngle,
+            size: size,
+            itemCount: itemCount,
+            fractionOfRoot: Double(size) / Double(rootTotalSize),
+            paletteIndex: paletteIndex
         )
     }
 
