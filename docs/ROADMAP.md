@@ -297,7 +297,7 @@ The sunburst should use:
 - polished Back/root/breadcrumb navigation;
 - context actions consistent with Tree view.
 
-### R4.4 Small-segment handling
+### R4.4 Small-segment handling — COMPLETE
 
 Replace unexplained visual gaps caused by tiny omitted arcs with a deliberate policy such as bounded aggregation into an `Other` representation when appropriate.
 
@@ -446,4 +446,4 @@ These are not assumed future stages.
 
 **R3 — Unified selection, navigation, and polished Tree view is complete.** All R3 slices are implemented and verified, including unified selection, compact item details, polished Tree presentation, native keyboard/focus behavior, and shared authoritative actions.
 
-**R4 — Sunburst 2.0: DiskUsage visual identity is in progress.** R4.1 — Derived segment model, R4.2 — Visual language, and R4.3 — Interaction are complete; the next slice is **R4.4 — Small-segment handling**.
+**R4 — Sunburst 2.0: DiskUsage visual identity is in progress.** R4.1 — Derived segment model, R4.2 — Visual language, R4.3 — Interaction, and R4.4 — Small-segment handling are complete; the next slice is **R4.5 — Motion**.
