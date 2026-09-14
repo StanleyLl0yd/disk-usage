@@ -136,7 +136,7 @@ final class FolderUsageTests: XCTestCase {
         XCTAssertEqual(presentation.visualSegmentCount, 2)
 
         let aggregate = try XCTUnwrap(presentation.aggregates.first)
-        XCTAssertEqual(aggregate.id, "other:scope:0")
+        XCTAssertEqual(aggregate.id, "aggregate-scope-0")
         XCTAssertEqual(aggregate.level, 0)
         XCTAssertEqual(aggregate.size, 2)
         XCTAssertEqual(aggregate.itemCount, 2)
@@ -170,7 +170,7 @@ final class FolderUsageTests: XCTestCase {
         XCTAssertEqual(presentation.visualSegmentCount, 3)
 
         let aggregate = try XCTUnwrap(presentation.aggregates.first)
-        XCTAssertEqual(aggregate.id, "other:\(parent.path):1")
+        XCTAssertEqual(aggregate.id, "aggregate-1-\(parent.path)")
         XCTAssertEqual(aggregate.level, 1)
         XCTAssertEqual(aggregate.size, 2)
         XCTAssertEqual(aggregate.itemCount, 2)
