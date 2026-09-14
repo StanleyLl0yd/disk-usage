@@ -145,10 +145,10 @@ final class DiskScannerTests: XCTestCase {
 final class SunburstPresentationStateTests: XCTestCase {
     @MainActor
     func testKeepsPublishedModelWhilePreparingReplacement() {
-        let publishedTotal: Int64 = 42
+        let publishedTotal = Int64(SunburstPalette.count)
         let state = SunburstPresentationState()
         state.prepare(items: [], totalSize: publishedTotal, levels: 1)
-        let replacement = FolderUsage(path: "/root/replacement", size: 84)
+        let replacement = FolderUsage(path: "/", size: publishedTotal + publishedTotal)
 
         state.prepare(items: [replacement], totalSize: replacement.size, levels: 1)
 
