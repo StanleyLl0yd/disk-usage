@@ -141,3 +141,17 @@ final class DiskScannerTests: XCTestCase {
         [item] + item.children.flatMap(flatten)
     }
 }
+
+final class SunburstPresentationStateTests: XCTestCase {
+    @MainActor
+    func testKeepsPublishedModelWhilePreparingReplacement() {
+        let state = SunburstPresentationState()
+        state.prepare(items: [], totalSize: 42, levels: 1)
+        let replacement = FolderUsage(path: "/root/replacement", size: 84)
+
+        state.prepare(items: [replacement], totalSize: replacement.size, levels: 1)
+
+        XCTAssertEqual(state.model.totalSize, 42)
+        state.cancel()
+    }
+}
