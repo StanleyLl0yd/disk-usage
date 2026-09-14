@@ -13,9 +13,9 @@ final class SunburstPresentationState: ObservableObject {
         generation &+= 1
         let generation = generation
         task?.cancel()
-        model = SunburstPresentation(totalSize: totalSize, segments: [])
 
         guard !items.isEmpty, totalSize > 0 else {
+            model = SunburstPresentation(totalSize: totalSize, segments: [])
             task = nil
             isPreparing = false
             return
@@ -127,6 +127,10 @@ struct SunburstView: View {
             + presentation.model.aggregates.map(RenderableSegment.init)
     }
 
+    private var isTransitioningPresentation: Bool {
+        presentation.isPreparing && presentation.model.visualSegmentCount > 0
+    }
+
     private var focusedContent: (name: String, size: Int64)? {
         if let hoveredSegmentID,
            let hovered = renderableSegments.first(where: { $0.id == hoveredSegmentID }) {
@@ -170,6 +174,12 @@ struct SunburstView: View {
                         .position(c)
                 }
             }
+            .opacity(isTransitioningPresentation ? 0.5 : 1)
+            .allowsHitTesting(!presentation.isPreparing)
+            .animation(
+                reduceMotion ? nil : .easeInOut(duration: 0.2),
+                value: isTransitioningPresentation
+            )
         }
         .frame(minWidth: 400, minHeight: 400)
         .overlay(alignment: .topTrailing) {
