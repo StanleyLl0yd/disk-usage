@@ -7,14 +7,11 @@ enum ZenDesign {
         static let small: CGFloat = 8
         static let medium: CGFloat = 12
         static let large: CGFloat = 16
-        static let xLarge: CGFloat = 24
-        static let xxLarge: CGFloat = 32
     }
 
     enum Radius {
         static let small: CGFloat = 6
         static let medium: CGFloat = 8
-        static let large: CGFloat = 12
     }
 
     enum Colors {
@@ -33,9 +30,7 @@ enum ZenDesign {
     }
 
     enum Typography {
-        static var windowTitle: Font { .title2.weight(.semibold) }
         static var section: Font { .headline }
-        static var body: Font { .body }
         static var detail: Font { .caption }
         static var micro: Font { .caption2 }
     }
