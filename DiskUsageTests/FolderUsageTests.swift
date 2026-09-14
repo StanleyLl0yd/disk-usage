@@ -87,6 +87,7 @@ final class FolderUsageTests: XCTestCase {
         XCTAssertEqual(presentation.totalSize, 100)
         XCTAssertEqual(segments.map(\.item.path), [a.path, childLarge.path, childSmall.path, b.path])
         XCTAssertEqual(segments.map(\.level), [0, 1, 1, 0])
+        XCTAssertEqual(segments.map(\.paletteIndex), [0, 0, 0, 1])
         XCTAssertEqual(segments.map(\.canNavigate), [true, false, false, false])
         XCTAssertEqual(segments[0].fractionOfRoot, 0.6, accuracy: 0.0001)
         XCTAssertEqual(segments[1].fractionOfRoot, 0.4, accuracy: 0.0001)
@@ -113,6 +114,19 @@ final class FolderUsageTests: XCTestCase {
         )
 
         XCTAssertEqual(prepared?.segments.map(\.item.path), [a.path, b.path])
+    }
+
+    func testSunburstPaletteIsRestrainedDepthAwareAndWrapsDeterministically() {
+        let lightRoot = SunburstPalette.tone(paletteIndex: 0, level: 0, darkMode: false)
+        let lightDeep = SunburstPalette.tone(paletteIndex: 0, level: 3, darkMode: false)
+        let darkRoot = SunburstPalette.tone(paletteIndex: 0, level: 0, darkMode: true)
+
+        XCTAssertEqual(SunburstPalette.tone(paletteIndex: SunburstPalette.count, level: 0, darkMode: false), lightRoot)
+        XCTAssertEqual(lightRoot.hue, lightDeep.hue, accuracy: 0.0001)
+        XCTAssertLessThanOrEqual(lightRoot.saturation, 0.5)
+        XCTAssertGreaterThan(lightRoot.saturation, lightDeep.saturation)
+        XCTAssertGreaterThan(lightRoot.brightness, lightDeep.brightness)
+        XCTAssertGreaterThan(darkRoot.brightness, lightRoot.brightness)
     }
 
     func testSyntheticPerformanceFixturesHaveExpectedShape() throws {
