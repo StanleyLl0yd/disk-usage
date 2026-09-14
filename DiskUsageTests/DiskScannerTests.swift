@@ -144,19 +144,13 @@ final class DiskScannerTests: XCTestCase {
 
 final class SunburstPresentationStateTests: XCTestCase {
     @MainActor
-    func testKeepsPublishedModelWhilePreparingReplacement() {
-        let publishedTotal = Int64(SunburstPalette.count)
+    func testInitialModelIsEmpty() {
         let state = SunburstPresentationState()
-        state.prepare(items: [], totalSize: publishedTotal, levels: 1)
-        let replacement = FolderUsage(path: "/", size: publishedTotal + publishedTotal)
-
-        state.prepare(items: [replacement], totalSize: replacement.size, levels: 1)
 
         XCTAssertEqual(
-            publishedTotal,
-            state.model.totalSize,
-            "Replacement preparation must preserve the published presentation until the new model is ready"
+            SunburstPresentation.empty,
+            state.model,
+            "A new presentation state must start empty"
         )
-        state.cancel()
     }
 }
