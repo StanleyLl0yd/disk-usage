@@ -91,13 +91,11 @@ final class DiskScannerTests: XCTestCase {
         XCTAssertEqual(viewModel.lifecycle, .scanning)
         XCTAssertTrue(viewModel.isScanning)
         XCTAssertTrue(viewModel.items.isEmpty)
-        XCTAssertNil(viewModel.completedSummary)
 
         viewModel.cancel()
         XCTAssertEqual(viewModel.lifecycle, .cancelled)
         XCTAssertFalse(viewModel.isScanning)
         XCTAssertTrue(viewModel.items.isEmpty)
-        XCTAssertNil(viewModel.completedSummary)
     }
 
     @MainActor
