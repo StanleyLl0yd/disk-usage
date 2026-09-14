@@ -145,13 +145,14 @@ final class DiskScannerTests: XCTestCase {
 final class SunburstPresentationStateTests: XCTestCase {
     @MainActor
     func testKeepsPublishedModelWhilePreparingReplacement() {
+        let publishedTotal: Int64 = 42
         let state = SunburstPresentationState()
-        state.prepare(items: [], totalSize: 42, levels: 1)
+        state.prepare(items: [], totalSize: publishedTotal, levels: 1)
         let replacement = FolderUsage(path: "/root/replacement", size: 84)
 
         state.prepare(items: [replacement], totalSize: replacement.size, levels: 1)
 
-        XCTAssertEqual(state.model.totalSize, 42)
+        XCTAssertEqual(publishedTotal, state.model.totalSize)
         state.cancel()
     }
 }
