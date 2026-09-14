@@ -272,7 +272,7 @@ nonisolated enum SunburstPresentationPreprocessor {
         if let aggregate = layout.aggregate {
             output.aggregates.append(
                 aggregateSegment(
-                    id: "other:scope:0",
+                    id: "aggregate-scope-0",
                     draft: aggregate,
                     level: 0,
                     rootTotalSize: totalSize
@@ -329,7 +329,7 @@ nonisolated enum SunburstPresentationPreprocessor {
         if let aggregate = layout.aggregate {
             output.aggregates.append(
                 aggregateSegment(
-                    id: "other:\(context.parentID):\(context.level)",
+                    id: "aggregate-\(context.level)-\(context.parentID)",
                     draft: aggregate,
                     level: context.level,
                     rootTotalSize: context.rootTotalSize
