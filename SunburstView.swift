@@ -3,7 +3,7 @@ import Combine
 
 @MainActor
 final class SunburstPresentationState: ObservableObject {
-    @Published private(set) var segments: [SunburstSegment] = []
+    @Published private(set) var model = SunburstPresentation.empty
     @Published private(set) var isPreparing = false
 
     private var task: Task<Void, Never>?
@@ -13,7 +13,7 @@ final class SunburstPresentationState: ObservableObject {
         generation &+= 1
         let generation = generation
         task?.cancel()
-        segments = []
+        model = SunburstPresentation(totalSize: totalSize, segments: [])
 
         guard !items.isEmpty, totalSize > 0 else {
             task = nil
@@ -23,7 +23,7 @@ final class SunburstPresentationState: ObservableObject {
 
         isPreparing = true
         task = Task.detached(priority: .userInitiated) { [items, totalSize, levels] in
-            guard let prepared = SunburstPresentationPreprocessor.segments(
+            guard let prepared = SunburstPresentationPreprocessor.presentation(
                 for: items,
                 totalSize: totalSize,
                 levels: levels
@@ -31,7 +31,7 @@ final class SunburstPresentationState: ObservableObject {
 
             await MainActor.run { [weak self] in
                 guard let self, self.generation == generation else { return }
-                self.segments = prepared
+                self.model = prepared
                 self.isPreparing = false
                 self.task = nil
             }
@@ -42,7 +42,7 @@ final class SunburstPresentationState: ObservableObject {
         generation &+= 1
         task?.cancel()
         task = nil
-        segments = []
+        model = .empty
         isPreparing = false
     }
 }
@@ -83,7 +83,7 @@ struct SunburstView: View {
             GeometryReader { geo in
                 let c = CGPoint(x: geo.size.width / 2, y: geo.size.height / 2)
                 ZStack {
-                    ForEach(presentation.segments) { segment in
+                    ForEach(presentation.model.segments) { segment in
                         let arc = Arc(
                             c: c,
                             r1: center + CGFloat(segment.level) * ring,
@@ -101,7 +101,7 @@ struct SunburstView: View {
                             .overlay(arc.stroke(.white.opacity(0.3), lineWidth: 0.5))
                             .onTapGesture {
                                 selectedPath = segment.item.path
-                                if !segment.item.children.isEmpty {
+                                if segment.canNavigate {
                                     updateNavigation {
                                         navigation.append(segment.item.path)
                                     }

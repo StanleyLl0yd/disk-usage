@@ -267,13 +267,13 @@ R3 is complete when tree navigation and selection feel intentional, keyboard/mou
 
 # R4 — Sunburst 2.0: DiskUsage visual identity
 
-**Status: PLANNED**
+**Status: IN PROGRESS**
 
 R4 creates the main visual signature of DiskUsage while staying clearly distinct from existing disk analyzers.
 
 ## Scope
 
-### R4.1 Derived segment model
+### R4.1 Derived segment model — COMPLETE
 
 Build the sunburst from precomputed derived presentation data established by R1 rather than expensive ad-hoc view recomputation.
 
@@ -446,4 +446,4 @@ These are not assumed future stages.
 
 **R3 — Unified selection, navigation, and polished Tree view is complete.** All R3 slices are implemented and verified, including unified selection, compact item details, polished Tree presentation, native keyboard/focus behavior, and shared authoritative actions.
 
-The next planned product-development stage is **R4 — Sunburst 2.0: DiskUsage visual identity**. R4 remains **PLANNED** and has not been started.
+**R4 — Sunburst 2.0: DiskUsage visual identity is in progress.** R4.1 — Derived segment model is complete; the next slice is **R4.2 — Visual language**.
