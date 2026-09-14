@@ -277,7 +277,7 @@ R4 creates the main visual signature of DiskUsage while staying clearly distinct
 
 Build the sunburst from precomputed derived presentation data established by R1 rather than expensive ad-hoc view recomputation.
 
-### R4.2 Visual language
+### R4.2 Visual language — COMPLETE
 
 The sunburst should use:
 
@@ -446,4 +446,4 @@ These are not assumed future stages.
 
 **R3 — Unified selection, navigation, and polished Tree view is complete.** All R3 slices are implemented and verified, including unified selection, compact item details, polished Tree presentation, native keyboard/focus behavior, and shared authoritative actions.
 
-**R4 — Sunburst 2.0: DiskUsage visual identity is in progress.** R4.1 — Derived segment model is complete; the next slice is **R4.2 — Visual language**.
+**R4 — Sunburst 2.0: DiskUsage visual identity is in progress.** R4.1 — Derived segment model and R4.2 — Visual language are complete; the next slice is **R4.3 — Interaction**.

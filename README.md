@@ -34,7 +34,7 @@ Run the `DiskUsage` shared scheme to build the app and execute the regression te
 - Current version: `0.1.0` (build `1`).
 - Distribution: source only; signed/notarized binaries are not published yet.
 - **R3 — Unified selection, navigation, and polished Tree view is complete.**
-- **R4 — Sunburst 2.0: DiskUsage visual identity is in progress.** R4.1 establishes the derived segment model; the next slice is R4.2 — Visual language. See [`docs/ROADMAP.md`](docs/ROADMAP.md).
+- **R4 — Sunburst 2.0: DiskUsage visual identity is in progress.** R4.1 derived segment model and R4.2 visual language are complete; the next slice is R4.3 — Interaction. See [`docs/ROADMAP.md`](docs/ROADMAP.md).
 - Version `1.0.0` is reserved for release readiness after the planned product stages are complete and verified.
 
 ## Contributing

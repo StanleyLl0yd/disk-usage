@@ -111,6 +111,42 @@ nonisolated struct SunburstPresentation: Equatable, Sendable {
     static let empty = SunburstPresentation(totalSize: 0, segments: [])
 }
 
+nonisolated struct SunburstTone: Equatable, Sendable {
+    let hue: Double
+    let saturation: Double
+    let brightness: Double
+}
+
+nonisolated enum SunburstPalette {
+    static let count = 8
+
+    static func tone(paletteIndex: Int, level: Int, darkMode: Bool) -> SunburstTone {
+        let normalizedIndex = ((paletteIndex % count) + count) % count
+        let depth = Double(min(max(level, 0), 3))
+
+        return SunburstTone(
+            hue: hue(at: normalizedIndex),
+            saturation: max(0.26, 0.46 - depth * 0.045),
+            brightness: darkMode
+                ? max(0.70, 0.84 - depth * 0.035)
+                : max(0.62, 0.80 - depth * 0.05)
+        )
+    }
+
+    private static func hue(at index: Int) -> Double {
+        switch index {
+        case 0: 0.58
+        case 1: 0.49
+        case 2: 0.38
+        case 3: 0.11
+        case 4: 0.04
+        case 5: 0.81
+        case 6: 0.72
+        default: 0.64
+        }
+    }
+}
+
 nonisolated struct SunburstSegment: Identifiable, Equatable, Sendable {
     let id: String
     let item: FolderUsage
@@ -118,7 +154,7 @@ nonisolated struct SunburstSegment: Identifiable, Equatable, Sendable {
     let startAngle: Double
     let endAngle: Double
     let fractionOfRoot: Double
-    let hue: Double
+    let paletteIndex: Int
     let canNavigate: Bool
 }
 
@@ -145,8 +181,7 @@ nonisolated enum SunburstPresentationPreprocessor {
             defer { angle = endAngle }
             guard span >= 1 else { continue }
 
-            let hue = (Double(index) / Double(max(sorted.count, 1)) + 0.08)
-                .truncatingRemainder(dividingBy: 1)
+            let paletteIndex = index % SunburstPalette.count
             result.append(
                 segment(
                     item: item,
@@ -154,7 +189,7 @@ nonisolated enum SunburstPresentationPreprocessor {
                     startAngle: angle,
                     endAngle: endAngle,
                     rootTotalSize: totalSize,
-                    hue: hue
+                    paletteIndex: paletteIndex
                 )
             )
 
@@ -166,7 +201,7 @@ nonisolated enum SunburstPresentationPreprocessor {
                 levels: levels,
                 start: angle,
                 end: endAngle,
-                hue: hue,
+                paletteIndex: paletteIndex,
                 result: &result
             ) else { return nil }
         }
@@ -182,7 +217,7 @@ nonisolated enum SunburstPresentationPreprocessor {
         levels: Int,
         start: Double,
         end: Double,
-        hue: Double,
+        paletteIndex: Int,
         result: inout [SunburstSegment]
     ) -> Bool {
         guard !isCancelled else { return false }
@@ -204,7 +239,7 @@ nonisolated enum SunburstPresentationPreprocessor {
                     startAngle: angle,
                     endAngle: endAngle,
                     rootTotalSize: rootTotalSize,
-                    hue: hue
+                    paletteIndex: paletteIndex
                 )
             )
 
@@ -216,7 +251,7 @@ nonisolated enum SunburstPresentationPreprocessor {
                 levels: levels,
                 start: angle,
                 end: endAngle,
-                hue: hue,
+                paletteIndex: paletteIndex,
                 result: &result
             ) else { return false }
         }
@@ -230,7 +265,7 @@ nonisolated enum SunburstPresentationPreprocessor {
         startAngle: Double,
         endAngle: Double,
         rootTotalSize: Int64,
-        hue: Double
+        paletteIndex: Int
     ) -> SunburstSegment {
         SunburstSegment(
             id: "\(item.path)-\(level)",
@@ -239,7 +274,7 @@ nonisolated enum SunburstPresentationPreprocessor {
             startAngle: startAngle,
             endAngle: endAngle,
             fractionOfRoot: Double(item.size) / Double(rootTotalSize),
-            hue: hue,
+            paletteIndex: paletteIndex,
             canNavigate: !item.children.isEmpty
         )
     }
