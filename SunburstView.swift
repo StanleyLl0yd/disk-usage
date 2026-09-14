@@ -60,6 +60,7 @@ struct SunburstView: View {
     @Environment(\.colorScheme) private var colorScheme
     @StateObject private var presentation = SunburstPresentationState()
     @State private var navigation: [String] = []
+    @State private var hoveredSegmentID: String?
 
     private let levels = 4, center: CGFloat = 70, ring: CGFloat = 45
 
@@ -76,6 +77,22 @@ struct SunburstView: View {
 
     private var current: (items: [FolderUsage], total: Int64) {
         (resolvedPath.last?.children ?? items, resolvedPath.last?.size ?? totalSize)
+    }
+
+    private var focusedItem: FolderUsage? {
+        if let hoveredSegmentID,
+           let hovered = presentation.model.segments.first(where: { $0.id == hoveredSegmentID }) {
+            return hovered.item
+        }
+
+        guard let selectedPath else { return nil }
+        if let selected = presentation.model.segments.first(where: { $0.item.path == selectedPath }) {
+            return selected.item
+        }
+        if let root = resolvedPath.last, root.path == selectedPath {
+            return root
+        }
+        return nil
     }
 
     var body: some View {
@@ -106,15 +123,29 @@ struct SunburstView: View {
                             brightness: tone.brightness
                         )
                         let isSelected = selectedPath == segment.item.path
+                        let isHovered = hoveredSegmentID == segment.id
 
-                        arc.fill(color.opacity(isSelected ? 1 : 0.92))
+                        arc.fill(color.opacity(isSelected || isHovered ? 1 : 0.9))
                             .overlay(
                                 arc.stroke(
                                     isSelected
-                                        ? ZenDesign.Colors.accent.opacity(0.9)
-                                        : ZenDesign.Colors.surface.opacity(colorScheme == .dark ? 0.70 : 0.92),
-                                    lineWidth: isSelected ? 2 : 0.8
+                                        ? ZenDesign.Colors.accent.opacity(0.95)
+                                        : isHovered
+                                            ? ZenDesign.Colors.accent.opacity(0.55)
+                                            : ZenDesign.Colors.surface.opacity(colorScheme == .dark ? 0.70 : 0.92),
+                                    lineWidth: isSelected ? 2 : isHovered ? 1.4 : 0.8
                                 )
+                            )
+                            .contentShape(arc)
+                            .onHover { hovering in
+                                if hovering {
+                                    hoveredSegmentID = segment.id
+                                } else if hoveredSegmentID == segment.id {
+                                    hoveredSegmentID = nil
+                                }
+                            }
+                            .help(
+                                "\(segment.item.name)\n\(formatBytes(segment.item.size)) · \(formatPercent(segment.item.size, of: current.total))"
                             )
                             .onTapGesture {
                                 selectedPath = segment.item.path
@@ -142,16 +173,9 @@ struct SunburstView: View {
                         .frame(width: center * 2, height: center * 2)
                         .position(c)
 
-                    VStack(spacing: 4) {
-                        Text(formatBytes(current.total))
-                            .font(.system(size: 18, weight: .bold))
-                            .foregroundStyle(ZenDesign.Colors.primaryText)
-                        Text(String(localized: "sunburst.scanned", defaultValue: "scanned"))
-                            .font(.system(size: 11))
-                            .foregroundStyle(ZenDesign.Colors.secondaryText)
-                    }
-                    .frame(width: center * 1.8)
-                    .position(c)
+                    centerContent
+                        .frame(width: center * 1.8)
+                        .position(c)
                 }
             }
         }
@@ -170,13 +194,47 @@ struct SunburstView: View {
             preparePresentation()
         }
         .onChange(of: navigation) { _, _ in
+            hoveredSegmentID = nil
             preparePresentation()
         }
         .onChange(of: snapshotRevision) { _, _ in
+            hoveredSegmentID = nil
             reconcileNavigationAndPrepare()
         }
         .onDisappear {
+            hoveredSegmentID = nil
             presentation.cancel()
+        }
+    }
+
+    @ViewBuilder
+    private var centerContent: some View {
+        if let focusedItem {
+            VStack(spacing: 3) {
+                Text(focusedItem.name)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(ZenDesign.Colors.primaryText)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Text(formatBytes(focusedItem.size))
+                    .font(.system(size: 17, weight: .bold))
+                    .foregroundStyle(ZenDesign.Colors.primaryText)
+                    .monospacedDigit()
+                Text(formatPercent(focusedItem.size, of: current.total))
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(ZenDesign.Colors.secondaryText)
+                    .monospacedDigit()
+            }
+        } else {
+            VStack(spacing: 4) {
+                Text(formatBytes(current.total))
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundStyle(ZenDesign.Colors.primaryText)
+                    .monospacedDigit()
+                Text(String(localized: "sunburst.scanned", defaultValue: "scanned"))
+                    .font(.system(size: 11))
+                    .foregroundStyle(ZenDesign.Colors.secondaryText)
+            }
         }
     }
 
@@ -190,29 +248,41 @@ struct SunburstView: View {
             .buttonStyle(.bordered)
             .disabled(resolvedPath.isEmpty)
 
-            HStack(spacing: ZenDesign.Spacing.compact) {
-                Button {
-                    updateNavigation { navigation.removeAll() }
-                } label: {
-                    Text(verbatim: "/")
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(resolvedPath.isEmpty ? ZenDesign.Colors.primaryText : ZenDesign.Colors.secondaryText)
-
-                ForEach(Array(resolvedPath.enumerated()), id: \.element.path) { index, item in
-                    Image(systemName: "chevron.right").font(.caption2).foregroundStyle(ZenDesign.Colors.mutedText)
-                    Button(item.name) {
-                        updateNavigation {
-                            navigation = Array(navigation.prefix(index + 1))
-                        }
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: ZenDesign.Spacing.compact) {
+                    Button {
+                        updateNavigation { navigation.removeAll() }
+                    } label: {
+                        Text(verbatim: "/")
                     }
                     .buttonStyle(.plain)
-                    .foregroundStyle(index == resolvedPath.count - 1 ? ZenDesign.Colors.primaryText : ZenDesign.Colors.secondaryText)
-                    .lineLimit(1)
+                    .foregroundStyle(resolvedPath.isEmpty ? ZenDesign.Colors.primaryText : ZenDesign.Colors.secondaryText)
+
+                    ForEach(Array(resolvedPath.enumerated()), id: \.element.path) { index, item in
+                        Image(systemName: "chevron.right")
+                            .font(.caption2)
+                            .foregroundStyle(ZenDesign.Colors.mutedText)
+                        Button(item.name) {
+                            updateNavigation {
+                                navigation = Array(navigation.prefix(index + 1))
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(
+                            selectedPath == item.path
+                                ? ZenDesign.Colors.accent
+                                : index == resolvedPath.count - 1
+                                    ? ZenDesign.Colors.primaryText
+                                    : ZenDesign.Colors.secondaryText
+                        )
+                        .fontWeight(selectedPath == item.path ? .semibold : .regular)
+                        .lineLimit(1)
+                    }
                 }
+                .font(.system(size: 13))
+                .fixedSize(horizontal: true, vertical: false)
             }
-            .font(.system(size: 13))
-            Spacer()
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.horizontal)
     }
