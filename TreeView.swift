@@ -14,27 +14,21 @@ struct TreeView: View {
 
     var body: some View {
         List(selection: $selectedPath) {
-            if items.isEmpty {
-                Text(String(localized: "empty.message", defaultValue: "No data. Start a scan."))
-                    .foregroundStyle(ZenDesign.Colors.secondaryText)
-                    .padding(.vertical, 20)
-            } else {
-                Section(String(localized: "section.items", defaultValue: "Items")) {
-                    OutlineGroup(items, children: \.childrenOptional) { item in
-                        ItemRow(
-                            item: item,
-                            totalSize: totalSize,
-                            isSelected: selectedPath == item.path,
-                            isTreeFocused: isTreeFocused
-                        )
-                        .tag(item.path)
-                        .folderContextMenu(
-                            item,
-                            onShowInFinder: onShowInFinder,
-                            onCopyPath: onCopyPath,
-                            onDelete: onDelete
-                        )
-                    }
+            Section(String(localized: "section.items", defaultValue: "Items")) {
+                OutlineGroup(items, children: \.childrenOptional) { item in
+                    ItemRow(
+                        item: item,
+                        totalSize: totalSize,
+                        isSelected: selectedPath == item.path,
+                        isTreeFocused: isTreeFocused
+                    )
+                    .tag(item.path)
+                    .folderContextMenu(
+                        item,
+                        onShowInFinder: onShowInFinder,
+                        onCopyPath: onCopyPath,
+                        onDelete: onDelete
+                    )
                 }
             }
 

@@ -94,11 +94,9 @@ nonisolated final class DiskScanner: @unchecked Sendable {
                    size > 0 {
                     let fileSize = Int64(size)
                     let filePath = item.standardizedFileURL.path
-                    let fileName = (filePath as NSString).lastPathComponent
 
                     rootNode.addFile(
                         path: filePath,
-                        name: fileName,
                         folder: folderPath,
                         size: fileSize,
                         rootPath: rootPath
@@ -156,7 +154,7 @@ nonisolated private final class Node {
         self.isFile = isFile
     }
 
-    func addFile(path filePath: String, name: String, folder: String, size: Int64, rootPath: String) {
+    func addFile(path filePath: String, folder: String, size: Int64, rootPath: String) {
         let relative: Substring
         if rootPath == "/" {
             relative = folder.dropFirst()
@@ -169,22 +167,25 @@ nonisolated private final class Node {
         self.size += size
         var current = self
         for component in relative.split(separator: "/") {
-            let name = String(component)
-            let child = current.children[name] ?? {
-                let child = Node(path: current.path == "/" ? "/\(name)" : "\(current.path)/\(name)")
-                current.children[name] = child
+            let componentName = String(component)
+            let child = current.children[componentName] ?? {
+                let child = Node(
+                    path: current.path == "/" ? "/\(componentName)" : "\(current.path)/\(componentName)"
+                )
+                current.children[componentName] = child
                 return child
             }()
             child.size += size
             current = child
         }
 
-        if let existing = current.children[name] {
+        let fileName = (filePath as NSString).lastPathComponent
+        if let existing = current.children[fileName] {
             existing.size += size
         } else {
             let fileNode = Node(path: filePath, isFile: true)
             fileNode.size = size
-            current.children[name] = fileNode
+            current.children[fileName] = fileNode
         }
     }
 

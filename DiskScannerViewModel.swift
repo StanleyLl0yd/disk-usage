@@ -37,7 +37,6 @@ final class DiskScannerViewModel: ObservableObject {
     @Published private(set) var totalSize: Int64 = 0
     @Published private(set) var progress = ScanProgress()
     @Published private(set) var diskInfo: DiskInfo = .empty
-    @Published private(set) var completedSummary: CompletedScanSummary?
     private(set) var snapshotRevision: UInt64 = 0
 
     var isScanning: Bool {
@@ -94,7 +93,6 @@ final class DiskScannerViewModel: ObservableObject {
         restricted = []
         totalSize = 0
         progress = ScanProgress()
-        completedSummary = nil
         status = String(localized: "status.scanning", defaultValue: "Scanning…")
         snapshotRevision &+= 1
         items = []
@@ -135,7 +133,6 @@ final class DiskScannerViewModel: ObservableObject {
         scanGeneration &+= 1
         cancelTasks()
         progress = ScanProgress()
-        completedSummary = nil
         status = String(localized: "status.cancelled", defaultValue: "Cancelled.")
         lifecycle = .cancelled
     }
@@ -147,7 +144,6 @@ final class DiskScannerViewModel: ObservableObject {
         progress = finalProgress
         totalSize = result.root.size
         restricted = result.restricted
-        completedSummary = result.summary
         snapshotRevision &+= 1
         items = result.root.children
 
@@ -203,7 +199,6 @@ final class DiskScannerViewModel: ObservableObject {
             try FileManager.default.trashItem(at: item.url, resultingItemURL: nil)
             let updatedItems = items.compactMap { $0.removing(path: item.path) }
             totalSize -= size
-            completedSummary = nil
             status = String(localized: "status.trashed", defaultValue: "Moved to Trash.")
             snapshotRevision &+= 1
             items = updatedItems

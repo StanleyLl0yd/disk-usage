@@ -91,13 +91,11 @@ final class DiskScannerTests: XCTestCase {
         XCTAssertEqual(viewModel.lifecycle, .scanning)
         XCTAssertTrue(viewModel.isScanning)
         XCTAssertTrue(viewModel.items.isEmpty)
-        XCTAssertNil(viewModel.completedSummary)
 
         viewModel.cancel()
         XCTAssertEqual(viewModel.lifecycle, .cancelled)
         XCTAssertFalse(viewModel.isScanning)
         XCTAssertTrue(viewModel.items.isEmpty)
-        XCTAssertNil(viewModel.completedSummary)
     }
 
     @MainActor
@@ -108,7 +106,7 @@ final class DiskScannerTests: XCTestCase {
         let replacementParent = FolderUsage(path: "/scope", size: 80, children: [replacementChild])
         let selection = ItemSelectionState()
 
-        selection.select(oldChild)
+        selection.selectedPath = oldChild.path
         selection.reconcile(with: [replacementParent])
 
         XCTAssertEqual(selection.selectedPath, replacementChild.path)
@@ -122,7 +120,7 @@ final class DiskScannerTests: XCTestCase {
         let sibling = FolderUsage(path: "/other", size: 50, isFile: true)
         let selection = ItemSelectionState()
 
-        selection.select(child)
+        selection.selectedPath = child.path
         selection.reconcile(with: [parent, sibling])
         XCTAssertEqual(selection.selectedPath, child.path)
 

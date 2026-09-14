@@ -55,10 +55,6 @@ final class TreePresentationState: ObservableObject {
 final class ItemSelectionState: ObservableObject {
     @Published var selectedPath: String?
 
-    func select(_ item: FolderUsage) {
-        selectedPath = item.path
-    }
-
     func selectedItem(in items: [FolderUsage]) -> FolderUsage? {
         guard let selectedPath else { return nil }
         return find(path: selectedPath, in: items)

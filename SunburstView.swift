@@ -51,7 +51,6 @@ struct SunburstView: View {
     let items: [FolderUsage]
     let totalSize: Int64
     let snapshotRevision: UInt64
-    var scanProgress: ScanProgress? = nil
     @Binding var selectedPath: String?
     let onShowInFinder: (FolderUsage) -> Void
     let onCopyPath: (FolderUsage) -> Void
@@ -123,11 +122,9 @@ struct SunburstView: View {
                         .position(c)
 
                     VStack(spacing: 4) {
-                        Text(formatBytes(scanProgress?.bytesFound ?? current.total))
+                        Text(formatBytes(current.total))
                             .font(.system(size: 18, weight: .bold))
-                        Text(scanProgress != nil
-                             ? String(localized: "sunburst.scanning", defaultValue: "scanning…")
-                             : String(localized: "sunburst.scanned", defaultValue: "scanned"))
+                        Text(String(localized: "sunburst.scanned", defaultValue: "scanned"))
                             .font(.system(size: 11))
                             .foregroundStyle(ZenDesign.Colors.secondaryText)
                     }

@@ -48,6 +48,13 @@ final class FolderUsageTests: XCTestCase {
         XCTAssertEqual(SortOption.sizeAsc.sorted([b, a]).map(\.path), [a.path, b.path])
     }
 
+    func testNameSortUsesPathAsDeterministicTieBreakerWhenCaseInsensitiveComparisonMatches() {
+        let lower = FolderUsage(path: "/root/a", size: 10)
+        let upper = FolderUsage(path: "/root/A", size: 10)
+
+        XCTAssertEqual(SortOption.name.sorted([lower, upper]).map(\.path), [upper.path, lower.path])
+    }
+
     func testTreePresentationPreprocessorSortsEveryLevelWithoutChangingSource() {
         let small = FolderUsage(path: "/root/a/small", size: 10, isFile: true)
         let large = FolderUsage(path: "/root/a/large", size: 90, isFile: true)
@@ -63,7 +70,7 @@ final class FolderUsageTests: XCTestCase {
         XCTAssertEqual(source[1].children.map(\.path), [small.path, large.path])
     }
 
-    func testSunburstPresentationPreprocessorBuildsDeterministicGeometry() {
+    func testSunburstPresentationPreprocessorBuildsDeterministicGeometry() throws {
         let childSmall = FolderUsage(path: "/root/a/small", size: 20, isFile: true)
         let childLarge = FolderUsage(path: "/root/a/large", size: 40, isFile: true)
         let a = FolderUsage(path: "/root/a", size: 60, children: [childSmall, childLarge])
@@ -75,7 +82,7 @@ final class FolderUsageTests: XCTestCase {
             levels: 4
         )
 
-        let segments = try! XCTUnwrap(prepared)
+        let segments = try XCTUnwrap(prepared)
         XCTAssertEqual(segments.map(\.item.path), [a.path, childLarge.path, childSmall.path, b.path])
         XCTAssertEqual(segments.map(\.level), [0, 1, 1, 0])
         XCTAssertEqual(segments[0].startAngle, 0, accuracy: 0.0001)

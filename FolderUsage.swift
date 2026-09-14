@@ -18,11 +18,6 @@ nonisolated struct FolderUsage: Identifiable, Hashable, Sendable {
         self.children = children
     }
 
-    func sorted(by option: SortOption) -> FolderUsage {
-        let sortedChildren = option.sorted(children.map { $0.sorted(by: option) })
-        return FolderUsage(path: path, size: size, isFile: isFile, children: sortedChildren)
-    }
-
     func removing(path targetPath: String) -> FolderUsage? {
         if path == targetPath { return nil }
         guard contains(targetPath) else { return self }
