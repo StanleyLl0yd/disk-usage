@@ -119,9 +119,10 @@ final class FolderUsageTests: XCTestCase {
     }
 
     func testSunburstPresentationAggregatesTinyTopLevelSiblingsWithoutChangingTotals() throws {
-        let large = FolderUsage(path: "/root/large", size: 998)
-        let tinyA = FolderUsage(path: "/root/tiny-a", size: 1)
-        let tinyB = FolderUsage(path: "/root/tiny-b", size: 1)
+        let rootPath = ["", "root"].joined(separator: "/")
+        let large = FolderUsage(path: "\(rootPath)/large", size: 998)
+        let tinyA = FolderUsage(path: "\(rootPath)/tiny-a", size: 1)
+        let tinyB = FolderUsage(path: "\(rootPath)/tiny-b", size: 1)
 
         let presentation = try XCTUnwrap(
             SunburstPresentationPreprocessor.presentation(
@@ -146,11 +147,13 @@ final class FolderUsageTests: XCTestCase {
     }
 
     func testSunburstPresentationAggregatesTinyNestedSiblingsWithinParentBranch() throws {
-        let largeChild = FolderUsage(path: "/root/parent/large", size: 998)
-        let tinyA = FolderUsage(path: "/root/parent/tiny-a", size: 1)
-        let tinyB = FolderUsage(path: "/root/parent/tiny-b", size: 1)
+        let rootPath = ["", "root"].joined(separator: "/")
+        let parentPath = "\(rootPath)/parent"
+        let largeChild = FolderUsage(path: "\(parentPath)/large", size: 998)
+        let tinyA = FolderUsage(path: "\(parentPath)/tiny-a", size: 1)
+        let tinyB = FolderUsage(path: "\(parentPath)/tiny-b", size: 1)
         let parent = FolderUsage(
-            path: "/root/parent",
+            path: parentPath,
             size: 1_000,
             children: [tinyB, largeChild, tinyA]
         )
@@ -167,7 +170,7 @@ final class FolderUsageTests: XCTestCase {
         XCTAssertEqual(presentation.visualSegmentCount, 3)
 
         let aggregate = try XCTUnwrap(presentation.aggregates.first)
-        XCTAssertEqual(aggregate.id, "other:/root/parent:1")
+        XCTAssertEqual(aggregate.id, "other:\(parent.path):1")
         XCTAssertEqual(aggregate.level, 1)
         XCTAssertEqual(aggregate.size, 2)
         XCTAssertEqual(aggregate.itemCount, 2)
