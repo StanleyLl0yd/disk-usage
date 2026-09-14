@@ -47,6 +47,73 @@ final class SunburstPresentationState: ObservableObject {
     }
 }
 
+private enum SunburstRenderableSegment: Identifiable {
+    case item(SunburstSegment)
+    case aggregate(SunburstAggregateSegment)
+
+    var id: String {
+        switch self {
+        case let .item(segment): segment.id
+        case let .aggregate(segment): segment.id
+        }
+    }
+
+    var item: FolderUsage? {
+        guard case let .item(segment) = self else { return nil }
+        return segment.item
+    }
+
+    var size: Int64 {
+        switch self {
+        case let .item(segment): segment.item.size
+        case let .aggregate(segment): segment.size
+        }
+    }
+
+    var itemCount: Int? {
+        guard case let .aggregate(segment) = self else { return nil }
+        return segment.itemCount
+    }
+
+    var level: Int {
+        switch self {
+        case let .item(segment): segment.level
+        case let .aggregate(segment): segment.level
+        }
+    }
+
+    var startAngle: Double {
+        switch self {
+        case let .item(segment): segment.startAngle
+        case let .aggregate(segment): segment.startAngle
+        }
+    }
+
+    var endAngle: Double {
+        switch self {
+        case let .item(segment): segment.endAngle
+        case let .aggregate(segment): segment.endAngle
+        }
+    }
+
+    var paletteIndex: Int {
+        switch self {
+        case let .item(segment): segment.paletteIndex
+        case let .aggregate(segment): segment.paletteIndex
+        }
+    }
+
+    var canNavigate: Bool {
+        guard case let .item(segment) = self else { return false }
+        return segment.canNavigate
+    }
+
+    var isAggregate: Bool {
+        if case .aggregate = self { return true }
+        return false
+    }
+}
+
 struct SunburstView: View {
     let items: [FolderUsage]
     let totalSize: Int64
@@ -83,14 +150,15 @@ struct SunburstView: View {
         String(localized: "sunburst.other", defaultValue: "Other")
     }
 
+    private var renderableSegments: [SunburstRenderableSegment] {
+        presentation.model.segments.map(SunburstRenderableSegment.item)
+            + presentation.model.aggregates.map(SunburstRenderableSegment.aggregate)
+    }
+
     private var focusedContent: (name: String, size: Int64)? {
-        if let hoveredSegmentID {
-            if let hovered = presentation.model.segments.first(where: { $0.id == hoveredSegmentID }) {
-                return (hovered.item.name, hovered.item.size)
-            }
-            if let aggregate = presentation.model.aggregates.first(where: { $0.id == hoveredSegmentID }) {
-                return (otherLabel, aggregate.size)
-            }
+        if let hoveredSegmentID,
+           let hovered = renderableSegments.first(where: { $0.id == hoveredSegmentID }) {
+            return (displayName(for: hovered), hovered.size)
         }
 
         guard let selectedPath else { return nil }
@@ -112,34 +180,8 @@ struct SunburstView: View {
                     RoundedRectangle(cornerRadius: ZenDesign.Radius.medium, style: .continuous)
                         .fill(ZenDesign.Colors.surface.opacity(colorScheme == .dark ? 0.28 : 0.52))
 
-                    ForEach(presentation.model.segments) { segment in
-                        renderedSegment(
-                            id: segment.id,
-                            item: segment.item,
-                            size: segment.item.size,
-                            level: segment.level,
-                            startAngle: segment.startAngle,
-                            endAngle: segment.endAngle,
-                            paletteIndex: segment.paletteIndex,
-                            canNavigate: segment.canNavigate,
-                            isAggregate: false,
-                            centerPoint: c
-                        )
-                    }
-
-                    ForEach(presentation.model.aggregates) { aggregate in
-                        renderedSegment(
-                            id: aggregate.id,
-                            item: nil,
-                            size: aggregate.size,
-                            level: aggregate.level,
-                            startAngle: aggregate.startAngle,
-                            endAngle: aggregate.endAngle,
-                            paletteIndex: aggregate.paletteIndex,
-                            canNavigate: false,
-                            isAggregate: true,
-                            centerPoint: c
-                        )
+                    ForEach(renderableSegments) { segment in
+                        renderedSegment(segment, centerPoint: c)
                     }
 
                     Circle()
@@ -187,63 +229,14 @@ struct SunburstView: View {
 
     @ViewBuilder
     private func renderedSegment(
-        id: String,
-        item: FolderUsage?,
-        size: Int64,
-        level: Int,
-        startAngle: Double,
-        endAngle: Double,
-        paletteIndex: Int,
-        canNavigate: Bool,
-        isAggregate: Bool,
+        _ segment: SunburstRenderableSegment,
         centerPoint: CGPoint
     ) -> some View {
-        let arc = Arc(
-            c: centerPoint,
-            r1: center + CGFloat(level) * ring,
-            r2: center + CGFloat(level + 1) * ring - 1,
-            a1: startAngle,
-            a2: endAngle
-        )
-        let tone = SunburstPalette.tone(
-            paletteIndex: paletteIndex,
-            level: level,
-            darkMode: colorScheme == .dark
-        )
-        let color = Color(
-            hue: tone.hue,
-            saturation: tone.saturation,
-            brightness: tone.brightness
-        )
-        let isSelected = item.map { $0.path == selectedPath } ?? false
-        let isHovered = hoveredSegmentID == id
-        let strokeColor = segmentStrokeColor(isSelected: isSelected, isHovered: isHovered)
-        let strokeWidth = segmentStrokeWidth(isSelected: isSelected, isHovered: isHovered)
-        let fillOpacity = segmentFillOpacity(
-            isAggregate: isAggregate,
-            isSelected: isSelected,
-            isHovered: isHovered
-        )
-        let title = item?.name ?? otherLabel
-        let segmentView = arc.fill(color.opacity(fillOpacity))
-            .overlay(
-                arc.stroke(strokeColor, lineWidth: strokeWidth)
-            )
-            .contentShape(arc)
-            .onHover { hovering in
-                if hovering {
-                    hoveredSegmentID = id
-                } else if hoveredSegmentID == id {
-                    hoveredSegmentID = nil
-                }
-            }
-            .help("\(title)\n\(formatBytes(size)) · \(formatPercent(size, of: current.total))")
-
-        if let item {
-            segmentView
+        if let item = segment.item {
+            segmentVisual(segment, centerPoint: centerPoint)
                 .onTapGesture {
                     selectedPath = item.path
-                    if canNavigate {
+                    if segment.canNavigate {
                         updateNavigation {
                             navigation.append(item.path)
                         }
@@ -257,8 +250,72 @@ struct SunburstView: View {
                     onDelete: onDelete
                 )
         } else {
-            segmentView
+            segmentVisual(segment, centerPoint: centerPoint)
         }
+    }
+
+    private func segmentVisual(
+        _ segment: SunburstRenderableSegment,
+        centerPoint: CGPoint
+    ) -> some View {
+        let arc = Arc(
+            c: centerPoint,
+            r1: center + CGFloat(segment.level) * ring,
+            r2: center + CGFloat(segment.level + 1) * ring - 1,
+            a1: segment.startAngle,
+            a2: segment.endAngle
+        )
+        let tone = SunburstPalette.tone(
+            paletteIndex: segment.paletteIndex,
+            level: segment.level,
+            darkMode: colorScheme == .dark
+        )
+        let color = Color(
+            hue: tone.hue,
+            saturation: tone.saturation,
+            brightness: tone.brightness
+        )
+        let isSelected = segment.item.map { $0.path == selectedPath } ?? false
+        let isHovered = hoveredSegmentID == segment.id
+
+        return arc.fill(color.opacity(segmentFillOpacity(
+            isAggregate: segment.isAggregate,
+            isSelected: isSelected,
+            isHovered: isHovered
+        )))
+        .overlay(
+            arc.stroke(
+                segmentStrokeColor(isSelected: isSelected, isHovered: isHovered),
+                lineWidth: segmentStrokeWidth(isSelected: isSelected, isHovered: isHovered)
+            )
+        )
+        .contentShape(arc)
+        .onHover { hovering in
+            updateHover(segmentID: segment.id, hovering: hovering)
+        }
+        .help(segmentHelpText(for: segment))
+    }
+
+    private func updateHover(segmentID: String, hovering: Bool) {
+        if hovering {
+            hoveredSegmentID = segmentID
+        } else if hoveredSegmentID == segmentID {
+            hoveredSegmentID = nil
+        }
+    }
+
+    private func segmentHelpText(for segment: SunburstRenderableSegment) -> String {
+        "\(displayName(for: segment))\n\(formatBytes(segment.size)) · \(formatPercent(segment.size, of: current.total))"
+    }
+
+    private func displayName(for segment: SunburstRenderableSegment) -> String {
+        if let item = segment.item {
+            return item.name
+        }
+        if let itemCount = segment.itemCount {
+            return "\(otherLabel) (\(itemCount))"
+        }
+        return otherLabel
     }
 
     @ViewBuilder
