@@ -50,9 +50,9 @@ nonisolated enum SortOption: String, CaseIterable, Identifiable, Sendable {
         items.sorted { lhs, rhs in
             switch self {
             case .sizeDesc:
-                lhs.size != rhs.size ? lhs.size > rhs.size : lhs.path < rhs.path
+                return lhs.size != rhs.size ? lhs.size > rhs.size : lhs.path < rhs.path
             case .sizeAsc:
-                lhs.size != rhs.size ? lhs.size < rhs.size : lhs.path < rhs.path
+                return lhs.size != rhs.size ? lhs.size < rhs.size : lhs.path < rhs.path
             case .name:
                 let comparison = lhs.path.localizedCaseInsensitiveCompare(rhs.path)
                 return comparison == .orderedSame
