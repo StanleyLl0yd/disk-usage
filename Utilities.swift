@@ -105,14 +105,25 @@ nonisolated enum TreePresentationPreprocessor {
 }
 
 nonisolated struct SunburstPresentation: Equatable, Sendable {
+    struct AggregateSegment: Identifiable, Equatable, Sendable {
+        let id: String
+        let level: Int
+        let startAngle: Double
+        let endAngle: Double
+        let size: Int64
+        let itemCount: Int
+        let fractionOfRoot: Double
+        let paletteIndex: Int
+    }
+
     let totalSize: Int64
     let segments: [SunburstSegment]
-    let aggregates: [SunburstAggregateSegment]
+    let aggregates: [AggregateSegment]
 
     init(
         totalSize: Int64,
         segments: [SunburstSegment],
-        aggregates: [SunburstAggregateSegment] = []
+        aggregates: [AggregateSegment] = []
     ) {
         self.totalSize = totalSize
         self.segments = segments
@@ -171,68 +182,57 @@ nonisolated struct SunburstSegment: Identifiable, Equatable, Sendable {
     let canNavigate: Bool
 }
 
-nonisolated struct SunburstAggregateSegment: Identifiable, Equatable, Sendable {
-    let id: String
-    let level: Int
-    let startAngle: Double
-    let endAngle: Double
-    let size: Int64
-    let itemCount: Int
-    let fractionOfRoot: Double
-    let paletteIndex: Int
-}
+nonisolated enum SunburstPresentationPreprocessor {
+    private struct PositionedItem: Sendable {
+        let item: FolderUsage
+        let startAngle: Double
+        let endAngle: Double
+        let paletteIndex: Int
+    }
 
-nonisolated private struct SunburstPositionedItem: Sendable {
-    let item: FolderUsage
-    let startAngle: Double
-    let endAngle: Double
-    let paletteIndex: Int
-}
+    private struct AggregateDraft: Sendable {
+        let startAngle: Double
+        let endAngle: Double
+        let size: Int64
+        let itemCount: Int
+        let paletteIndex: Int
+    }
 
-nonisolated private struct SunburstAggregateDraft: Sendable {
-    let startAngle: Double
-    let endAngle: Double
-    let size: Int64
-    let itemCount: Int
-    let paletteIndex: Int
-}
+    private struct SiblingLayout: Sendable {
+        let visible: [PositionedItem]
+        let aggregate: AggregateDraft?
+    }
 
-nonisolated private struct SunburstSiblingLayout: Sendable {
-    let visible: [SunburstPositionedItem]
-    let aggregate: SunburstAggregateDraft?
-}
+    private enum PaletteAssignment: Sendable {
+        case topLevel
+        case fixed(Int)
 
-nonisolated private enum SunburstPaletteAssignment: Sendable {
-    case topLevel
-    case fixed(Int)
-
-    func index(for position: Int) -> Int {
-        switch self {
-        case .topLevel:
-            position % SunburstPalette.count
-        case let .fixed(index):
-            index
+        func index(for position: Int) -> Int {
+            switch self {
+            case .topLevel:
+                position % SunburstPalette.count
+            case let .fixed(index):
+                index
+            }
         }
     }
-}
 
-nonisolated private struct SunburstBuildContext: Sendable {
-    let parentID: String
-    let parentTotalSize: Int64
-    let rootTotalSize: Int64
-    let level: Int
-    let levels: Int
-    let startAngle: Double
-    let endAngle: Double
-    let paletteIndex: Int
-}
+    private struct BuildContext: Sendable {
+        let parentID: String
+        let parentTotalSize: Int64
+        let rootTotalSize: Int64
+        let level: Int
+        let levels: Int
+        let startAngle: Double
+        let endAngle: Double
+        let paletteIndex: Int
+    }
 
-nonisolated private struct SunburstBuildOutput: Sendable {
-    var segments: [SunburstSegment] = []
-    var aggregates: [SunburstAggregateSegment] = []
-}
+    private struct BuildOutput: Sendable {
+        var segments: [SunburstSegment] = []
+        var aggregates: [SunburstPresentation.AggregateSegment] = []
+    }
 
-nonisolated enum SunburstPresentationPreprocessor {
     private static let minimumIndividualSpan = 1.0
 
     static func presentation(
@@ -252,11 +252,11 @@ nonisolated enum SunburstPresentationPreprocessor {
             paletteAssignment: .topLevel
         ) else { return nil }
 
-        var output = SunburstBuildOutput()
+        var output = BuildOutput()
         for positioned in layout.visible {
             output.segments.append(segment(positioned, level: 0, rootTotalSize: totalSize))
 
-            let context = SunburstBuildContext(
+            let context = BuildContext(
                 parentID: positioned.item.path,
                 parentTotalSize: positioned.item.size,
                 rootTotalSize: totalSize,
@@ -289,8 +289,8 @@ nonisolated enum SunburstPresentationPreprocessor {
 
     private static func build(
         _ items: [FolderUsage],
-        context: SunburstBuildContext,
-        output: inout SunburstBuildOutput
+        context: BuildContext,
+        output: inout BuildOutput
     ) -> Bool {
         guard !isCancelled else { return false }
         guard context.level < context.levels,
@@ -313,7 +313,7 @@ nonisolated enum SunburstPresentationPreprocessor {
                 )
             )
 
-            let childContext = SunburstBuildContext(
+            let childContext = BuildContext(
                 parentID: positioned.item.path,
                 parentTotalSize: positioned.item.size,
                 rootTotalSize: context.rootTotalSize,
@@ -345,9 +345,9 @@ nonisolated enum SunburstPresentationPreprocessor {
         parentTotalSize: Int64,
         startAngle: Double,
         endAngle: Double,
-        paletteAssignment: SunburstPaletteAssignment
-    ) -> SunburstSiblingLayout? {
-        var visible: [SunburstPositionedItem] = []
+        paletteAssignment: PaletteAssignment
+    ) -> SiblingLayout? {
+        var visible: [PositionedItem] = []
         var angle = startAngle
         var aggregateStart: Double?
         var aggregateSize: Int64 = 0
@@ -365,7 +365,7 @@ nonisolated enum SunburstPresentationPreprocessor {
             let paletteIndex = paletteAssignment.index(for: position)
             if span >= minimumIndividualSpan {
                 visible.append(
-                    SunburstPositionedItem(
+                    PositionedItem(
                         item: item,
                         startAngle: angle,
                         endAngle: itemEndAngle,
@@ -390,7 +390,7 @@ nonisolated enum SunburstPresentationPreprocessor {
             itemCount: aggregateCount,
             paletteIndex: aggregatePaletteIndex
         )
-        return SunburstSiblingLayout(visible: visible, aggregate: aggregate)
+        return SiblingLayout(visible: visible, aggregate: aggregate)
     }
 
     private static func aggregateDraft(
@@ -399,9 +399,9 @@ nonisolated enum SunburstPresentationPreprocessor {
         size: Int64,
         itemCount: Int,
         paletteIndex: Int?
-    ) -> SunburstAggregateDraft? {
+    ) -> AggregateDraft? {
         guard let startAngle, let paletteIndex, size > 0, itemCount > 0 else { return nil }
-        return SunburstAggregateDraft(
+        return AggregateDraft(
             startAngle: startAngle,
             endAngle: endAngle,
             size: size,
@@ -411,7 +411,7 @@ nonisolated enum SunburstPresentationPreprocessor {
     }
 
     private static func segment(
-        _ positioned: SunburstPositionedItem,
+        _ positioned: PositionedItem,
         level: Int,
         rootTotalSize: Int64
     ) -> SunburstSegment {
@@ -429,11 +429,11 @@ nonisolated enum SunburstPresentationPreprocessor {
 
     private static func aggregateSegment(
         id: String,
-        draft: SunburstAggregateDraft,
+        draft: AggregateDraft,
         level: Int,
         rootTotalSize: Int64
-    ) -> SunburstAggregateSegment {
-        SunburstAggregateSegment(
+    ) -> SunburstPresentation.AggregateSegment {
+        SunburstPresentation.AggregateSegment(
             id: id,
             level: level,
             startAngle: draft.startAngle,
