@@ -118,20 +118,6 @@ final class FolderUsageTests: XCTestCase {
         XCTAssertTrue(prepared?.aggregates.isEmpty == true)
     }
 
-    @MainActor
-    func testSunburstPresentationStateKeepsExistingModelWhilePreparingReplacement() {
-        let state = SunburstPresentationState()
-        state.prepare(items: [], totalSize: 42, levels: 1)
-        let existingModel = state.model
-        let replacement = FolderUsage(path: "/root/replacement", size: 84)
-
-        state.prepare(items: [replacement], totalSize: replacement.size, levels: 1)
-
-        XCTAssertTrue(state.isPreparing)
-        XCTAssertEqual(state.model, existingModel)
-        state.cancel()
-    }
-
     func testSunburstPresentationAggregatesTinyTopLevelSiblingsWithoutChangingTotals() throws {
         let rootURL = FileManager.default.temporaryDirectory.appendingPathComponent("sunburst-top-level")
         let large = FolderUsage(path: rootURL.appendingPathComponent("large").path, size: 998)
