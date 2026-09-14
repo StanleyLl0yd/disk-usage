@@ -182,6 +182,56 @@ nonisolated struct SunburstAggregateSegment: Identifiable, Equatable, Sendable {
     let paletteIndex: Int
 }
 
+nonisolated private struct SunburstPositionedItem: Sendable {
+    let item: FolderUsage
+    let startAngle: Double
+    let endAngle: Double
+    let paletteIndex: Int
+}
+
+nonisolated private struct SunburstAggregateDraft: Sendable {
+    let startAngle: Double
+    let endAngle: Double
+    let size: Int64
+    let itemCount: Int
+    let paletteIndex: Int
+}
+
+nonisolated private struct SunburstSiblingLayout: Sendable {
+    let visible: [SunburstPositionedItem]
+    let aggregate: SunburstAggregateDraft?
+}
+
+nonisolated private enum SunburstPaletteAssignment: Sendable {
+    case topLevel
+    case fixed(Int)
+
+    func index(for position: Int) -> Int {
+        switch self {
+        case .topLevel:
+            position % SunburstPalette.count
+        case let .fixed(index):
+            index
+        }
+    }
+}
+
+nonisolated private struct SunburstBuildContext: Sendable {
+    let parentID: String
+    let parentTotalSize: Int64
+    let rootTotalSize: Int64
+    let level: Int
+    let levels: Int
+    let startAngle: Double
+    let endAngle: Double
+    let paletteIndex: Int
+}
+
+nonisolated private struct SunburstBuildOutput: Sendable {
+    var segments: [SunburstSegment] = []
+    var aggregates: [SunburstAggregateSegment] = []
+}
+
 nonisolated enum SunburstPresentationPreprocessor {
     private static let minimumIndividualSpan = 1.0
 
@@ -194,161 +244,95 @@ nonisolated enum SunburstPresentationPreprocessor {
         guard totalSize > 0, levels > 0 else {
             return SunburstPresentation(totalSize: totalSize, segments: [])
         }
+        guard let layout = siblingLayout(
+            items,
+            parentTotalSize: totalSize,
+            startAngle: 0,
+            endAngle: 360,
+            paletteAssignment: .topLevel
+        ) else { return nil }
 
-        let sorted = sortedBySize(items)
-        var result: [SunburstSegment] = []
-        var aggregates: [SunburstAggregateSegment] = []
-        var angle = 0.0
-        var aggregateStart: Double?
-        var aggregateSize: Int64 = 0
-        var aggregateCount = 0
-        var aggregatePaletteIndex: Int?
+        var output = SunburstBuildOutput()
+        for positioned in layout.visible {
+            output.segments.append(segment(positioned, level: 0, rootTotalSize: totalSize))
 
-        for (index, item) in sorted.enumerated() {
-            guard !isCancelled else { return nil }
-
-            let span = 360 * Double(item.size) / Double(totalSize)
-            let endAngle = angle + span
-            defer { angle = endAngle }
-            guard span > 0 else { continue }
-
-            let paletteIndex = index % SunburstPalette.count
-            guard span >= minimumIndividualSpan else {
-                if aggregateStart == nil {
-                    aggregateStart = angle
-                    aggregatePaletteIndex = paletteIndex
-                }
-                aggregateSize += item.size
-                aggregateCount += 1
-                continue
-            }
-
-            result.append(
-                segment(
-                    item: item,
-                    level: 0,
-                    startAngle: angle,
-                    endAngle: endAngle,
-                    rootTotalSize: totalSize,
-                    paletteIndex: paletteIndex
-                )
-            )
-
-            guard build(
-                item.children,
-                parentID: item.path,
-                parentTotalSize: item.size,
+            let context = SunburstBuildContext(
+                parentID: positioned.item.path,
+                parentTotalSize: positioned.item.size,
                 rootTotalSize: totalSize,
                 level: 1,
                 levels: levels,
-                start: angle,
-                end: endAngle,
-                paletteIndex: paletteIndex,
-                result: &result,
-                aggregates: &aggregates
-            ) else { return nil }
+                startAngle: positioned.startAngle,
+                endAngle: positioned.endAngle,
+                paletteIndex: positioned.paletteIndex
+            )
+            guard build(positioned.item.children, context: context, output: &output) else { return nil }
         }
 
-        if let aggregateStart,
-           let aggregatePaletteIndex,
-           aggregateSize > 0,
-           aggregateCount > 0 {
-            aggregates.append(
+        if let aggregate = layout.aggregate {
+            output.aggregates.append(
                 aggregateSegment(
                     id: "other:scope:0",
+                    draft: aggregate,
                     level: 0,
-                    startAngle: aggregateStart,
-                    endAngle: 360,
-                    size: aggregateSize,
-                    itemCount: aggregateCount,
-                    rootTotalSize: totalSize,
-                    paletteIndex: aggregatePaletteIndex
+                    rootTotalSize: totalSize
                 )
             )
         }
 
         return SunburstPresentation(
             totalSize: totalSize,
-            segments: result,
-            aggregates: aggregates
+            segments: output.segments,
+            aggregates: output.aggregates
         )
     }
 
     private static func build(
         _ items: [FolderUsage],
-        parentID: String,
-        parentTotalSize: Int64,
-        rootTotalSize: Int64,
-        level: Int,
-        levels: Int,
-        start: Double,
-        end: Double,
-        paletteIndex: Int,
-        result: inout [SunburstSegment],
-        aggregates: inout [SunburstAggregateSegment]
+        context: SunburstBuildContext,
+        output: inout SunburstBuildOutput
     ) -> Bool {
         guard !isCancelled else { return false }
-        guard level < levels, parentTotalSize > 0, !items.isEmpty else { return true }
+        guard context.level < context.levels,
+              context.parentTotalSize > 0,
+              !items.isEmpty else { return true }
+        guard let layout = siblingLayout(
+            items,
+            parentTotalSize: context.parentTotalSize,
+            startAngle: context.startAngle,
+            endAngle: context.endAngle,
+            paletteAssignment: .fixed(context.paletteIndex)
+        ) else { return false }
 
-        var angle = start
-        var aggregateStart: Double?
-        var aggregateSize: Int64 = 0
-        var aggregateCount = 0
-
-        for item in sortedBySize(items) {
-            guard !isCancelled else { return false }
-
-            let span = (end - start) * Double(item.size) / Double(parentTotalSize)
-            let endAngle = angle + span
-            defer { angle = endAngle }
-            guard span > 0 else { continue }
-
-            guard span >= minimumIndividualSpan else {
-                if aggregateStart == nil {
-                    aggregateStart = angle
-                }
-                aggregateSize += item.size
-                aggregateCount += 1
-                continue
-            }
-
-            result.append(
+        for positioned in layout.visible {
+            output.segments.append(
                 segment(
-                    item: item,
-                    level: level,
-                    startAngle: angle,
-                    endAngle: endAngle,
-                    rootTotalSize: rootTotalSize,
-                    paletteIndex: paletteIndex
+                    positioned,
+                    level: context.level,
+                    rootTotalSize: context.rootTotalSize
                 )
             )
 
-            guard build(
-                item.children,
-                parentID: item.path,
-                parentTotalSize: item.size,
-                rootTotalSize: rootTotalSize,
-                level: level + 1,
-                levels: levels,
-                start: angle,
-                end: endAngle,
-                paletteIndex: paletteIndex,
-                result: &result,
-                aggregates: &aggregates
-            ) else { return false }
+            let childContext = SunburstBuildContext(
+                parentID: positioned.item.path,
+                parentTotalSize: positioned.item.size,
+                rootTotalSize: context.rootTotalSize,
+                level: context.level + 1,
+                levels: context.levels,
+                startAngle: positioned.startAngle,
+                endAngle: positioned.endAngle,
+                paletteIndex: context.paletteIndex
+            )
+            guard build(positioned.item.children, context: childContext, output: &output) else { return false }
         }
 
-        if let aggregateStart, aggregateSize > 0, aggregateCount > 0 {
-            aggregates.append(
+        if let aggregate = layout.aggregate {
+            output.aggregates.append(
                 aggregateSegment(
-                    id: "other:\(parentID):\(level)",
-                    level: level,
-                    startAngle: aggregateStart,
-                    endAngle: end,
-                    size: aggregateSize,
-                    itemCount: aggregateCount,
-                    rootTotalSize: rootTotalSize,
-                    paletteIndex: paletteIndex
+                    id: "other:\(context.parentID):\(context.level)",
+                    draft: aggregate,
+                    level: context.level,
+                    rootTotalSize: context.rootTotalSize
                 )
             )
         }
@@ -356,45 +340,108 @@ nonisolated enum SunburstPresentationPreprocessor {
         return true
     }
 
-    private static func segment(
-        item: FolderUsage,
-        level: Int,
+    private static func siblingLayout(
+        _ items: [FolderUsage],
+        parentTotalSize: Int64,
         startAngle: Double,
         endAngle: Double,
-        rootTotalSize: Int64,
-        paletteIndex: Int
-    ) -> SunburstSegment {
-        SunburstSegment(
-            id: "\(item.path)-\(level)",
-            item: item,
-            level: level,
+        paletteAssignment: SunburstPaletteAssignment
+    ) -> SunburstSiblingLayout? {
+        var visible: [SunburstPositionedItem] = []
+        var angle = startAngle
+        var aggregateStart: Double?
+        var aggregateSize: Int64 = 0
+        var aggregateCount = 0
+        var aggregatePaletteIndex: Int?
+
+        for (position, item) in sortedBySize(items).enumerated() {
+            guard !isCancelled else { return nil }
+
+            let span = (endAngle - startAngle) * Double(item.size) / Double(parentTotalSize)
+            let itemEndAngle = angle + span
+            defer { angle = itemEndAngle }
+            guard span > 0 else { continue }
+
+            let paletteIndex = paletteAssignment.index(for: position)
+            if span >= minimumIndividualSpan {
+                visible.append(
+                    SunburstPositionedItem(
+                        item: item,
+                        startAngle: angle,
+                        endAngle: itemEndAngle,
+                        paletteIndex: paletteIndex
+                    )
+                )
+                continue
+            }
+
+            if aggregateStart == nil {
+                aggregateStart = angle
+                aggregatePaletteIndex = paletteIndex
+            }
+            aggregateSize += item.size
+            aggregateCount += 1
+        }
+
+        let aggregate = aggregateDraft(
+            startAngle: aggregateStart,
+            endAngle: angle,
+            size: aggregateSize,
+            itemCount: aggregateCount,
+            paletteIndex: aggregatePaletteIndex
+        )
+        return SunburstSiblingLayout(visible: visible, aggregate: aggregate)
+    }
+
+    private static func aggregateDraft(
+        startAngle: Double?,
+        endAngle: Double,
+        size: Int64,
+        itemCount: Int,
+        paletteIndex: Int?
+    ) -> SunburstAggregateDraft? {
+        guard let startAngle, let paletteIndex, size > 0, itemCount > 0 else { return nil }
+        return SunburstAggregateDraft(
             startAngle: startAngle,
             endAngle: endAngle,
-            fractionOfRoot: Double(item.size) / Double(rootTotalSize),
-            paletteIndex: paletteIndex,
-            canNavigate: !item.children.isEmpty
+            size: size,
+            itemCount: itemCount,
+            paletteIndex: paletteIndex
+        )
+    }
+
+    private static func segment(
+        _ positioned: SunburstPositionedItem,
+        level: Int,
+        rootTotalSize: Int64
+    ) -> SunburstSegment {
+        SunburstSegment(
+            id: "\(positioned.item.path)-\(level)",
+            item: positioned.item,
+            level: level,
+            startAngle: positioned.startAngle,
+            endAngle: positioned.endAngle,
+            fractionOfRoot: Double(positioned.item.size) / Double(rootTotalSize),
+            paletteIndex: positioned.paletteIndex,
+            canNavigate: !positioned.item.children.isEmpty
         )
     }
 
     private static func aggregateSegment(
         id: String,
+        draft: SunburstAggregateDraft,
         level: Int,
-        startAngle: Double,
-        endAngle: Double,
-        size: Int64,
-        itemCount: Int,
-        rootTotalSize: Int64,
-        paletteIndex: Int
+        rootTotalSize: Int64
     ) -> SunburstAggregateSegment {
         SunburstAggregateSegment(
             id: id,
             level: level,
-            startAngle: startAngle,
-            endAngle: endAngle,
-            size: size,
-            itemCount: itemCount,
-            fractionOfRoot: Double(size) / Double(rootTotalSize),
-            paletteIndex: paletteIndex
+            startAngle: draft.startAngle,
+            endAngle: draft.endAngle,
+            size: draft.size,
+            itemCount: draft.itemCount,
+            fractionOfRoot: Double(draft.size) / Double(rootTotalSize),
+            paletteIndex: draft.paletteIndex
         )
     }
 
