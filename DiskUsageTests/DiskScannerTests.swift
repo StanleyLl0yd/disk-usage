@@ -144,13 +144,16 @@ final class DiskScannerTests: XCTestCase {
 
 final class SunburstPresentationStateTests: XCTestCase {
     @MainActor
-    func testInitialModelIsEmpty() {
+    func testEmptyPreparationPublishesRequestedTotal() {
+        let publishedTotal = Int64(SunburstPalette.count)
         let state = SunburstPresentationState()
 
+        state.prepare(items: [], totalSize: publishedTotal, levels: 1)
+
         XCTAssertEqual(
-            SunburstPresentation.empty,
-            state.model,
-            "A new presentation state must start empty"
+            publishedTotal,
+            state.model.totalSize,
+            "Empty preparation must publish the requested empty total"
         )
     }
 }
