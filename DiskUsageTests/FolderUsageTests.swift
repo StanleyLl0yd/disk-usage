@@ -119,10 +119,10 @@ final class FolderUsageTests: XCTestCase {
     }
 
     func testSunburstPresentationAggregatesTinyTopLevelSiblingsWithoutChangingTotals() throws {
-        let rootPath = ["", "root"].joined(separator: "/")
-        let large = FolderUsage(path: "\(rootPath)/large", size: 998)
-        let tinyA = FolderUsage(path: "\(rootPath)/tiny-a", size: 1)
-        let tinyB = FolderUsage(path: "\(rootPath)/tiny-b", size: 1)
+        let rootURL = FileManager.default.temporaryDirectory.appendingPathComponent("sunburst-top-level")
+        let large = FolderUsage(path: rootURL.appendingPathComponent("large").path, size: 998)
+        let tinyA = FolderUsage(path: rootURL.appendingPathComponent("tiny-a").path, size: 1)
+        let tinyB = FolderUsage(path: rootURL.appendingPathComponent("tiny-b").path, size: 1)
 
         let presentation = try XCTUnwrap(
             SunburstPresentationPreprocessor.presentation(
@@ -147,13 +147,14 @@ final class FolderUsageTests: XCTestCase {
     }
 
     func testSunburstPresentationAggregatesTinyNestedSiblingsWithinParentBranch() throws {
-        let rootPath = ["", "root"].joined(separator: "/")
-        let parentPath = "\(rootPath)/parent"
-        let largeChild = FolderUsage(path: "\(parentPath)/large", size: 998)
-        let tinyA = FolderUsage(path: "\(parentPath)/tiny-a", size: 1)
-        let tinyB = FolderUsage(path: "\(parentPath)/tiny-b", size: 1)
+        let parentURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("sunburst-nested")
+            .appendingPathComponent("parent")
+        let largeChild = FolderUsage(path: parentURL.appendingPathComponent("large").path, size: 998)
+        let tinyA = FolderUsage(path: parentURL.appendingPathComponent("tiny-a").path, size: 1)
+        let tinyB = FolderUsage(path: parentURL.appendingPathComponent("tiny-b").path, size: 1)
         let parent = FolderUsage(
-            path: parentPath,
+            path: parentURL.path,
             size: 1_000,
             children: [tinyB, largeChild, tinyA]
         )
