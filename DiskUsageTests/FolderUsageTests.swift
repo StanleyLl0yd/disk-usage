@@ -118,16 +118,17 @@ final class FolderUsageTests: XCTestCase {
         XCTAssertTrue(prepared?.aggregates.isEmpty == true)
     }
 
-    @MainActor
-    func testSunburstPresentationStateKeepsPublishedTotalWhilePreparingReplacement() {
-        let state = SunburstPresentationState()
-        state.prepare(items: [], totalSize: 42, levels: 1)
-        let replacement = FolderUsage(path: "/root/replacement", size: 84)
+    func testSunburstPresentationStateKeepsPublishedTotalWhilePreparingReplacement() async {
+        await MainActor.run {
+            let state = SunburstPresentationState()
+            state.prepare(items: [], totalSize: 42, levels: 1)
+            let replacement = FolderUsage(path: "/root/replacement", size: 84)
 
-        state.prepare(items: [replacement], totalSize: replacement.size, levels: 1)
+            state.prepare(items: [replacement], totalSize: replacement.size, levels: 1)
 
-        XCTAssertEqual(state.model.totalSize, 42)
-        state.cancel()
+            XCTAssertEqual(state.model.totalSize, 42)
+            state.cancel()
+        }
     }
 
     func testSunburstPresentationAggregatesTinyTopLevelSiblingsWithoutChangingTotals() throws {
