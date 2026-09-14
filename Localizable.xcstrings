@@ -4,22 +4,6 @@
     "" : {
 
     },
-    "/" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "/"
-          }
-        },
-        "ru" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "/"
-          }
-        }
-      }
-    },
     "alert.cancel" : {
       "localizations" : {
         "en" : { "stringUnit" : { "state" : "translated", "value" : "Cancel" } },
@@ -102,18 +86,6 @@
       "localizations" : {
         "en" : { "stringUnit" : { "state" : "translated", "value" : "Free:" } },
         "ru" : { "stringUnit" : { "state" : "translated", "value" : "Свободно:" } }
-      }
-    },
-    "empty.message" : {
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "No data. Start a scan." } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Нет данных. Начните сканирование." } }
-      }
-    },
-    "header.title" : {
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Disk Usage" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Использование диска" } }
       }
     },
     "header.viewMode.help" : {
@@ -288,12 +260,6 @@
       "localizations" : {
         "en" : { "stringUnit" : { "state" : "translated", "value" : "scanned" } },
         "ru" : { "stringUnit" : { "state" : "translated", "value" : "просканировано" } }
-      }
-    },
-    "sunburst.scanning" : {
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "scanning…" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "сканирование…" } }
       }
     },
     "target.none" : {
