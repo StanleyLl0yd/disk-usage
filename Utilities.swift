@@ -104,23 +104,34 @@ nonisolated enum TreePresentationPreprocessor {
     }
 }
 
+nonisolated struct SunburstPresentation: Equatable, Sendable {
+    let totalSize: Int64
+    let segments: [SunburstSegment]
+
+    static let empty = SunburstPresentation(totalSize: 0, segments: [])
+}
+
 nonisolated struct SunburstSegment: Identifiable, Equatable, Sendable {
     let id: String
     let item: FolderUsage
     let level: Int
     let startAngle: Double
     let endAngle: Double
+    let fractionOfRoot: Double
     let hue: Double
+    let canNavigate: Bool
 }
 
 nonisolated enum SunburstPresentationPreprocessor {
-    static func segments(
+    static func presentation(
         for items: [FolderUsage],
         totalSize: Int64,
         levels: Int = 4
-    ) -> [SunburstSegment]? {
+    ) -> SunburstPresentation? {
         guard !isCancelled else { return nil }
-        guard totalSize > 0, levels > 0 else { return [] }
+        guard totalSize > 0, levels > 0 else {
+            return SunburstPresentation(totalSize: totalSize, segments: [])
+        }
 
         let sorted = sortedBySize(items)
         var result: [SunburstSegment] = []
@@ -137,19 +148,20 @@ nonisolated enum SunburstPresentationPreprocessor {
             let hue = (Double(index) / Double(max(sorted.count, 1)) + 0.08)
                 .truncatingRemainder(dividingBy: 1)
             result.append(
-                SunburstSegment(
-                    id: item.path + "-0",
+                segment(
                     item: item,
                     level: 0,
                     startAngle: angle,
                     endAngle: endAngle,
+                    rootTotalSize: totalSize,
                     hue: hue
                 )
             )
 
             guard build(
                 item.children,
-                totalSize: item.size,
+                parentTotalSize: item.size,
+                rootTotalSize: totalSize,
                 level: 1,
                 levels: levels,
                 start: angle,
@@ -159,12 +171,13 @@ nonisolated enum SunburstPresentationPreprocessor {
             ) else { return nil }
         }
 
-        return result
+        return SunburstPresentation(totalSize: totalSize, segments: result)
     }
 
     private static func build(
         _ items: [FolderUsage],
-        totalSize: Int64,
+        parentTotalSize: Int64,
+        rootTotalSize: Int64,
         level: Int,
         levels: Int,
         start: Double,
@@ -173,31 +186,32 @@ nonisolated enum SunburstPresentationPreprocessor {
         result: inout [SunburstSegment]
     ) -> Bool {
         guard !isCancelled else { return false }
-        guard level < levels, totalSize > 0, !items.isEmpty else { return true }
+        guard level < levels, parentTotalSize > 0, !items.isEmpty else { return true }
 
         var angle = start
         for item in sortedBySize(items) {
             guard !isCancelled else { return false }
 
-            let span = (end - start) * Double(item.size) / Double(totalSize)
+            let span = (end - start) * Double(item.size) / Double(parentTotalSize)
             let endAngle = angle + span
             defer { angle = endAngle }
             guard span >= 1 else { continue }
 
             result.append(
-                SunburstSegment(
-                    id: "\(item.path)-\(level)",
+                segment(
                     item: item,
                     level: level,
                     startAngle: angle,
                     endAngle: endAngle,
+                    rootTotalSize: rootTotalSize,
                     hue: hue
                 )
             )
 
             guard build(
                 item.children,
-                totalSize: item.size,
+                parentTotalSize: item.size,
+                rootTotalSize: rootTotalSize,
                 level: level + 1,
                 levels: levels,
                 start: angle,
@@ -208,6 +222,26 @@ nonisolated enum SunburstPresentationPreprocessor {
         }
 
         return true
+    }
+
+    private static func segment(
+        item: FolderUsage,
+        level: Int,
+        startAngle: Double,
+        endAngle: Double,
+        rootTotalSize: Int64,
+        hue: Double
+    ) -> SunburstSegment {
+        SunburstSegment(
+            id: "\(item.path)-\(level)",
+            item: item,
+            level: level,
+            startAngle: startAngle,
+            endAngle: endAngle,
+            fractionOfRoot: Double(item.size) / Double(rootTotalSize),
+            hue: hue,
+            canNavigate: !item.children.isEmpty
+        )
     }
 
     private static func sortedBySize(_ items: [FolderUsage]) -> [FolderUsage] {

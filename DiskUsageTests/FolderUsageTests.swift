@@ -70,21 +70,28 @@ final class FolderUsageTests: XCTestCase {
         XCTAssertEqual(source[1].children.map(\.path), [small.path, large.path])
     }
 
-    func testSunburstPresentationPreprocessorBuildsDeterministicGeometry() throws {
+    func testSunburstPresentationPreprocessorBuildsDeterministicDerivedModel() throws {
         let childSmall = FolderUsage(path: "/root/a/small", size: 20, isFile: true)
         let childLarge = FolderUsage(path: "/root/a/large", size: 40, isFile: true)
         let a = FolderUsage(path: "/root/a", size: 60, children: [childSmall, childLarge])
         let b = FolderUsage(path: "/root/b", size: 40)
 
-        let prepared = SunburstPresentationPreprocessor.segments(
+        let prepared = SunburstPresentationPreprocessor.presentation(
             for: [b, a],
             totalSize: 100,
             levels: 4
         )
 
-        let segments = try XCTUnwrap(prepared)
+        let presentation = try XCTUnwrap(prepared)
+        let segments = presentation.segments
+        XCTAssertEqual(presentation.totalSize, 100)
         XCTAssertEqual(segments.map(\.item.path), [a.path, childLarge.path, childSmall.path, b.path])
         XCTAssertEqual(segments.map(\.level), [0, 1, 1, 0])
+        XCTAssertEqual(segments.map(\.canNavigate), [true, false, false, false])
+        XCTAssertEqual(segments[0].fractionOfRoot, 0.6, accuracy: 0.0001)
+        XCTAssertEqual(segments[1].fractionOfRoot, 0.4, accuracy: 0.0001)
+        XCTAssertEqual(segments[2].fractionOfRoot, 0.2, accuracy: 0.0001)
+        XCTAssertEqual(segments[3].fractionOfRoot, 0.4, accuracy: 0.0001)
         XCTAssertEqual(segments[0].startAngle, 0, accuracy: 0.0001)
         XCTAssertEqual(segments[0].endAngle, 216, accuracy: 0.0001)
         XCTAssertEqual(segments[1].startAngle, 0, accuracy: 0.0001)
@@ -99,13 +106,13 @@ final class FolderUsageTests: XCTestCase {
         let b = FolderUsage(path: "/root/b", size: 50)
         let a = FolderUsage(path: "/root/a", size: 50)
 
-        let prepared = SunburstPresentationPreprocessor.segments(
+        let prepared = SunburstPresentationPreprocessor.presentation(
             for: [b, a],
             totalSize: 100,
             levels: 1
         )
 
-        XCTAssertEqual(prepared?.map(\.item.path), [a.path, b.path])
+        XCTAssertEqual(prepared?.segments.map(\.item.path), [a.path, b.path])
     }
 
     func testSyntheticPerformanceFixturesHaveExpectedShape() throws {
@@ -116,15 +123,15 @@ final class FolderUsageTests: XCTestCase {
         XCTAssertEqual(nodeCount(sunburstFixture), 8_276)
 
         let totalSize = sunburstFixture.reduce(Int64(0)) { $0 + $1.size }
-        let segments = try XCTUnwrap(
-            SunburstPresentationPreprocessor.segments(
+        let presentation = try XCTUnwrap(
+            SunburstPresentationPreprocessor.presentation(
                 for: sunburstFixture,
                 totalSize: totalSize,
                 levels: 4
             )
         )
-        XCTAssertEqual(segments.count, 84)
-        XCTAssertEqual(Set(segments.map(\.id)).count, segments.count)
+        XCTAssertEqual(presentation.segments.count, 84)
+        XCTAssertEqual(Set(presentation.segments.map(\.id)).count, presentation.segments.count)
     }
 
     func testTreePresentationPreprocessorSyntheticPerformance() {
@@ -141,17 +148,17 @@ final class FolderUsageTests: XCTestCase {
     func testSunburstPresentationPreprocessorSyntheticPerformance() {
         let source = makeSunburstPerformanceFixture()
         let totalSize = source.reduce(Int64(0)) { $0 + $1.size }
-        var segments: [SunburstSegment]?
+        var presentation: SunburstPresentation?
 
         measure(metrics: [XCTClockMetric()]) {
-            segments = SunburstPresentationPreprocessor.segments(
+            presentation = SunburstPresentationPreprocessor.presentation(
                 for: source,
                 totalSize: totalSize,
                 levels: 4
             )
         }
 
-        XCTAssertEqual(segments?.count, 84)
+        XCTAssertEqual(presentation?.segments.count, 84)
     }
 
     func testFormatBytesUsesNextUnitAtExactBoundary() {
