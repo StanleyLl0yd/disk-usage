@@ -47,46 +47,46 @@ final class SunburstPresentationState: ObservableObject {
     }
 }
 
-private struct SunburstRenderableSegment: Identifiable {
-    let id: String
-    let item: FolderUsage?
-    let size: Int64
-    let itemCount: Int?
-    let level: Int
-    let startAngle: Double
-    let endAngle: Double
-    let paletteIndex: Int
-    let canNavigate: Bool
-    let isAggregate: Bool
-
-    init(_ segment: SunburstSegment) {
-        id = segment.id
-        item = segment.item
-        size = segment.item.size
-        itemCount = nil
-        level = segment.level
-        startAngle = segment.startAngle
-        endAngle = segment.endAngle
-        paletteIndex = segment.paletteIndex
-        canNavigate = segment.canNavigate
-        isAggregate = false
-    }
-
-    init(_ segment: SunburstAggregateSegment) {
-        id = segment.id
-        item = nil
-        size = segment.size
-        itemCount = segment.itemCount
-        level = segment.level
-        startAngle = segment.startAngle
-        endAngle = segment.endAngle
-        paletteIndex = segment.paletteIndex
-        canNavigate = false
-        isAggregate = true
-    }
-}
-
 struct SunburstView: View {
+    private struct RenderableSegment: Identifiable {
+        let id: String
+        let item: FolderUsage?
+        let size: Int64
+        let itemCount: Int?
+        let level: Int
+        let startAngle: Double
+        let endAngle: Double
+        let paletteIndex: Int
+        let canNavigate: Bool
+        let isAggregate: Bool
+
+        init(_ segment: SunburstSegment) {
+            id = segment.id
+            item = segment.item
+            size = segment.item.size
+            itemCount = nil
+            level = segment.level
+            startAngle = segment.startAngle
+            endAngle = segment.endAngle
+            paletteIndex = segment.paletteIndex
+            canNavigate = segment.canNavigate
+            isAggregate = false
+        }
+
+        init(_ segment: SunburstPresentation.AggregateSegment) {
+            id = segment.id
+            item = nil
+            size = segment.size
+            itemCount = segment.itemCount
+            level = segment.level
+            startAngle = segment.startAngle
+            endAngle = segment.endAngle
+            paletteIndex = segment.paletteIndex
+            canNavigate = false
+            isAggregate = true
+        }
+    }
+
     let items: [FolderUsage]
     let totalSize: Int64
     let snapshotRevision: UInt64
@@ -122,9 +122,9 @@ struct SunburstView: View {
         String(localized: "sunburst.other", defaultValue: "Other")
     }
 
-    private var renderableSegments: [SunburstRenderableSegment] {
-        presentation.model.segments.map(SunburstRenderableSegment.init)
-            + presentation.model.aggregates.map(SunburstRenderableSegment.init)
+    private var renderableSegments: [RenderableSegment] {
+        presentation.model.segments.map(RenderableSegment.init)
+            + presentation.model.aggregates.map(RenderableSegment.init)
     }
 
     private var focusedContent: (name: String, size: Int64)? {
@@ -201,7 +201,7 @@ struct SunburstView: View {
 
     @ViewBuilder
     private func renderedSegment(
-        _ segment: SunburstRenderableSegment,
+        _ segment: RenderableSegment,
         centerPoint: CGPoint
     ) -> some View {
         if let item = segment.item {
@@ -227,7 +227,7 @@ struct SunburstView: View {
     }
 
     private func segmentVisual(
-        _ segment: SunburstRenderableSegment,
+        _ segment: RenderableSegment,
         centerPoint: CGPoint
     ) -> some View {
         let arc = Arc(
@@ -276,11 +276,11 @@ struct SunburstView: View {
         }
     }
 
-    private func segmentHelpText(for segment: SunburstRenderableSegment) -> String {
+    private func segmentHelpText(for segment: RenderableSegment) -> String {
         "\(displayName(for: segment))\n\(formatBytes(segment.size)) · \(formatPercent(segment.size, of: current.total))"
     }
 
-    private func displayName(for segment: SunburstRenderableSegment) -> String {
+    private func displayName(for segment: RenderableSegment) -> String {
         if let item = segment.item {
             return item.name
         }
