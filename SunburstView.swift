@@ -131,6 +131,18 @@ struct SunburstView: View {
         presentation.isPreparing && presentation.model.visualSegmentCount > 0
     }
 
+    private var presentationOpacity: Double {
+        if isTransitioningPresentation {
+            return 0.5
+        }
+        return 1
+    }
+
+    private var presentationAnimation: Animation? {
+        guard !reduceMotion else { return nil }
+        return .easeInOut(duration: 0.2)
+    }
+
     private var focusedContent: (name: String, size: Int64)? {
         if let hoveredSegmentID,
            let hovered = renderableSegments.first(where: { $0.id == hoveredSegmentID }) {
@@ -174,12 +186,9 @@ struct SunburstView: View {
                         .position(c)
                 }
             }
-            .opacity(isTransitioningPresentation ? 0.5 : 1)
+            .opacity(presentationOpacity)
             .allowsHitTesting(!presentation.isPreparing)
-            .animation(
-                reduceMotion ? nil : .easeInOut(duration: 0.2),
-                value: isTransitioningPresentation
-            )
+            .animation(presentationAnimation, value: isTransitioningPresentation)
         }
         .frame(minWidth: 400, minHeight: 400)
         .overlay(alignment: .topTrailing) {
