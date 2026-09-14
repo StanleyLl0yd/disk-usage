@@ -215,7 +215,7 @@ struct SunburstView: View {
             saturation: tone.saturation,
             brightness: tone.brightness
         )
-        let isSelected = item?.path == selectedPath
+        let isSelected = item.map { $0.path == selectedPath } ?? false
         let isHovered = hoveredSegmentID == id
         let strokeColor = segmentStrokeColor(isSelected: isSelected, isHovered: isHovered)
         let strokeWidth = segmentStrokeWidth(isSelected: isSelected, isHovered: isHovered)
