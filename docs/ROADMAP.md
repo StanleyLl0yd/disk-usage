@@ -288,7 +288,7 @@ The sunburst should use:
 - consistent depth cues;
 - smooth but subtle transitions.
 
-### R4.3 Interaction
+### R4.3 Interaction — COMPLETE
 
 - hover feedback;
 - selected-segment state;
@@ -446,4 +446,4 @@ These are not assumed future stages.
 
 **R3 — Unified selection, navigation, and polished Tree view is complete.** All R3 slices are implemented and verified, including unified selection, compact item details, polished Tree presentation, native keyboard/focus behavior, and shared authoritative actions.
 
-**R4 — Sunburst 2.0: DiskUsage visual identity is in progress.** R4.1 — Derived segment model and R4.2 — Visual language are complete; the next slice is **R4.3 — Interaction**.
+**R4 — Sunburst 2.0: DiskUsage visual identity is in progress.** R4.1 — Derived segment model, R4.2 — Visual language, and R4.3 — Interaction are complete; the next slice is **R4.4 — Small-segment handling**.
