@@ -57,6 +57,7 @@ struct SunburstView: View {
     let onDelete: (FolderUsage) -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var colorScheme
     @StateObject private var presentation = SunburstPresentationState()
     @State private var navigation: [String] = []
 
@@ -83,6 +84,9 @@ struct SunburstView: View {
             GeometryReader { geo in
                 let c = CGPoint(x: geo.size.width / 2, y: geo.size.height / 2)
                 ZStack {
+                    RoundedRectangle(cornerRadius: ZenDesign.Radius.medium, style: .continuous)
+                        .fill(ZenDesign.Colors.surface.opacity(colorScheme == .dark ? 0.28 : 0.52))
+
                     ForEach(presentation.model.segments) { segment in
                         let arc = Arc(
                             c: c,
@@ -91,14 +95,27 @@ struct SunburstView: View {
                             a1: segment.startAngle,
                             a2: segment.endAngle
                         )
-                        let color = Color(
-                            hue: segment.hue,
-                            saturation: 0.7 - Double(segment.level) * 0.08,
-                            brightness: 0.9 - Double(segment.level) * 0.12
+                        let tone = SunburstPalette.tone(
+                            paletteIndex: segment.paletteIndex,
+                            level: segment.level,
+                            darkMode: colorScheme == .dark
                         )
+                        let color = Color(
+                            hue: tone.hue,
+                            saturation: tone.saturation,
+                            brightness: tone.brightness
+                        )
+                        let isSelected = selectedPath == segment.item.path
 
-                        arc.fill(color)
-                            .overlay(arc.stroke(.white.opacity(0.3), lineWidth: 0.5))
+                        arc.fill(color.opacity(isSelected ? 1 : 0.92))
+                            .overlay(
+                                arc.stroke(
+                                    isSelected
+                                        ? ZenDesign.Colors.accent.opacity(0.9)
+                                        : ZenDesign.Colors.surface.opacity(colorScheme == .dark ? 0.70 : 0.92),
+                                    lineWidth: isSelected ? 2 : 0.8
+                                )
+                            )
                             .onTapGesture {
                                 selectedPath = segment.item.path
                                 if segment.canNavigate {
@@ -118,12 +135,17 @@ struct SunburstView: View {
 
                     Circle()
                         .fill(ZenDesign.Colors.surface)
+                        .overlay {
+                            Circle()
+                                .strokeBorder(ZenDesign.Colors.separator.opacity(0.45), lineWidth: 1)
+                        }
                         .frame(width: center * 2, height: center * 2)
                         .position(c)
 
                     VStack(spacing: 4) {
                         Text(formatBytes(current.total))
                             .font(.system(size: 18, weight: .bold))
+                            .foregroundStyle(ZenDesign.Colors.primaryText)
                         Text(String(localized: "sunburst.scanned", defaultValue: "scanned"))
                             .font(.system(size: 11))
                             .foregroundStyle(ZenDesign.Colors.secondaryText)
