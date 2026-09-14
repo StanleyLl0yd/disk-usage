@@ -124,17 +124,12 @@ struct SunburstView: View {
                         )
                         let isSelected = selectedPath == segment.item.path
                         let isHovered = hoveredSegmentID == segment.id
+                        let strokeColor = segmentStrokeColor(isSelected: isSelected, isHovered: isHovered)
+                        let strokeWidth = segmentStrokeWidth(isSelected: isSelected, isHovered: isHovered)
 
                         arc.fill(color.opacity(isSelected || isHovered ? 1 : 0.9))
                             .overlay(
-                                arc.stroke(
-                                    isSelected
-                                        ? ZenDesign.Colors.accent.opacity(0.95)
-                                        : isHovered
-                                            ? ZenDesign.Colors.accent.opacity(0.55)
-                                            : ZenDesign.Colors.surface.opacity(colorScheme == .dark ? 0.70 : 0.92),
-                                    lineWidth: isSelected ? 2 : isHovered ? 1.4 : 0.8
-                                )
+                                arc.stroke(strokeColor, lineWidth: strokeWidth)
                             )
                             .contentShape(arc)
                             .onHover { hovering in
@@ -268,13 +263,7 @@ struct SunburstView: View {
                             }
                         }
                         .buttonStyle(.plain)
-                        .foregroundStyle(
-                            selectedPath == item.path
-                                ? ZenDesign.Colors.accent
-                                : index == resolvedPath.count - 1
-                                    ? ZenDesign.Colors.primaryText
-                                    : ZenDesign.Colors.secondaryText
-                        )
+                        .foregroundStyle(breadcrumbColor(for: item, index: index))
                         .fontWeight(selectedPath == item.path ? .semibold : .regular)
                         .lineLimit(1)
                     }
@@ -285,6 +274,36 @@ struct SunburstView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.horizontal)
+    }
+
+    private func segmentStrokeColor(isSelected: Bool, isHovered: Bool) -> Color {
+        if isSelected {
+            return ZenDesign.Colors.accent.opacity(0.95)
+        }
+        if isHovered {
+            return ZenDesign.Colors.accent.opacity(0.55)
+        }
+        return ZenDesign.Colors.surface.opacity(colorScheme == .dark ? 0.70 : 0.92)
+    }
+
+    private func segmentStrokeWidth(isSelected: Bool, isHovered: Bool) -> CGFloat {
+        if isSelected {
+            return 2
+        }
+        if isHovered {
+            return 1.4
+        }
+        return 0.8
+    }
+
+    private func breadcrumbColor(for item: FolderUsage, index: Int) -> Color {
+        if selectedPath == item.path {
+            return ZenDesign.Colors.accent
+        }
+        if index == resolvedPath.count - 1 {
+            return ZenDesign.Colors.primaryText
+        }
+        return ZenDesign.Colors.secondaryText
     }
 
     private func updateNavigation(_ changes: () -> Void) {
