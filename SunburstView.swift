@@ -47,70 +47,42 @@ final class SunburstPresentationState: ObservableObject {
     }
 }
 
-private enum SunburstRenderableSegment: Identifiable {
-    case item(SunburstSegment)
-    case aggregate(SunburstAggregateSegment)
+private struct SunburstRenderableSegment: Identifiable {
+    let id: String
+    let item: FolderUsage?
+    let size: Int64
+    let itemCount: Int?
+    let level: Int
+    let startAngle: Double
+    let endAngle: Double
+    let paletteIndex: Int
+    let canNavigate: Bool
+    let isAggregate: Bool
 
-    var id: String {
-        switch self {
-        case let .item(segment): segment.id
-        case let .aggregate(segment): segment.id
-        }
+    init(_ segment: SunburstSegment) {
+        id = segment.id
+        item = segment.item
+        size = segment.item.size
+        itemCount = nil
+        level = segment.level
+        startAngle = segment.startAngle
+        endAngle = segment.endAngle
+        paletteIndex = segment.paletteIndex
+        canNavigate = segment.canNavigate
+        isAggregate = false
     }
 
-    var item: FolderUsage? {
-        guard case let .item(segment) = self else { return nil }
-        return segment.item
-    }
-
-    var size: Int64 {
-        switch self {
-        case let .item(segment): segment.item.size
-        case let .aggregate(segment): segment.size
-        }
-    }
-
-    var itemCount: Int? {
-        guard case let .aggregate(segment) = self else { return nil }
-        return segment.itemCount
-    }
-
-    var level: Int {
-        switch self {
-        case let .item(segment): segment.level
-        case let .aggregate(segment): segment.level
-        }
-    }
-
-    var startAngle: Double {
-        switch self {
-        case let .item(segment): segment.startAngle
-        case let .aggregate(segment): segment.startAngle
-        }
-    }
-
-    var endAngle: Double {
-        switch self {
-        case let .item(segment): segment.endAngle
-        case let .aggregate(segment): segment.endAngle
-        }
-    }
-
-    var paletteIndex: Int {
-        switch self {
-        case let .item(segment): segment.paletteIndex
-        case let .aggregate(segment): segment.paletteIndex
-        }
-    }
-
-    var canNavigate: Bool {
-        guard case let .item(segment) = self else { return false }
-        return segment.canNavigate
-    }
-
-    var isAggregate: Bool {
-        if case .aggregate = self { return true }
-        return false
+    init(_ segment: SunburstAggregateSegment) {
+        id = segment.id
+        item = nil
+        size = segment.size
+        itemCount = segment.itemCount
+        level = segment.level
+        startAngle = segment.startAngle
+        endAngle = segment.endAngle
+        paletteIndex = segment.paletteIndex
+        canNavigate = false
+        isAggregate = true
     }
 }
 
@@ -151,8 +123,8 @@ struct SunburstView: View {
     }
 
     private var renderableSegments: [SunburstRenderableSegment] {
-        presentation.model.segments.map(SunburstRenderableSegment.item)
-            + presentation.model.aggregates.map(SunburstRenderableSegment.aggregate)
+        presentation.model.segments.map(SunburstRenderableSegment.init)
+            + presentation.model.aggregates.map(SunburstRenderableSegment.init)
     }
 
     private var focusedContent: (name: String, size: Int64)? {
