@@ -256,6 +256,12 @@
         "ru" : { "stringUnit" : { "state" : "translated", "value" : "Перемещено в Корзину." } }
       }
     },
+    "sunburst.other" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Other" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Прочее" } }
+      }
+    },
     "sunburst.scanned" : {
       "localizations" : {
         "en" : { "stringUnit" : { "state" : "translated", "value" : "scanned" } },

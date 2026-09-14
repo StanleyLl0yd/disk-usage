@@ -85,6 +85,7 @@ final class FolderUsageTests: XCTestCase {
         let presentation = try XCTUnwrap(prepared)
         let segments = presentation.segments
         XCTAssertEqual(presentation.totalSize, 100)
+        XCTAssertTrue(presentation.aggregates.isEmpty)
         XCTAssertEqual(segments.map(\.item.path), [a.path, childLarge.path, childSmall.path, b.path])
         XCTAssertEqual(segments.map(\.level), [0, 1, 1, 0])
         XCTAssertEqual(segments.map(\.paletteIndex), [0, 0, 0, 1])
@@ -114,6 +115,70 @@ final class FolderUsageTests: XCTestCase {
         )
 
         XCTAssertEqual(prepared?.segments.map(\.item.path), [a.path, b.path])
+        XCTAssertTrue(prepared?.aggregates.isEmpty == true)
+    }
+
+    func testSunburstPresentationAggregatesTinyTopLevelSiblingsWithoutChangingTotals() throws {
+        let rootURL = FileManager.default.temporaryDirectory.appendingPathComponent("sunburst-top-level")
+        let large = FolderUsage(path: rootURL.appendingPathComponent("large").path, size: 998)
+        let tinyA = FolderUsage(path: rootURL.appendingPathComponent("tiny-a").path, size: 1)
+        let tinyB = FolderUsage(path: rootURL.appendingPathComponent("tiny-b").path, size: 1)
+
+        let presentation = try XCTUnwrap(
+            SunburstPresentationPreprocessor.presentation(
+                for: [tinyB, large, tinyA],
+                totalSize: 1_000,
+                levels: 1
+            )
+        )
+
+        XCTAssertEqual(presentation.segments.map(\.item.path), [large.path])
+        XCTAssertEqual(presentation.visualSegmentCount, 2)
+
+        let aggregate = try XCTUnwrap(presentation.aggregates.first)
+        XCTAssertEqual(aggregate.id, "aggregate-scope-0")
+        XCTAssertEqual(aggregate.level, 0)
+        XCTAssertEqual(aggregate.size, 2)
+        XCTAssertEqual(aggregate.itemCount, 2)
+        XCTAssertEqual(aggregate.paletteIndex, 1)
+        XCTAssertEqual(aggregate.fractionOfRoot, 0.002, accuracy: 0.0001)
+        XCTAssertEqual(aggregate.startAngle, 359.28, accuracy: 0.0001)
+        XCTAssertEqual(aggregate.endAngle, 360, accuracy: 0.0001)
+    }
+
+    func testSunburstPresentationAggregatesTinyNestedSiblingsWithinParentBranch() throws {
+        let parentURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("sunburst-nested")
+            .appendingPathComponent("parent")
+        let largeChild = FolderUsage(path: parentURL.appendingPathComponent("large").path, size: 998)
+        let tinyA = FolderUsage(path: parentURL.appendingPathComponent("tiny-a").path, size: 1)
+        let tinyB = FolderUsage(path: parentURL.appendingPathComponent("tiny-b").path, size: 1)
+        let parent = FolderUsage(
+            path: parentURL.path,
+            size: 1_000,
+            children: [tinyB, largeChild, tinyA]
+        )
+
+        let presentation = try XCTUnwrap(
+            SunburstPresentationPreprocessor.presentation(
+                for: [parent],
+                totalSize: 1_000,
+                levels: 2
+            )
+        )
+
+        XCTAssertEqual(presentation.segments.map(\.item.path), [parent.path, largeChild.path])
+        XCTAssertEqual(presentation.visualSegmentCount, 3)
+
+        let aggregate = try XCTUnwrap(presentation.aggregates.first)
+        XCTAssertEqual(aggregate.id, "aggregate-1-\(parent.path)")
+        XCTAssertEqual(aggregate.level, 1)
+        XCTAssertEqual(aggregate.size, 2)
+        XCTAssertEqual(aggregate.itemCount, 2)
+        XCTAssertEqual(aggregate.paletteIndex, 0)
+        XCTAssertEqual(aggregate.fractionOfRoot, 0.002, accuracy: 0.0001)
+        XCTAssertEqual(aggregate.startAngle, 359.28, accuracy: 0.0001)
+        XCTAssertEqual(aggregate.endAngle, 360, accuracy: 0.0001)
     }
 
     func testSunburstPaletteIsRestrainedDepthAwareAndWrapsDeterministically() {
@@ -145,7 +210,12 @@ final class FolderUsageTests: XCTestCase {
             )
         )
         XCTAssertEqual(presentation.segments.count, 84)
-        XCTAssertEqual(Set(presentation.segments.map(\.id)).count, presentation.segments.count)
+        XCTAssertEqual(presentation.aggregates.count, 64)
+        XCTAssertEqual(presentation.visualSegmentCount, 148)
+        XCTAssertTrue(presentation.aggregates.allSatisfy { $0.itemCount == 128 })
+
+        let allIDs = presentation.segments.map(\.id) + presentation.aggregates.map(\.id)
+        XCTAssertEqual(Set(allIDs).count, presentation.visualSegmentCount)
     }
 
     func testTreePresentationPreprocessorSyntheticPerformance() {
@@ -173,6 +243,8 @@ final class FolderUsageTests: XCTestCase {
         }
 
         XCTAssertEqual(presentation?.segments.count, 84)
+        XCTAssertEqual(presentation?.aggregates.count, 64)
+        XCTAssertEqual(presentation?.visualSegmentCount, 148)
     }
 
     func testFormatBytesUsesNextUnitAtExactBoundary() {
