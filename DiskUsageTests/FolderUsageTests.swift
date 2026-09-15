@@ -261,14 +261,14 @@ final class FolderUsageTests: XCTestCase {
         )
 
         var openedURL: URL?
-        let opened = FullDiskAccessSettings.open { candidate in
+        let opened = FullDiskAccessSettings.open(using: { candidate in
             openedURL = candidate
             return true
-        }
+        })
 
         XCTAssertTrue(opened)
         XCTAssertEqual(openedURL, url)
-        XCTAssertFalse(FullDiskAccessSettings.open { _ in false })
+        XCTAssertFalse(FullDiskAccessSettings.open(using: { _ in false }))
     }
 
     private func makeTreePerformanceFixture() -> [FolderUsage] {

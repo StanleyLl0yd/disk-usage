@@ -12,7 +12,7 @@ enum FullDiskAccessSettings {
 
     @MainActor
     static func open() -> Bool {
-        open { NSWorkspace.shared.open($0) }
+        open(using: { NSWorkspace.shared.open($0) })
     }
 }
 
