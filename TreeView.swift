@@ -5,6 +5,9 @@ struct TreeView: View {
     let totalSize: Int64
     let restricted: [String]
     let canRescan: Bool
+    let isSearchMode: Bool
+    let isSearchPreparing: Bool
+    @Binding var searchQuery: String
     @Binding var selectedPath: String?
     let onShowInFinder: (FolderUsage) -> Void
     let onCopyPath: (FolderUsage) -> Void
@@ -18,20 +21,28 @@ struct TreeView: View {
     var body: some View {
         List(selection: $selectedPath) {
             Section(String(localized: "section.items", defaultValue: "Items")) {
-                OutlineGroup(items, children: \.childrenOptional) { item in
-                    ItemRow(
-                        item: item,
-                        totalSize: totalSize,
-                        isSelected: selectedPath == item.path,
-                        isTreeFocused: isTreeFocused
-                    )
-                    .tag(item.path)
-                    .folderContextMenu(
-                        item,
-                        onShowInFinder: onShowInFinder,
-                        onCopyPath: onCopyPath,
-                        onDelete: onDelete
-                    )
+                if isSearchMode {
+                    if isSearchPreparing && items.isEmpty {
+                        HStack {
+                            Spacer()
+                            ProgressView()
+                                .controlSize(.small)
+                            Spacer()
+                        }
+                        .listRowSeparator(.hidden)
+                    } else if items.isEmpty {
+                        ContentUnavailableView.search(text: searchQuery)
+                            .frame(maxWidth: .infinity)
+                            .listRowSeparator(.hidden)
+                    } else {
+                        ForEach(items) { item in
+                            itemRow(item)
+                        }
+                    }
+                } else {
+                    OutlineGroup(items, children: \.childrenOptional) { item in
+                        itemRow(item)
+                    }
                 }
             }
 
@@ -75,10 +86,28 @@ struct TreeView: View {
                 }
             }
         }
+        .searchable(text: $searchQuery)
         .focused($isTreeFocused)
         .onAppear {
             isTreeFocused = true
         }
+    }
+
+    @ViewBuilder
+    private func itemRow(_ item: FolderUsage) -> some View {
+        ItemRow(
+            item: item,
+            totalSize: totalSize,
+            isSelected: selectedPath == item.path,
+            isTreeFocused: isTreeFocused
+        )
+        .tag(item.path)
+        .folderContextMenu(
+            item,
+            onShowInFinder: onShowInFinder,
+            onCopyPath: onCopyPath,
+            onDelete: onDelete
+        )
     }
 }
 

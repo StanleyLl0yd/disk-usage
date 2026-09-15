@@ -71,6 +71,77 @@ final class FolderUsageTests: XCTestCase {
         XCTAssertEqual(source[1].children.map(\.path), [small.path, large.path])
     }
 
+    func testSearchPresentationPreprocessorMatchesNameAndPathCaseInsensitivelyAndSorts() throws {
+        let rootURL = FileManager.default.temporaryDirectory.appendingPathComponent("search-matching")
+        let documentsURL = rootURL.appendingPathComponent("Documents")
+        let photosURL = rootURL.appendingPathComponent("Photos")
+        let report = FolderUsage(
+            path: documentsURL.appendingPathComponent("Annual Report.pdf").path,
+            size: 20,
+            isFile: true
+        )
+        let trip = FolderUsage(
+            path: photosURL.appendingPathComponent("Annual Trip.jpg").path,
+            size: 40,
+            isFile: true
+        )
+        let documents = FolderUsage(path: documentsURL.path, size: 20, children: [report])
+        let photos = FolderUsage(path: photosURL.path, size: 40, children: [trip])
+        let source = [documents, photos]
+
+        let nameMatches = try XCTUnwrap(
+            SearchPresentationPreprocessor.matches(
+                in: source,
+                query: "aNnUaL",
+                sortedBy: .sizeDesc
+            )
+        )
+        XCTAssertEqual([trip.path, report.path], nameMatches.map(\.path))
+
+        let pathMatches = try XCTUnwrap(
+            SearchPresentationPreprocessor.matches(
+                in: source,
+                query: "DOCUMENTS",
+                sortedBy: .sizeDesc
+            )
+        )
+        XCTAssertEqual([documents.path, report.path], pathMatches.map(\.path))
+    }
+
+    func testSearchPresentationPreprocessorLeavesSourceUnchangedAndTreatsWhitespaceAsEmpty() throws {
+        let rootURL = FileManager.default.temporaryDirectory.appendingPathComponent("search-source")
+        let first = FolderUsage(
+            path: rootURL.appendingPathComponent("b/report.txt").path,
+            size: 10,
+            isFile: true
+        )
+        let second = FolderUsage(
+            path: rootURL.appendingPathComponent("a/report.txt").path,
+            size: 10,
+            isFile: true
+        )
+        let source = [first, second]
+        let original = source
+
+        let matches = try XCTUnwrap(
+            SearchPresentationPreprocessor.matches(
+                in: source,
+                query: "report",
+                sortedBy: .sizeDesc
+            )
+        )
+
+        XCTAssertEqual([second.path, first.path], matches.map(\.path))
+        XCTAssertEqual(original, source)
+        XCTAssertTrue(
+            SearchPresentationPreprocessor.matches(
+                in: source,
+                query: "  \n\t ",
+                sortedBy: .sizeDesc
+            )?.isEmpty == true
+        )
+    }
+
     func testSunburstPresentationPreprocessorBuildsDeterministicDerivedModel() throws {
         let childSmall = FolderUsage(path: "/root/a/small", size: 20, isFile: true)
         let childLarge = FolderUsage(path: "/root/a/large", size: 40, isFile: true)
@@ -228,6 +299,22 @@ final class FolderUsageTests: XCTestCase {
         }
 
         XCTAssertEqual(nodeCount(prepared ?? []), 4_680)
+    }
+
+    func testSearchPresentationPreprocessorSyntheticPerformance() {
+        let source = makeTreePerformanceFixture()
+        let targetPath = source[7].children[7].children[7].children[7].path
+        var matches: [FolderUsage]?
+
+        measure(metrics: [XCTClockMetric()]) {
+            matches = SearchPresentationPreprocessor.matches(
+                in: source,
+                query: targetPath,
+                sortedBy: .sizeDesc
+            )
+        }
+
+        XCTAssertEqual(1, matches?.count)
     }
 
     func testSunburstPresentationPreprocessorSyntheticPerformance() {
