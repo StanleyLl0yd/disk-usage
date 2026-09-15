@@ -44,7 +44,9 @@ struct DiskUsageApp: App {
                     String(localized: "alert.error.title", defaultValue: "Error"),
                     isPresented: $showDropError
                 ) {
-                    Button(String(localized: "alert.ok", defaultValue: "OK")) {}
+                    Button(String(localized: "alert.ok", defaultValue: "OK")) {
+                        showDropError = false
+                    }
                 } message: {
                     Text(dropErrorMessage)
                 }
