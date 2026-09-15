@@ -92,10 +92,6 @@ nonisolated enum LargestFilesPresentationPreprocessor {
         return lhs.path < rhs.path
     }
 
-    private static func isBetter(_ lhs: FolderUsage, _ rhs: FolderUsage) -> Bool {
-        isBetter(lhs, than: rhs)
-    }
-
     private static func isWorse(_ lhs: FolderUsage, than rhs: FolderUsage) -> Bool {
         if lhs.size != rhs.size {
             return lhs.size < rhs.size
