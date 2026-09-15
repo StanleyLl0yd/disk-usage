@@ -27,14 +27,22 @@ A fast, privacy-first disk space analyzer for macOS built with SwiftUI.
 2. Build and run.
 3. If scanning protected areas, grant **Full Disk Access** in System Settings → Privacy & Security.
 
+## Alpha builds
+The project owner has approved unsigned alpha binary distribution before R5.4. Alpha artifacts are intentionally **not Developer ID signed and not notarized**, so macOS Gatekeeper may block a normal first launch.
+
+Each prerelease publishes a universal `arm64` + `x86_64` app archive, a DMG, and `SHA256SUMS`. Verify the downloaded artifact before opening it and do not disable Gatekeeper globally. See [`docs/RELEASE.md`](docs/RELEASE.md) for the testing policy and safe launch guidance.
+
+The first binary alpha target is `v0.1.0-alpha.1`, using app version `0.1.0` build `1`.
+
 ## Verification
 Run the `DiskUsage` shared scheme to build the app and execute the regression tests. CI uses Xcode 26.6 as the canonical toolchain. Repeatable presentation-performance workloads and profiling guidance are documented in [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md).
 
 ## Status & Roadmap
-- Current version: `0.1.0` (build `1`).
-- Distribution: source only; signed/notarized binaries are not published yet.
+- Current app version: `0.1.0` (build `1`).
+- Distribution policy: source plus owner-approved unsigned alpha prereleases; signed/notarized binaries are not available yet.
 - **R3 — Unified selection, navigation, and polished Tree view is complete.**
-- **R4 — Sunburst 2.0: DiskUsage visual identity is complete.** All five R4 slices are implemented and verified, and the separate master exit review found no remaining R4 gap. **R5 — Core productivity workflow is in progress.** R5.1 Rescan current target and R5.2 Drag and drop are implemented and verified; R5.3 Full Disk Access UX is next. See [`docs/ROADMAP.md`](docs/ROADMAP.md).
+- **R4 — Sunburst 2.0: DiskUsage visual identity is complete.** All five R4 slices are implemented and verified, and the separate master exit review found no remaining R4 gap.
+- **R5 — Core productivity workflow is in progress.** R5.1 Rescan current target, R5.2 Drag and drop, and R5.3 Full Disk Access UX are implemented and verified. An owner-approved unsigned alpha release slice is being completed before R5.4 Search and filtering; after that release, R5.4 resumes. See [`docs/ROADMAP.md`](docs/ROADMAP.md).
 - Version `1.0.0` is reserved for release readiness after the planned product stages are complete and verified.
 
 ## Contributing

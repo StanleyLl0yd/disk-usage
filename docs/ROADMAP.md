@@ -71,7 +71,7 @@ Before this roadmap begins, DiskUsage already has:
 - Swift 6 language mode;
 - Xcode 26.6 stable as the canonical CI/toolchain baseline;
 - minimum supported macOS 14.0;
-- source-only pre-release version `0.1.0` (build `1`), with `1.0.0` reserved for R7 release readiness.
+- pre-release version `0.1.0` (build `1`), with an owner-approved unsigned alpha binary distribution exception after R5.3 and `1.0.0` reserved for R7 release readiness.
 
 The platform baseline was an explicit project-owner-approved priority before R1.2. It should be preserved rather than rebuilt.
 
@@ -335,7 +335,7 @@ Allow a directory dragged from Finder onto an appropriate application target to 
 
 Reject unsupported drag content clearly and safely.
 
-### R5.3 Full Disk Access UX
+### R5.3 Full Disk Access UX — COMPLETE
 
 When restricted paths indicate incomplete analysis:
 
@@ -364,6 +364,18 @@ Requirements:
 ## R5 exit criteria
 
 R5 is complete when a user can scan, inspect, search, identify large files, act on them safely, and rescan without unnecessary repeated setup.
+
+## Owner-approved prerelease distribution exception
+
+After R5.3, the project owner explicitly approved an unsigned `v0.1.0-alpha.1` binary prerelease before R5.4.
+
+- This slice is release engineering only and must not add R5.4/R5.5 product functionality.
+- Artifacts must be built from an exact verified `main` commit and bound to the immutable prerelease tag.
+- The alpha is intentionally unsigned and not notarized; no Developer ID, signing, or notarization secrets are introduced.
+- The release publishes a universal app archive, DMG, and SHA-256 checksums with explicit Gatekeeper guidance.
+- After successful publication and verification, execution returns to R5.4 Search and filtering.
+
+This exception does not mark R5 complete and does not complete the R7 release-quality stage.
 
 ---
 
@@ -398,9 +410,9 @@ R6 is complete when the largest practical tested workloads have documented behav
 
 # R7 — Release-quality product polish
 
-**Status: PLANNED / RELEASE-DECISION GATED**
+**Status: PLANNED / UNSIGNED ALPHA EXCEPTION APPROVED**
 
-R7 prepares DiskUsage for deliberate binary distribution. Starting the release pipeline requires an explicit project-owner decision.
+R7 remains the full release-quality stage. A narrow owner-approved unsigned alpha distribution exception is active after R5.3; it does not waive R7 polish, signing/notarization decisions, or R7 exit criteria.
 
 ## Scope before binary release
 
@@ -415,7 +427,7 @@ R7 prepares DiskUsage for deliberate binary distribution. Starting the release p
 
 ## Scope after explicit binary-release decision
 
-Only then introduce the release-integrity work already required by `AGENTS.md`, including signing, notarization, immutable release tags, artifact verification, and provenance/attestation where supported.
+Release-integrity work required by `AGENTS.md` must remain appropriate to the chosen distribution path. Immutable release tags and artifact verification apply to the unsigned alpha. Developer ID signing, notarization, signing credentials, and related verification remain deferred until those capabilities are explicitly available and approved.
 
 ## R7 exit criteria
 
@@ -448,4 +460,4 @@ These are not assumed future stages.
 
 **R4 — Sunburst 2.0: DiskUsage visual identity is complete.** All five R4 slices are implemented and verified, and the separate master exit review found no remaining visual, interaction, responsiveness, synchronization, accessibility, safety, or verification gap.
 
-**R5 — Core productivity workflow is in progress.** R5.1 Rescan current target and R5.2 Drag and drop are implemented and verified; R5.3 Full Disk Access UX is next.
+**R5 — Core productivity workflow is in progress.** R5.1 Rescan current target, R5.2 Drag and drop, and R5.3 Full Disk Access UX are implemented and verified. The owner-approved unsigned `v0.1.0-alpha.1` release slice is current before R5.4; after successful publication, work returns to R5.4 Search and filtering.
