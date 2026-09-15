@@ -43,7 +43,7 @@ Run the `DiskUsage` shared scheme to build the app and execute the regression te
 - Distribution policy: source plus owner-approved unsigned alpha prereleases; signed/notarized binaries are not available yet.
 - **R3 — Unified selection, navigation, and polished Tree view is complete.**
 - **R4 — Sunburst 2.0: DiskUsage visual identity is complete.** All five R4 slices are implemented and verified, and the separate master exit review found no remaining R4 gap.
-- **R5 — Core productivity workflow is in progress.** R5.1 Rescan current target, R5.2 Drag and drop, R5.3 Full Disk Access UX, and R5.4 Search and filtering are implemented and verified. The owner-approved unsigned `v0.1.0-alpha.1` prerelease is published; R5.5 Largest Files is next. See [`docs/ROADMAP.md`](docs/ROADMAP.md).
+- **R5 — Core productivity workflow is in progress.** R5.1 Rescan current target, R5.2 Drag and drop, R5.3 Full Disk Access UX, R5.4 Search and filtering, and R5.5 Largest Files are implemented and verified. The owner-approved unsigned `v0.1.0-alpha.1` prerelease is published; the separate R5 exit review is next. See [`docs/ROADMAP.md`](docs/ROADMAP.md).
 - Version `1.0.0` is reserved for release readiness after the planned product stages are complete and verified.
 
 ## Contributing

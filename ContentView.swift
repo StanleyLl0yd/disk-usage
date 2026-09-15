@@ -2,6 +2,114 @@ import SwiftUI
 import AppKit
 import Combine
 
+nonisolated enum LargestFilesPresentationPreprocessor {
+    static let defaultLimit = 100
+
+    static func largestFiles(
+        in source: [FolderUsage],
+        limit: Int = defaultLimit
+    ) -> [FolderUsage]? {
+        guard limit > 0 else { return [] }
+        guard !isCancelled else { return nil }
+
+        var heap: [FolderUsage] = []
+        heap.reserveCapacity(limit)
+
+        for item in source {
+            guard collectFiles(in: item, limit: limit, heap: &heap) else { return nil }
+        }
+
+        guard !isCancelled else { return nil }
+        return heap.sorted { isBetter($0, than: $1) }
+    }
+
+    private static func collectFiles(
+        in item: FolderUsage,
+        limit: Int,
+        heap: inout [FolderUsage]
+    ) -> Bool {
+        guard !isCancelled else { return false }
+
+        if item.isFile {
+            retain(item, limit: limit, heap: &heap)
+            return true
+        }
+
+        for child in item.children {
+            guard collectFiles(in: child, limit: limit, heap: &heap) else { return false }
+        }
+        return true
+    }
+
+    private static func retain(
+        _ candidate: FolderUsage,
+        limit: Int,
+        heap: inout [FolderUsage]
+    ) {
+        if heap.count < limit {
+            heap.append(candidate)
+            siftUp(&heap, from: heap.count - 1)
+            return
+        }
+
+        guard let worst = heap.first, isBetter(candidate, than: worst) else { return }
+        heap[0] = candidate
+        siftDown(&heap, from: 0)
+    }
+
+    private static func siftUp(_ heap: inout [FolderUsage], from startIndex: Int) {
+        var index = startIndex
+        while index > 0 {
+            let parent = (index - 1) / 2
+            guard isWorse(heap[index], than: heap[parent]) else { return }
+            heap.swapAt(index, parent)
+            index = parent
+        }
+    }
+
+    private static func siftDown(_ heap: inout [FolderUsage], from startIndex: Int) {
+        var index = startIndex
+        while true {
+            let left = index * 2 + 1
+            guard left < heap.count else { return }
+
+            let right = left + 1
+            var worseChild = left
+            if right < heap.count, isWorse(heap[right], than: heap[left]) {
+                worseChild = right
+            }
+
+            guard isWorse(heap[worseChild], than: heap[index]) else { return }
+            heap.swapAt(index, worseChild)
+            index = worseChild
+        }
+    }
+
+    private static func isBetter(_ lhs: FolderUsage, than rhs: FolderUsage) -> Bool {
+        if lhs.size != rhs.size {
+            return lhs.size > rhs.size
+        }
+        return lhs.path < rhs.path
+    }
+
+    private static func isBetter(_ lhs: FolderUsage, _ rhs: FolderUsage) -> Bool {
+        isBetter(lhs, than: rhs)
+    }
+
+    private static func isWorse(_ lhs: FolderUsage, than rhs: FolderUsage) -> Bool {
+        if lhs.size != rhs.size {
+            return lhs.size < rhs.size
+        }
+        return lhs.path > rhs.path
+    }
+
+    private static var isCancelled: Bool {
+        withUnsafeCurrentTask { task in
+            task?.isCancelled ?? false
+        }
+    }
+}
+
 nonisolated enum SearchPresentationPreprocessor {
     static func matches(
         in source: [FolderUsage],
@@ -151,6 +259,50 @@ final class SearchPresentationState: ObservableObject {
 }
 
 @MainActor
+final class LargestFilesPresentationState: ObservableObject {
+    @Published private(set) var items: [FolderUsage] = []
+    @Published private(set) var isPreparing = false
+
+    private var task: Task<Void, Never>?
+    private var generation = 0
+
+    func prepare(_ source: [FolderUsage]) {
+        generation &+= 1
+        let generation = generation
+        task?.cancel()
+
+        guard !source.isEmpty else {
+            task = nil
+            items = []
+            isPreparing = false
+            return
+        }
+
+        items = []
+        isPreparing = true
+
+        task = Task.detached(priority: .userInitiated) { [source] in
+            guard let prepared = LargestFilesPresentationPreprocessor.largestFiles(in: source) else { return }
+
+            await MainActor.run { [weak self] in
+                guard let self, self.generation == generation else { return }
+                self.items = prepared
+                self.isPreparing = false
+                self.task = nil
+            }
+        }
+    }
+
+    func cancel() {
+        generation &+= 1
+        task?.cancel()
+        task = nil
+        items = []
+        isPreparing = false
+    }
+}
+
+@MainActor
 final class ItemSelectionState: ObservableObject {
     @Published var selectedPath: String?
 
@@ -184,9 +336,11 @@ struct ContentView: View {
     @EnvironmentObject var settings: AppSettings
     @StateObject private var treePresentation = TreePresentationState()
     @StateObject private var searchPresentation = SearchPresentationState()
+    @StateObject private var largestFilesPresentation = LargestFilesPresentationState()
     @StateObject private var selection = ItemSelectionState()
     @State private var sortOption: SortOption = .sizeDesc
     @State private var searchQuery = ""
+    @State private var isLargestFilesMode = false
     @State private var itemToDelete: FolderUsage?
     @State private var showDeleteAlert = false
     @State private var showErrorAlert = false
@@ -310,6 +464,9 @@ struct ContentView: View {
                 by: sortOption,
                 preservingCurrent: false
             )
+            if isLargestFilesMode {
+                largestFilesPresentation.prepare(items)
+            }
         }
         .onChange(of: sortOption) { _, option in
             treePresentation.prepare(viewModel.items, by: option, preservingCurrent: true)
@@ -322,6 +479,9 @@ struct ContentView: View {
         }
         .onChange(of: searchQuery) { _, query in
             selection.selectedPath = nil
+            if !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                isLargestFilesMode = false
+            }
             searchPresentation.prepare(
                 viewModel.items,
                 query: query,
@@ -329,9 +489,19 @@ struct ContentView: View {
                 preservingCurrent: false
             )
         }
+        .onChange(of: isLargestFilesMode) { _, isEnabled in
+            selection.selectedPath = nil
+            if isEnabled {
+                searchQuery = ""
+                largestFilesPresentation.prepare(viewModel.items)
+            } else {
+                largestFilesPresentation.cancel()
+            }
+        }
         .onDisappear {
             treePresentation.cancel()
             searchPresentation.cancel()
+            largestFilesPresentation.cancel()
         }
         .alert(
             String(localized: "alert.delete.title", defaultValue: "Move to Trash?"),
@@ -385,6 +555,18 @@ struct ContentView: View {
                             searchMode: true,
                             isPreparing: searchPresentation.isPreparing
                         )
+                    } else if isLargestFilesMode {
+                        if largestFilesPresentation.isPreparing {
+                            preparingState
+                        } else if largestFilesPresentation.items.isEmpty {
+                            largestFilesEmptyState
+                        } else {
+                            treeView(
+                                items: largestFilesPresentation.items,
+                                searchMode: false,
+                                isPreparing: false
+                            )
+                        }
                     } else if treePresentation.items.isEmpty {
                         preparingState
                     } else {
@@ -487,15 +669,32 @@ struct ContentView: View {
 
     private var treeControls: some View {
         HStack {
-            Picker("", selection: $sortOption) {
-                ForEach(SortOption.allCases) { option in
-                    Text(option.title).tag(option)
+            if !isLargestFilesMode {
+                Picker("", selection: $sortOption) {
+                    ForEach(SortOption.allCases) { option in
+                        Text(option.title).tag(option)
+                    }
                 }
+                .pickerStyle(.segmented)
+                .frame(width: 200)
             }
-            .pickerStyle(.segmented)
-            .frame(width: 200)
 
             Spacer()
+
+            Toggle(isOn: $isLargestFilesMode) {
+                Label(
+                    String(localized: "largestFiles.top100", defaultValue: "Top 100 Files"),
+                    systemImage: "list.number"
+                )
+            }
+            .toggleStyle(.button)
+            .controlSize(.small)
+            .help(
+                String(
+                    localized: "largestFiles.help",
+                    defaultValue: "Show up to the 100 largest files in this scan"
+                )
+            )
         }
         .padding(.horizontal, ZenDesign.Spacing.medium)
     }
@@ -544,6 +743,23 @@ struct ContentView: View {
                 String(
                     localized: "status.finished.empty",
                     defaultValue: "No allocated-size items in this scan."
+                )
+            )
+            .font(.title3)
+            .foregroundStyle(ZenDesign.Colors.secondaryText)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var largestFilesEmptyState: some View {
+        VStack(spacing: ZenDesign.Spacing.large) {
+            Image(systemName: "doc")
+                .font(.system(size: 48))
+                .foregroundStyle(ZenDesign.Colors.mutedText)
+            Text(
+                String(
+                    localized: "largestFiles.empty",
+                    defaultValue: "No files in this scan."
                 )
             )
             .font(.title3)

@@ -124,6 +124,24 @@
         "ru" : { "stringUnit" : { "state" : "translated", "value" : "Системный" } }
       }
     },
+    "largestFiles.empty" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "No files in this scan." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "В этом сканировании нет файлов." } }
+      }
+    },
+    "largestFiles.help" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Show up to the 100 largest files in this scan" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Показать до 100 крупнейших файлов в этом сканировании" } }
+      }
+    },
+    "largestFiles.top100" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Top 100 Files" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "100 крупнейших файлов" } }
+      }
+    },
     "progress.files" : {
       "localizations" : {
         "en" : { "stringUnit" : { "state" : "translated", "value" : "%@ files" } },

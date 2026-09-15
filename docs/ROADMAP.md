@@ -350,7 +350,7 @@ Add fast local search of completed scan results by useful properties such as fil
 
 Search must not rescan the filesystem and must remain a derived view of the authoritative snapshot.
 
-### R5.5 Largest Files
+### R5.5 Largest Files — COMPLETE
 
 Add a focused way to find the largest files in the completed scan scope.
 
@@ -460,4 +460,4 @@ These are not assumed future stages.
 
 **R4 — Sunburst 2.0: DiskUsage visual identity is complete.** All five R4 slices are implemented and verified, and the separate master exit review found no remaining visual, interaction, responsiveness, synchronization, accessibility, safety, or verification gap.
 
-**R5 — Core productivity workflow is in progress.** R5.1 Rescan current target, R5.2 Drag and drop, R5.3 Full Disk Access UX, and R5.4 Search and filtering are implemented and verified. The owner-approved unsigned `v0.1.0-alpha.1` prerelease is published and verified. R5.5 Largest Files is next.
+**R5 — Core productivity workflow is in progress.** R5.1 Rescan current target, R5.2 Drag and drop, R5.3 Full Disk Access UX, R5.4 Search and filtering, and R5.5 Largest Files are implemented and verified. The owner-approved unsigned `v0.1.0-alpha.1` prerelease is published and verified. The separate R5 exit review is next.
