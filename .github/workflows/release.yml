@@ -41,8 +41,9 @@ jobs:
   publish:
     if: github.event_name == 'push'
     runs-on: macos-26
-    timeout-minutes: 30
+    timeout-minutes: 45
     permissions:
+      checks: read
       contents: write
 
     steps:
@@ -50,6 +51,64 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      - name: Wait for exact-main verification
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          required_checks=(
+            "macos"
+            "Actions Policy"
+            "Gitleaks"
+            "CodeQL Actions"
+            "CodeQL Swift"
+            "SonarCloud Code Analysis"
+          )
+
+          for attempt in {1..120}; do
+            all_green=true
+            checks_json="$(gh api -H 'Accept: application/vnd.github+json' \
+              "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/check-runs?per_page=100")"
+
+            for check_name in "${required_checks[@]}"; do
+              state="$(jq -r --arg name "$check_name" '
+                [.check_runs[] | select(.name == $name)]
+                | sort_by(.started_at)
+                | last
+                | if . == null then "missing"
+                  else (.status + "\t" + (.conclusion // ""))
+                  end
+              ' <<< "$checks_json")"
+
+              if [[ "$state" == "missing" ]]; then
+                all_green=false
+                continue
+              fi
+
+              status="${state%%$'\t'*}"
+              conclusion="${state#*$'\t'}"
+              if [[ "$status" != "completed" ]]; then
+                all_green=false
+                continue
+              fi
+              if [[ "$conclusion" != "success" ]]; then
+                echo "::error::Required check '${check_name}' completed with '${conclusion}'."
+                exit 1
+              fi
+            done
+
+            if [[ "$all_green" == "true" ]]; then
+              echo "All exact-main release gates are green for ${GITHUB_SHA}."
+              exit 0
+            fi
+
+            sleep 15
+          done
+
+          echo "::error::Timed out waiting for exact-main release gates for ${GITHUB_SHA}."
+          exit 1
 
       - name: Select Xcode 26.6
         run: sudo xcode-select -s /Applications/Xcode_26.6.app/Contents/Developer
@@ -108,7 +167,7 @@ jobs:
 
           Early alpha build for real-world testing after completion of R5.3.
 
-          **Unsigned / not notarized:** these binaries intentionally have no Developer ID signature and are not notarized. macOS Gatekeeper may block a normal first launch. Do not disable Gatekeeper globally; follow the testing guidance in docs/RELEASE.md if you choose to run this alpha.
+          **Not Developer ID signed / not notarized:** these binaries intentionally have no Developer ID identity and are not notarized. macOS Gatekeeper may block a normal first launch. Do not disable Gatekeeper globally; follow the testing guidance in docs/RELEASE.md if you choose to run this alpha.
 
           - macOS 14.0+
           - universal binary: arm64 + x86_64
