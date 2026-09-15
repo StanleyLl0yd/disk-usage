@@ -267,7 +267,7 @@ R3 is complete when tree navigation and selection feel intentional, keyboard/mou
 
 # R4 — Sunburst 2.0: DiskUsage visual identity
 
-**Status: IN PROGRESS**
+**Status: COMPLETE**
 
 R4 creates the main visual signature of DiskUsage while staying clearly distinct from existing disk analyzers.
 
@@ -446,4 +446,6 @@ These are not assumed future stages.
 
 **R3 — Unified selection, navigation, and polished Tree view is complete.** All R3 slices are implemented and verified, including unified selection, compact item details, polished Tree presentation, native keyboard/focus behavior, and shared authoritative actions.
 
-**R4 — Sunburst 2.0: DiskUsage visual identity is in progress.** R4.1 — Derived segment model, R4.2 — Visual language, R4.3 — Interaction, R4.4 — Small-segment handling, and R4.5 — Motion are complete; the next step is a separate **R4 exit review**.
+**R4 — Sunburst 2.0: DiskUsage visual identity is complete.** All five R4 slices are implemented and verified, and the separate master exit review found no remaining visual, interaction, responsiveness, synchronization, accessibility, safety, or verification gap.
+
+**R5 — Core productivity workflow is planned and has not started.**
