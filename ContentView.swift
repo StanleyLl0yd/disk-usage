@@ -20,7 +20,7 @@ nonisolated enum LargestFilesPresentationPreprocessor {
         }
 
         guard !isCancelled else { return nil }
-        return heap.sorted(by: isBetter)
+        return heap.sorted { isBetter($0, than: $1) }
     }
 
     private static func collectFiles(
