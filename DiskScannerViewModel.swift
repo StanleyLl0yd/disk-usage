@@ -43,7 +43,17 @@ final class DiskScannerViewModel: ObservableObject {
         lifecycle == .scanning
     }
 
+    var canRescan: Bool {
+        currentTarget != nil && !isScanning
+    }
+
+    private struct ScanTarget {
+        let url: URL
+        let description: String
+    }
+
     private let settings: AppSettings
+    private var currentTarget: ScanTarget?
     private var scanTask: Task<Void, Never>?
     private var progressTask: Task<Void, Never>?
     private var scanGeneration = 0
@@ -82,6 +92,21 @@ final class DiskScannerViewModel: ObservableObject {
     func scan(_ url: URL, description: String? = nil) {
         guard !isScanning else { return }
 
+        let standardizedURL = url.standardizedFileURL
+        let target = ScanTarget(
+            url: standardizedURL,
+            description: description ?? standardizedURL.path
+        )
+        currentTarget = target
+        startScan(target)
+    }
+
+    func rescan() {
+        guard canRescan, let currentTarget else { return }
+        startScan(currentTarget)
+    }
+
+    private func startScan(_ target: ScanTarget) {
         cancelTasks()
         scanGeneration &+= 1
         let generation = scanGeneration
@@ -89,7 +114,7 @@ final class DiskScannerViewModel: ObservableObject {
         let showHiddenFiles = settings.showHiddenFiles
 
         lifecycle = .scanning
-        targetDescription = description ?? url.path
+        targetDescription = target.description
         restricted = []
         totalSize = 0
         progress = ScanProgress()
@@ -109,7 +134,7 @@ final class DiskScannerViewModel: ObservableObject {
             result: DiskScanResult,
             progress: ScanProgress
         )? in
-            let result = await scanner.scan(at: url, showHiddenFiles: showHiddenFiles)
+            let result = await scanner.scan(at: target.url, showHiddenFiles: showHiddenFiles)
             guard !Task.isCancelled else { return nil }
             return (result: result, progress: scanner.progress)
         }
