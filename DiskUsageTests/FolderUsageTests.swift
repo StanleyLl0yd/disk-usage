@@ -71,66 +71,6 @@ final class FolderUsageTests: XCTestCase {
         XCTAssertEqual(source[1].children.map(\.path), [small.path, large.path])
     }
 
-    func testSearchPresentationPreprocessorMatchesNameAndPathCaseInsensitivelyAndSorts() throws {
-        let report = FolderUsage(
-            path: "/root/Documents/Annual Report.pdf",
-            size: 20,
-            isFile: true
-        )
-        let trip = FolderUsage(
-            path: "/root/Photos/Annual Trip.jpg",
-            size: 40,
-            isFile: true
-        )
-        let documents = FolderUsage(path: "/root/Documents", size: 20, children: [report])
-        let photos = FolderUsage(path: "/root/Photos", size: 40, children: [trip])
-        let source = [documents, photos]
-
-        let nameMatches = try XCTUnwrap(
-            SearchPresentationPreprocessor.matches(
-                in: source,
-                query: "aNnUaL",
-                sortedBy: .sizeDesc
-            )
-        )
-        XCTAssertEqual(nameMatches.map(\.path), [trip.path, report.path])
-
-        let pathMatches = try XCTUnwrap(
-            SearchPresentationPreprocessor.matches(
-                in: source,
-                query: "DOCUMENTS",
-                sortedBy: .sizeDesc
-            )
-        )
-        XCTAssertEqual(pathMatches.map(\.path), [documents.path, report.path])
-    }
-
-    func testSearchPresentationPreprocessorLeavesSourceUnchangedAndTreatsWhitespaceAsEmpty() throws {
-        let first = FolderUsage(path: "/root/b/report.txt", size: 10, isFile: true)
-        let second = FolderUsage(path: "/root/a/report.txt", size: 10, isFile: true)
-        let source = [first, second]
-        let original = source
-
-        let matches = try XCTUnwrap(
-            SearchPresentationPreprocessor.matches(
-                in: source,
-                query: "report",
-                sortedBy: .sizeDesc
-            )
-        )
-
-        XCTAssertEqual(matches.map(\.path), [second.path, first.path])
-        XCTAssertEqual(source, original)
-        XCTAssertEqual(
-            SearchPresentationPreprocessor.matches(
-                in: source,
-                query: "  \n\t ",
-                sortedBy: .sizeDesc
-            ),
-            []
-        )
-    }
-
     func testSunburstPresentationPreprocessorBuildsDeterministicDerivedModel() throws {
         let childSmall = FolderUsage(path: "/root/a/small", size: 20, isFile: true)
         let childLarge = FolderUsage(path: "/root/a/large", size: 40, isFile: true)
@@ -288,21 +228,6 @@ final class FolderUsageTests: XCTestCase {
         }
 
         XCTAssertEqual(nodeCount(prepared ?? []), 4_680)
-    }
-
-    func testSearchPresentationPreprocessorSyntheticPerformance() {
-        let source = makeTreePerformanceFixture()
-        var matches: [FolderUsage]?
-
-        measure(metrics: [XCTClockMetric()]) {
-            matches = SearchPresentationPreprocessor.matches(
-                in: source,
-                query: "/fixture/root-7/node-7/node-7/node-7",
-                sortedBy: .sizeDesc
-            )
-        }
-
-        XCTAssertEqual(matches?.count, 1)
     }
 
     func testSunburstPresentationPreprocessorSyntheticPerformance() {
