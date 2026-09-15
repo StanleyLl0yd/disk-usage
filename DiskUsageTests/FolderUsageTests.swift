@@ -142,6 +142,130 @@ final class FolderUsageTests: XCTestCase {
         )
     }
 
+    func testLargestFilesFindsNestedFilesAndExcludesFolders() throws {
+        let rootURL = makeTemporaryFixtureRoot("largest-files-nested")
+        let nestedURL = rootURL.appendingPathComponent("nested", isDirectory: true)
+        let smaller = FolderUsage(
+            path: nestedURL.appendingPathComponent("smaller.dat").path,
+            size: 70,
+            isFile: true
+        )
+        let larger = FolderUsage(
+            path: rootURL.appendingPathComponent("larger.dat").path,
+            size: 90,
+            isFile: true
+        )
+        let nested = FolderUsage(path: nestedURL.path, size: 1_000, children: [smaller])
+        let source = [nested, larger]
+
+        let files = try XCTUnwrap(LargestFilesPresentationPreprocessor.largestFiles(in: source))
+
+        XCTAssertEqual(files.map(\.path), [larger.path, smaller.path])
+        XCTAssertTrue(files.allSatisfy(\.isFile))
+        XCTAssertFalse(files.contains { $0.path == nested.path })
+    }
+
+    func testLargestFilesDefaultLimitKeepsTop100() throws {
+        let rootURL = makeTemporaryFixtureRoot("largest-files-limit")
+        let folderURL = rootURL.appendingPathComponent("scope", isDirectory: true)
+        let files = (1...150).map { ordinal in
+            FolderUsage(
+                path: folderURL.appendingPathComponent("file-\(ordinal).dat").path,
+                size: Int64(ordinal),
+                isFile: true
+            )
+        }
+        let source = [
+            FolderUsage(
+                path: folderURL.path,
+                size: files.reduce(Int64(0)) { $0 + $1.size },
+                children: files
+            )
+        ]
+
+        let largest = try XCTUnwrap(LargestFilesPresentationPreprocessor.largestFiles(in: source))
+
+        XCTAssertEqual(largest.count, 100)
+        XCTAssertEqual(largest.first?.size, 150)
+        XCTAssertEqual(largest.last?.size, 51)
+        XCTAssertTrue(largest.allSatisfy(\.isFile))
+    }
+
+    func testLargestFilesUsesPathTieBreakerForEqualSizes() throws {
+        let rootURL = makeTemporaryFixtureRoot("largest-files-tie")
+        let b = FolderUsage(
+            path: rootURL.appendingPathComponent("b.dat").path,
+            size: 50,
+            isFile: true
+        )
+        let a = FolderUsage(
+            path: rootURL.appendingPathComponent("a.dat").path,
+            size: 50,
+            isFile: true
+        )
+
+        let largest = try XCTUnwrap(
+            LargestFilesPresentationPreprocessor.largestFiles(in: [b, a], limit: 2)
+        )
+
+        XCTAssertEqual(largest.map(\.path), [a.path, b.path])
+    }
+
+    func testLargestFilesHandlesEdgeLimits() throws {
+        let rootURL = makeTemporaryFixtureRoot("largest-files-edge")
+        let file = FolderUsage(
+            path: rootURL.appendingPathComponent("only.dat").path,
+            size: 10,
+            isFile: true
+        )
+
+        XCTAssertEqual(
+            LargestFilesPresentationPreprocessor.largestFiles(in: [file], limit: 0),
+            []
+        )
+        XCTAssertEqual(
+            LargestFilesPresentationPreprocessor.largestFiles(in: [file], limit: -1),
+            []
+        )
+        XCTAssertEqual(
+            try XCTUnwrap(LargestFilesPresentationPreprocessor.largestFiles(in: [file], limit: 1)),
+            [file]
+        )
+        XCTAssertEqual(
+            try XCTUnwrap(LargestFilesPresentationPreprocessor.largestFiles(in: [file], limit: 10)),
+            [file]
+        )
+        XCTAssertEqual(
+            LargestFilesPresentationPreprocessor.largestFiles(in: [], limit: 10),
+            []
+        )
+    }
+
+    func testLargestFilesLeavesSourceSnapshotUnchanged() throws {
+        let rootURL = makeTemporaryFixtureRoot("largest-files-source")
+        let first = FolderUsage(
+            path: rootURL.appendingPathComponent("first.dat").path,
+            size: 10,
+            isFile: true
+        )
+        let second = FolderUsage(
+            path: rootURL.appendingPathComponent("second.dat").path,
+            size: 20,
+            isFile: true
+        )
+        let folder = FolderUsage(
+            path: rootURL.path,
+            size: 30,
+            children: [first, second]
+        )
+        let source = [folder]
+        let original = source
+
+        _ = try XCTUnwrap(LargestFilesPresentationPreprocessor.largestFiles(in: source, limit: 1))
+
+        XCTAssertEqual(source, original)
+    }
+
     func testSunburstPresentationPreprocessorBuildsDeterministicDerivedModel() throws {
         let childSmall = FolderUsage(path: "/root/a/small", size: 20, isFile: true)
         let childLarge = FolderUsage(path: "/root/a/large", size: 40, isFile: true)
@@ -317,6 +441,24 @@ final class FolderUsageTests: XCTestCase {
         XCTAssertEqual(1, matches?.count)
     }
 
+    func testLargestFilesPresentationPreprocessorSyntheticPerformance() throws {
+        let source = makeLargestFilesPerformanceFixture()
+        var largest: [FolderUsage]?
+
+        measure(metrics: [XCTClockMetric()]) {
+            largest = LargestFilesPresentationPreprocessor.largestFiles(in: source)
+        }
+
+        let result = try XCTUnwrap(largest)
+        XCTAssertEqual(result.count, 100)
+        XCTAssertTrue(result.allSatisfy(\.isFile))
+        XCTAssertTrue(
+            zip(result, result.dropFirst()).allSatisfy { lhs, rhs in
+                lhs.size > rhs.size || (lhs.size == rhs.size && lhs.path < rhs.path)
+            }
+        )
+    }
+
     func testSunburstPresentationPreprocessorSyntheticPerformance() {
         let source = makeSunburstPerformanceFixture()
         let totalSize = source.reduce(Int64(0)) { $0 + $1.size }
@@ -398,6 +540,32 @@ final class FolderUsageTests: XCTestCase {
             size: children.reduce(Int64(0)) { $0 + $1.size },
             children: children
         )
+    }
+
+    private func makeLargestFilesPerformanceFixture() -> [FolderUsage] {
+        let rootURL = makeTemporaryFixtureRoot("largest-files-performance")
+
+        return (0..<12).map { folderIndex in
+            let folderURL = rootURL.appendingPathComponent("folder-\(folderIndex)", isDirectory: true)
+            let files = (0..<1_000).map { fileIndex in
+                let ordinal = folderIndex * 1_000 + fileIndex
+                return FolderUsage(
+                    path: folderURL.appendingPathComponent("file-\(fileIndex).dat").path,
+                    size: Int64((ordinal % 997) + 1),
+                    isFile: true
+                )
+            }
+            return FolderUsage(
+                path: folderURL.path,
+                size: files.reduce(Int64(0)) { $0 + $1.size },
+                children: files
+            )
+        }
+    }
+
+    private func makeTemporaryFixtureRoot(_ name: String) -> URL {
+        FileManager.default.temporaryDirectory
+            .appendingPathComponent("\(name)-\(UUID().uuidString)", isDirectory: true)
     }
 
     private func makeSunburstPerformanceFixture() -> [FolderUsage] {
