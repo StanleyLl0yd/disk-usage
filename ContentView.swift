@@ -2,6 +2,50 @@ import SwiftUI
 import AppKit
 import Combine
 
+nonisolated enum SearchPresentationPreprocessor {
+    static func matches(
+        in source: [FolderUsage],
+        query: String,
+        sortedBy option: SortOption
+    ) -> [FolderUsage]? {
+        let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return [] }
+        guard !isCancelled else { return nil }
+
+        var matches: [FolderUsage] = []
+        for item in source {
+            guard collectMatches(in: item, query: query, into: &matches) else { return nil }
+        }
+
+        guard !isCancelled else { return nil }
+        return option.sorted(matches)
+    }
+
+    private static func collectMatches(
+        in item: FolderUsage,
+        query: String,
+        into matches: inout [FolderUsage]
+    ) -> Bool {
+        guard !isCancelled else { return false }
+
+        if item.name.localizedCaseInsensitiveContains(query)
+            || item.path.localizedCaseInsensitiveContains(query) {
+            matches.append(item)
+        }
+
+        for child in item.children {
+            guard collectMatches(in: child, query: query, into: &matches) else { return false }
+        }
+        return true
+    }
+
+    private static var isCancelled: Bool {
+        withUnsafeCurrentTask { task in
+            task?.isCancelled ?? false
+        }
+    }
+}
+
 @MainActor
 final class TreePresentationState: ObservableObject {
     @Published private(set) var items: [FolderUsage] = []
@@ -33,6 +77,61 @@ final class TreePresentationState: ObservableObject {
 
         task = Task.detached(priority: .userInitiated) { [source, option] in
             guard let prepared = TreePresentationPreprocessor.sorted(source, by: option) else { return }
+
+            await MainActor.run { [weak self] in
+                guard let self, self.generation == generation else { return }
+                self.items = prepared
+                self.isPreparing = false
+                self.task = nil
+            }
+        }
+    }
+
+    func cancel() {
+        generation &+= 1
+        task?.cancel()
+        task = nil
+        isPreparing = false
+    }
+}
+
+@MainActor
+final class SearchPresentationState: ObservableObject {
+    @Published private(set) var items: [FolderUsage] = []
+    @Published private(set) var isPreparing = false
+
+    private var task: Task<Void, Never>?
+    private var generation = 0
+
+    func prepare(
+        _ source: [FolderUsage],
+        query: String,
+        by option: SortOption,
+        preservingCurrent: Bool
+    ) {
+        generation &+= 1
+        let generation = generation
+        task?.cancel()
+
+        let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty, !source.isEmpty else {
+            task = nil
+            items = []
+            isPreparing = false
+            return
+        }
+
+        if !preservingCurrent {
+            items = []
+        }
+        isPreparing = true
+
+        task = Task.detached(priority: .userInitiated) { [source, query, option] in
+            guard let prepared = SearchPresentationPreprocessor.matches(
+                in: source,
+                query: query,
+                sortedBy: option
+            ) else { return }
 
             await MainActor.run { [weak self] in
                 guard let self, self.generation == generation else { return }
@@ -84,12 +183,18 @@ struct ContentView: View {
     @StateObject var viewModel: DiskScannerViewModel
     @EnvironmentObject var settings: AppSettings
     @StateObject private var treePresentation = TreePresentationState()
+    @StateObject private var searchPresentation = SearchPresentationState()
     @StateObject private var selection = ItemSelectionState()
     @State private var sortOption: SortOption = .sizeDesc
+    @State private var searchQuery = ""
     @State private var itemToDelete: FolderUsage?
     @State private var showDeleteAlert = false
     @State private var showErrorAlert = false
     @State private var errorMessage = ""
+
+    private var isSearchActive: Bool {
+        !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
 
     var body: some View {
         VStack(spacing: ZenDesign.Spacing.small) {
@@ -199,12 +304,34 @@ struct ContentView: View {
         .onReceive(viewModel.$items) { items in
             selection.reconcile(with: items)
             treePresentation.prepare(items, by: sortOption, preservingCurrent: false)
+            searchPresentation.prepare(
+                items,
+                query: searchQuery,
+                by: sortOption,
+                preservingCurrent: false
+            )
         }
         .onChange(of: sortOption) { _, option in
             treePresentation.prepare(viewModel.items, by: option, preservingCurrent: true)
+            searchPresentation.prepare(
+                viewModel.items,
+                query: searchQuery,
+                by: option,
+                preservingCurrent: true
+            )
+        }
+        .onChange(of: searchQuery) { _, query in
+            selection.selectedPath = nil
+            searchPresentation.prepare(
+                viewModel.items,
+                query: query,
+                by: sortOption,
+                preservingCurrent: false
+            )
         }
         .onDisappear {
             treePresentation.cancel()
+            searchPresentation.cancel()
         }
         .alert(
             String(localized: "alert.delete.title", defaultValue: "Move to Trash?"),
@@ -252,27 +379,20 @@ struct ContentView: View {
             } else {
                 switch settings.viewMode {
                 case .tree:
-                    if treePresentation.items.isEmpty {
+                    if isSearchActive {
+                        treeView(
+                            items: searchPresentation.items,
+                            searchMode: true,
+                            isPreparing: searchPresentation.isPreparing
+                        )
+                    } else if treePresentation.items.isEmpty {
                         preparingState
                     } else {
-                        TreeView(
+                        treeView(
                             items: treePresentation.items,
-                            totalSize: viewModel.totalSize,
-                            restricted: viewModel.restricted,
-                            canRescan: viewModel.canRescan,
-                            selectedPath: $selection.selectedPath,
-                            onShowInFinder: viewModel.showInFinder,
-                            onCopyPath: viewModel.copyPath,
-                            onDelete: requestDelete,
-                            onOpenFullDiskAccess: openFullDiskAccessSettings,
-                            onRescan: viewModel.rescan
+                            searchMode: false,
+                            isPreparing: treePresentation.isPreparing
                         )
-                        .overlay(alignment: .topTrailing) {
-                            if treePresentation.isPreparing {
-                                presentationIndicator
-                                    .padding(ZenDesign.Spacing.small)
-                            }
-                        }
                     }
                 case .sunburst:
                     SunburstView(
@@ -285,6 +405,34 @@ struct ContentView: View {
                         onDelete: requestDelete
                     )
                 }
+            }
+        }
+    }
+
+    private func treeView(
+        items: [FolderUsage],
+        searchMode: Bool,
+        isPreparing: Bool
+    ) -> some View {
+        TreeView(
+            items: items,
+            totalSize: viewModel.totalSize,
+            restricted: viewModel.restricted,
+            canRescan: viewModel.canRescan,
+            isSearchMode: searchMode,
+            isSearchPreparing: searchMode && isPreparing,
+            searchQuery: $searchQuery,
+            selectedPath: $selection.selectedPath,
+            onShowInFinder: viewModel.showInFinder,
+            onCopyPath: viewModel.copyPath,
+            onDelete: requestDelete,
+            onOpenFullDiskAccess: openFullDiskAccessSettings,
+            onRescan: viewModel.rescan
+        )
+        .overlay(alignment: .topTrailing) {
+            if isPreparing && !items.isEmpty {
+                presentationIndicator
+                    .padding(ZenDesign.Spacing.small)
             }
         }
     }
