@@ -4,10 +4,13 @@ struct TreeView: View {
     let items: [FolderUsage]
     let totalSize: Int64
     let restricted: [String]
+    let canRescan: Bool
     @Binding var selectedPath: String?
     let onShowInFinder: (FolderUsage) -> Void
     let onCopyPath: (FolderUsage) -> Void
     let onDelete: (FolderUsage) -> Void
+    let onOpenFullDiskAccess: () -> Void
+    let onRescan: () -> Void
 
     @State private var showRestricted = false
     @FocusState private var isTreeFocused: Bool
@@ -46,11 +49,18 @@ struct TreeView: View {
                         Text(
                             String(
                                 localized: "restricted.hint",
-                                defaultValue: "Grant Full Disk Access in System Settings for complete analysis."
+                                defaultValue: "Some locations could not be read. Full Disk Access is controlled by macOS System Settings. Enable it for DiskUsage, then rescan."
                             )
                         )
                         .font(.footnote)
                         .foregroundStyle(ZenDesign.Colors.secondaryText)
+
+                        RestrictedAccessActions(
+                            canRescan: canRescan,
+                            onOpenFullDiskAccess: onOpenFullDiskAccess,
+                            onRescan: onRescan
+                        )
+                        .padding(.top, ZenDesign.Spacing.compact)
                     } label: {
                         Label {
                             Text(
@@ -69,6 +79,33 @@ struct TreeView: View {
         .onAppear {
             isTreeFocused = true
         }
+    }
+}
+
+struct RestrictedAccessActions: View {
+    let canRescan: Bool
+    let onOpenFullDiskAccess: () -> Void
+    let onRescan: () -> Void
+
+    var body: some View {
+        HStack(spacing: ZenDesign.Spacing.compact) {
+            Button(action: onOpenFullDiskAccess) {
+                Label(
+                    String(localized: "restricted.openSettings", defaultValue: "Open Full Disk Access"),
+                    systemImage: "gearshape"
+                )
+            }
+
+            Button(action: onRescan) {
+                Label(
+                    String(localized: "button.rescan", defaultValue: "Rescan"),
+                    systemImage: "arrow.clockwise"
+                )
+            }
+            .disabled(!canRescan)
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.small)
     }
 }
 

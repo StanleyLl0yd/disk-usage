@@ -259,10 +259,13 @@ struct ContentView: View {
                             items: treePresentation.items,
                             totalSize: viewModel.totalSize,
                             restricted: viewModel.restricted,
+                            canRescan: viewModel.canRescan,
                             selectedPath: $selection.selectedPath,
                             onShowInFinder: viewModel.showInFinder,
                             onCopyPath: viewModel.copyPath,
-                            onDelete: requestDelete
+                            onDelete: requestDelete,
+                            onOpenFullDiskAccess: openFullDiskAccessSettings,
+                            onRescan: viewModel.rescan
                         )
                         .overlay(alignment: .topTrailing) {
                             if treePresentation.isPreparing {
@@ -437,16 +440,34 @@ struct ContentView: View {
             Text(
                 String(
                     localized: "restricted.hint",
-                    defaultValue: "Grant Full Disk Access in System Settings for complete analysis."
+                    defaultValue: "Some locations could not be read. Full Disk Access is controlled by macOS System Settings. Enable it for DiskUsage, then rescan."
                 )
             )
             .font(ZenDesign.Typography.micro)
             .foregroundStyle(ZenDesign.Colors.mutedText)
+
+            RestrictedAccessActions(
+                canRescan: viewModel.canRescan,
+                onOpenFullDiskAccess: openFullDiskAccessSettings,
+                onRescan: viewModel.rescan
+            )
+            .padding(.top, ZenDesign.Spacing.compact)
         }
         .padding(.horizontal, ZenDesign.Spacing.medium)
         .padding(.vertical, ZenDesign.Spacing.small)
         .background(ZenDesign.Colors.surface)
         .clipShape(RoundedRectangle(cornerRadius: ZenDesign.Radius.medium, style: .continuous))
+    }
+
+    private func openFullDiskAccessSettings() {
+        guard FullDiskAccessSettings.open() else {
+            errorMessage = String(
+                localized: "restricted.settingsOpenError",
+                defaultValue: "Could not open Full Disk Access settings. Open System Settings > Privacy & Security > Full Disk Access manually."
+            )
+            showErrorAlert = true
+            return
+        }
     }
 
     private func chooseFolder() {
