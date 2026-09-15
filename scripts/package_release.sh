@@ -84,12 +84,26 @@ case " $ARCH_LIST " in
   *) echo "Missing x86_64 architecture: $ARCH_LIST" >&2; exit 1 ;;
 esac
 
-if codesign -dv "$APP_PATH" >/dev/null 2>&1; then
-  echo "DiskUsage.app unexpectedly contains a code signature." >&2
+# Apple Silicon linkers embed an ad-hoc Mach-O signature even when Xcode code signing is disabled.
+# Accept only that identity-less signature; reject any Developer ID/team-backed bundle signature.
+SIGN_INFO="$(codesign -dv --verbose=4 "$APP_PATH" 2>&1 || true)"
+if ! grep -q '^Signature=adhoc$' <<< "$SIGN_INFO"; then
+  echo "Expected only an ad-hoc linker signature." >&2
+  echo "$SIGN_INFO" >&2
+  exit 1
+fi
+if grep -q '^Authority=' <<< "$SIGN_INFO"; then
+  echo "DiskUsage.app unexpectedly contains a signing authority." >&2
+  echo "$SIGN_INFO" >&2
+  exit 1
+fi
+if ! grep -q '^TeamIdentifier=not set$' <<< "$SIGN_INFO"; then
+  echo "DiskUsage.app unexpectedly contains a TeamIdentifier." >&2
+  echo "$SIGN_INFO" >&2
   exit 1
 fi
 if [[ -e "$APP_PATH/Contents/_CodeSignature" ]]; then
-  echo "DiskUsage.app unexpectedly contains a _CodeSignature directory." >&2
+  echo "DiskUsage.app unexpectedly contains a bundle _CodeSignature directory." >&2
   exit 1
 fi
 
@@ -118,6 +132,7 @@ hdiutil create \
   shasum -a 256 -c SHA256SUMS
 )
 
-echo "Packaged unsigned DiskUsage ${RELEASE_NAME} (build ${BUILD})"
+echo "Packaged DiskUsage ${RELEASE_NAME} (build ${BUILD}) without Developer ID signing"
 echo "Architectures: ${ARCH_LIST}"
+echo "Signature: ad-hoc linker signature only; no signing authority or TeamIdentifier"
 echo "Output: ${OUTPUT_DIR}"
