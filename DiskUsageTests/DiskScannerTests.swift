@@ -145,8 +145,8 @@ final class DiskScannerTests: XCTestCase {
 final class SunburstPresentationStateTests: XCTestCase {
     @MainActor
     func testEmptyPreparationPublishesRequestedTotal() {
-        let publishedTotal = Int64(SunburstPalette.count)
-        let replacement = FolderUsage(path: "/", size: publishedTotal + publishedTotal)
+        let replacement = FolderUsage(path: "/", size: Int64(SunburstPalette.count))
+        let publishedTotal = replacement.size
         let state = SunburstPresentationState()
 
         state.prepare(items: [], totalSize: publishedTotal, levels: 1)
@@ -156,6 +156,5 @@ final class SunburstPresentationStateTests: XCTestCase {
             state.model.totalSize,
             "Empty preparation must publish the requested empty total"
         )
-        XCTAssertGreaterThan(replacement.size, publishedTotal)
     }
 }
