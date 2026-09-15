@@ -252,6 +252,7 @@ final class FolderUsageTests: XCTestCase {
         XCTAssertEqual(formatBytes(1024), "1.0 KB")
     }
 
+    @MainActor
     func testFullDiskAccessSettingsUsesExpectedRouteAndInjectedOpener() throws {
         let url = try XCTUnwrap(FullDiskAccessSettings.url)
         XCTAssertEqual(url.absoluteString, FullDiskAccessSettings.urlString)
