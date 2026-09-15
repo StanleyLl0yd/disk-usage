@@ -329,7 +329,7 @@ R5 adds the high-value capabilities that make repeated real-world disk analysis 
 - Add a clear Rescan action.
 - Preserve one-authoritative-scan and stale-result guarantees.
 
-### R5.2 Drag and drop
+### R5.2 Drag and drop — COMPLETE
 
 Allow a directory dragged from Finder onto an appropriate application target to become the scan target.
 
@@ -448,4 +448,4 @@ These are not assumed future stages.
 
 **R4 — Sunburst 2.0: DiskUsage visual identity is complete.** All five R4 slices are implemented and verified, and the separate master exit review found no remaining visual, interaction, responsiveness, synchronization, accessibility, safety, or verification gap.
 
-**R5 — Core productivity workflow is in progress.** R5.1 Rescan current target is implemented and verified; R5.2 Drag and drop is next.
+**R5 — Core productivity workflow is in progress.** R5.1 Rescan current target and R5.2 Drag and drop are implemented and verified; R5.3 Full Disk Access UX is next.
