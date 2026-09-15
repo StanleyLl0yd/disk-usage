@@ -115,16 +115,9 @@ final class DiskScannerViewModel: ObservableObject {
         }
 
         let standardizedURL = url.standardizedFileURL
-        guard standardizedURL.isFileURL else {
-            return .unsupportedItem
-        }
-
-        do {
-            let values = try standardizedURL.resourceValues(forKeys: [.isDirectoryKey])
-            guard values.isDirectory == true else {
-                return .unsupportedItem
-            }
-        } catch {
+        guard standardizedURL.isFileURL,
+              let values = try? standardizedURL.resourceValues(forKeys: [.isDirectoryKey]),
+              values.isDirectory == true else {
             return .unsupportedItem
         }
 
