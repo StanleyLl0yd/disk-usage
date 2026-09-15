@@ -94,6 +94,24 @@
         "ru" : { "stringUnit" : { "state" : "translated", "value" : "Свободно:" } }
       }
     },
+    "drop.error.busy" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Cancel or finish the current scan before dropping another folder." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Отмените или завершите текущее сканирование, прежде чем перетаскивать другую папку." } }
+      }
+    },
+    "drop.error.directoryOnly" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Only folders can be scanned by drag and drop." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Перетаскиванием можно запускать сканирование только папок." } }
+      }
+    },
+    "drop.error.singleFolder" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Drop one folder at a time." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Перетаскивайте по одной папке за раз." } }
+      }
+    },
     "header.viewMode.help" : {
       "localizations" : {
         "en" : { "stringUnit" : { "state" : "translated", "value" : "Switch view mode" } },

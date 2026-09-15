@@ -134,6 +134,74 @@ final class DiskScannerTests: XCTestCase {
     }
 
     @MainActor
+    func testDroppedDirectoryStartsAuthoritativeScan() async throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let target = root.appendingPathComponent("dropped", isDirectory: true)
+        try FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
+        let payload = target.appendingPathComponent("payload.dat")
+        try Data(repeating: 1, count: 4096).write(to: payload)
+
+        let viewModel = DiskScannerViewModel()
+        let result = viewModel.scanDroppedURLs([target])
+
+        XCTAssertEqual(result, .accepted)
+        XCTAssertEqual(viewModel.lifecycle, .scanning)
+        XCTAssertEqual(viewModel.targetDescription, target.standardizedFileURL.path)
+        XCTAssertFalse(viewModel.canRescan)
+
+        await waitForScanCompletion(viewModel)
+
+        XCTAssertEqual(viewModel.lifecycle, .completed)
+        XCTAssertTrue(viewModel.canRescan)
+        XCTAssertTrue(viewModel.items.contains { $0.path == payload.standardizedFileURL.path })
+    }
+
+    @MainActor
+    func testDroppedFileAndMultipleItemsAreRejectedWithoutChangingState() throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let file = root.appendingPathComponent("payload.dat")
+        try Data(repeating: 1, count: 4096).write(to: file)
+        let first = root.appendingPathComponent("first", isDirectory: true)
+        let second = root.appendingPathComponent("second", isDirectory: true)
+        try FileManager.default.createDirectory(at: first, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: second, withIntermediateDirectories: true)
+
+        let viewModel = DiskScannerViewModel()
+
+        XCTAssertEqual(viewModel.scanDroppedURLs([file]), .unsupportedItem)
+        XCTAssertEqual(viewModel.lifecycle, .initial)
+        XCTAssertFalse(viewModel.canRescan)
+
+        XCTAssertEqual(viewModel.scanDroppedURLs([first, second]), .requiresSingleFolder)
+        XCTAssertEqual(viewModel.lifecycle, .initial)
+        XCTAssertFalse(viewModel.canRescan)
+    }
+
+    @MainActor
+    func testDroppedFolderDoesNotReplaceActiveScanTarget() throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let active = root.appendingPathComponent("active", isDirectory: true)
+        let dropped = root.appendingPathComponent("dropped", isDirectory: true)
+        try FileManager.default.createDirectory(at: active, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: dropped, withIntermediateDirectories: true)
+
+        let viewModel = DiskScannerViewModel()
+        viewModel.scan(active)
+
+        XCTAssertEqual(viewModel.scanDroppedURLs([dropped]), .scanInProgress)
+        XCTAssertEqual(viewModel.lifecycle, .scanning)
+        XCTAssertEqual(viewModel.targetDescription, active.standardizedFileURL.path)
+
+        viewModel.cancel()
+    }
+
+    @MainActor
     func testSelectionReconcilePreservesPathAcrossSnapshotReplacement() {
         let oldChild = FolderUsage(path: "/scope/child", size: 100, isFile: true)
         let oldParent = FolderUsage(path: "/scope", size: 100, children: [oldChild])
@@ -173,7 +241,7 @@ final class DiskScannerTests: XCTestCase {
             }
             try? await Task.sleep(for: .milliseconds(20))
         }
-        XCTFail("Rescan did not complete")
+        XCTFail("Scan did not complete")
     }
 
     private func makeTemporaryDirectory() throws -> URL {

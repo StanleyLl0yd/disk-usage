@@ -14,6 +14,13 @@ enum ScanLifecycle: Equatable {
     case cancelled
 }
 
+enum DroppedScanResult: Equatable {
+    case accepted
+    case scanInProgress
+    case requiresSingleFolder
+    case unsupportedItem
+}
+
 struct DiskInfo {
     let totalCapacity: Int64
     let usedSpace: Int64
@@ -99,6 +106,30 @@ final class DiskScannerViewModel: ObservableObject {
         )
         currentTarget = target
         startScan(target)
+    }
+
+    func scanDroppedURLs(_ urls: [URL]) -> DroppedScanResult {
+        guard !isScanning else { return .scanInProgress }
+        guard urls.count == 1, let url = urls.first else {
+            return .requiresSingleFolder
+        }
+
+        let standardizedURL = url.standardizedFileURL
+        guard standardizedURL.isFileURL else {
+            return .unsupportedItem
+        }
+
+        do {
+            let values = try standardizedURL.resourceValues(forKeys: [.isDirectoryKey])
+            guard values.isDirectory == true else {
+                return .unsupportedItem
+            }
+        } catch {
+            return .unsupportedItem
+        }
+
+        scan(standardizedURL)
+        return .accepted
     }
 
     func rescan() {
