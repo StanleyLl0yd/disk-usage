@@ -144,17 +144,22 @@ final class DiskScannerTests: XCTestCase {
 
 final class SunburstPresentationStateTests: XCTestCase {
     @MainActor
-    func testEmptyPreparationPublishesRequestedTotal() {
-        let replacement = FolderUsage(path: "/", size: Int64(SunburstPalette.count))
-        let publishedTotal = replacement.size
+    func testKeepsPublishedModelWhilePreparingReplacement() {
+        let publishedTotal = Int64(SunburstPalette.count)
+        let replacementPath = FileManager.default.temporaryDirectory
+            .appendingPathComponent("sunburst-replacement")
+            .path
+        let replacement = FolderUsage(path: replacementPath, size: publishedTotal + publishedTotal)
         let state = SunburstPresentationState()
-
         state.prepare(items: [], totalSize: publishedTotal, levels: 1)
+
+        state.prepare(items: [replacement], totalSize: replacement.size, levels: 1)
 
         XCTAssertEqual(
             publishedTotal,
             state.model.totalSize,
-            "Empty preparation must publish the requested empty total"
+            "Replacement preparation must preserve the published presentation until the new model is ready"
         )
+        state.cancel()
     }
 }
