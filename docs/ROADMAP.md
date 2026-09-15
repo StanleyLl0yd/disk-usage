@@ -344,7 +344,7 @@ When restricted paths indicate incomplete analysis:
 - never imply that DiskUsage can grant permission itself;
 - make the return-and-rescan workflow obvious.
 
-### R5.4 Search and filtering
+### R5.4 Search and filtering — COMPLETE
 
 Add fast local search of completed scan results by useful properties such as file/folder name or path.
 
@@ -373,7 +373,7 @@ After R5.3, the project owner explicitly approved an unsigned `v0.1.0-alpha.1` b
 - Artifacts must be built from an exact verified `main` commit and bound to the immutable prerelease tag.
 - The alpha is intentionally unsigned and not notarized; no Developer ID, signing, or notarization secrets are introduced.
 - The release publishes a universal app archive, DMG, and SHA-256 checksums with explicit Gatekeeper guidance.
-- After successful publication and verification, execution returns to R5.4 Search and filtering.
+- The prerelease was successfully published and verified from exact `main` commit `23355eeed05f777022a2f2aed19ccf90d6e55a27`; execution returned to R5.4 Search and filtering.
 
 This exception does not mark R5 complete and does not complete the R7 release-quality stage.
 
@@ -460,4 +460,4 @@ These are not assumed future stages.
 
 **R4 — Sunburst 2.0: DiskUsage visual identity is complete.** All five R4 slices are implemented and verified, and the separate master exit review found no remaining visual, interaction, responsiveness, synchronization, accessibility, safety, or verification gap.
 
-**R5 — Core productivity workflow is in progress.** R5.1 Rescan current target, R5.2 Drag and drop, and R5.3 Full Disk Access UX are implemented and verified. The owner-approved unsigned `v0.1.0-alpha.1` release slice is current before R5.4; after successful publication, work returns to R5.4 Search and filtering.
+**R5 — Core productivity workflow is in progress.** R5.1 Rescan current target, R5.2 Drag and drop, R5.3 Full Disk Access UX, and R5.4 Search and filtering are implemented and verified. The owner-approved unsigned `v0.1.0-alpha.1` prerelease is published and verified. R5.5 Largest Files is next.
