@@ -138,8 +138,20 @@
     },
     "restricted.hint" : {
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Grant Full Disk Access in System Settings for complete analysis." } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Для полного анализа выдайте «Полный доступ к диску» в Настройках системы." } }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Some locations could not be read. Full Disk Access is controlled by macOS System Settings. Enable it for DiskUsage, then rescan." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Некоторые папки не удалось прочитать. Полный доступ к диску настраивается в macOS. Разрешите его для DiskUsage в Настройках системы, затем запустите сканирование снова." } }
+      }
+    },
+    "restricted.openSettings" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Open Full Disk Access" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Открыть полный доступ к диску" } }
+      }
+    },
+    "restricted.settingsOpenError" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Could not open Full Disk Access settings. Open System Settings > Privacy & Security > Full Disk Access manually." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Не удалось открыть настройки полного доступа к диску. Откройте Настройки системы > Конфиденциальность и безопасность > Полный доступ к диску вручную." } }
       }
     },
     "section.items" : {

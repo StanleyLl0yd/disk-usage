@@ -1,4 +1,20 @@
 import SwiftUI
+import AppKit
+
+enum FullDiskAccessSettings {
+    static let urlString = "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_AllFiles"
+    static let url = URL(string: urlString)
+
+    static func open(using opener: (URL) -> Bool) -> Bool {
+        guard let url else { return false }
+        return opener(url)
+    }
+
+    @MainActor
+    static func open() -> Bool {
+        open { NSWorkspace.shared.open($0) }
+    }
+}
 
 @main
 struct DiskUsageApp: App {

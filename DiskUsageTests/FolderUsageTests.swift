@@ -1,3 +1,4 @@
+import Foundation
 import XCTest
 @testable import DiskUsage
 
@@ -249,6 +250,25 @@ final class FolderUsageTests: XCTestCase {
 
     func testFormatBytesUsesNextUnitAtExactBoundary() {
         XCTAssertEqual(formatBytes(1024), "1.0 KB")
+    }
+
+    func testFullDiskAccessSettingsUsesExpectedRouteAndInjectedOpener() throws {
+        let url = try XCTUnwrap(FullDiskAccessSettings.url)
+        XCTAssertEqual(url.absoluteString, FullDiskAccessSettings.urlString)
+        XCTAssertEqual(
+            url.absoluteString,
+            "x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_AllFiles"
+        )
+
+        var openedURL: URL?
+        let opened = FullDiskAccessSettings.open { candidate in
+            openedURL = candidate
+            return true
+        }
+
+        XCTAssertTrue(opened)
+        XCTAssertEqual(openedURL, url)
+        XCTAssertFalse(FullDiskAccessSettings.open { _ in false })
     }
 
     private func makeTreePerformanceFixture() -> [FolderUsage] {
