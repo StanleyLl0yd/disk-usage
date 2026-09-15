@@ -86,16 +86,51 @@ final class DiskScannerTests: XCTestCase {
         let viewModel = DiskScannerViewModel()
         XCTAssertEqual(viewModel.lifecycle, .initial)
         XCTAssertFalse(viewModel.isScanning)
+        XCTAssertFalse(viewModel.canRescan)
 
         viewModel.scan(root)
         XCTAssertEqual(viewModel.lifecycle, .scanning)
         XCTAssertTrue(viewModel.isScanning)
+        XCTAssertFalse(viewModel.canRescan)
         XCTAssertTrue(viewModel.items.isEmpty)
 
         viewModel.cancel()
         XCTAssertEqual(viewModel.lifecycle, .cancelled)
         XCTAssertFalse(viewModel.isScanning)
+        XCTAssertTrue(viewModel.canRescan)
         XCTAssertTrue(viewModel.items.isEmpty)
+    }
+
+    @MainActor
+    func testRescanRetainsCurrentTargetAcrossCancellation() async throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let target = root.appendingPathComponent("scope", isDirectory: true)
+        try FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
+        let payload = target.appendingPathComponent("payload.dat")
+        try Data(repeating: 1, count: 4096).write(to: payload)
+
+        let viewModel = DiskScannerViewModel()
+        viewModel.scan(target, description: "Test scope")
+        viewModel.cancel()
+
+        XCTAssertEqual(viewModel.lifecycle, .cancelled)
+        XCTAssertEqual(viewModel.targetDescription, "Test scope")
+        XCTAssertTrue(viewModel.canRescan)
+
+        viewModel.rescan()
+
+        XCTAssertEqual(viewModel.lifecycle, .scanning)
+        XCTAssertEqual(viewModel.targetDescription, "Test scope")
+        XCTAssertFalse(viewModel.canRescan)
+
+        await waitForScanCompletion(viewModel)
+
+        XCTAssertEqual(viewModel.lifecycle, .completed)
+        XCTAssertEqual(viewModel.targetDescription, "Test scope")
+        XCTAssertTrue(viewModel.canRescan)
+        XCTAssertTrue(viewModel.items.contains { $0.path == payload.standardizedFileURL.path })
     }
 
     @MainActor
@@ -128,6 +163,17 @@ final class DiskScannerTests: XCTestCase {
 
         XCTAssertNil(selection.selectedPath)
         XCTAssertNil(selection.selectedItem(in: [sibling]))
+    }
+
+    @MainActor
+    private func waitForScanCompletion(_ viewModel: DiskScannerViewModel) async {
+        for _ in 0..<100 {
+            if viewModel.lifecycle == .completed {
+                return
+            }
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+        XCTFail("Rescan did not complete")
     }
 
     private func makeTemporaryDirectory() throws -> URL {
