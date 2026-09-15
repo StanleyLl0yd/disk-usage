@@ -2,14 +2,15 @@
 
 ## Supported versions
 
-DiskUsage currently uses a source-only development model and has no published binary releases.
+DiskUsage is developed source-first and also publishes owner-approved unsigned alpha prereleases for early testing. Alpha artifacts are intentionally not Developer ID signed or notarized and are not maintained as separate long-lived release branches.
 
 | Version | Supported |
 | --- | --- |
 | Current `main` | Yes |
-| Older commits or forks | No |
+| Latest owner-approved alpha prerelease | Testing artifact; fixes land on current `main` |
+| Older commits, prereleases, or forks | No |
 
-Security fixes are applied to the current development branch. A versioned support policy will be defined when signed/notarized binary releases begin.
+Security fixes are applied to the current development branch. Published alpha artifacts may therefore contain older code; users evaluating a reported issue should compare against current `main` or the next verified build. A broader versioned support policy will be defined when signed/notarized production binary releases begin.
 
 ## Reporting a vulnerability
 
@@ -38,7 +39,7 @@ In scope:
 - macOS privacy boundaries, TCC, Full Disk Access, entitlements, and code-signing configuration;
 - dependency and build-toolchain risks introduced by this repository;
 - GitHub Actions, required checks, secret exposure, and supply-chain integrity;
-- future signing, packaging, release provenance, and update integrity when binary distribution is introduced.
+- packaging, release provenance, artifact and tag integrity, and future signing/notarization/update integrity.
 
 Generally out of scope unless DiskUsage directly causes or amplifies the issue:
 
@@ -62,6 +63,7 @@ DiskUsage intentionally minimizes attack surface:
 - Gitleaks secret scanning;
 - Dependency Review for dependency/workflow changes;
 - Dependabot updates for GitHub Actions;
-- CI build and regression-test gates.
+- CI build and regression-test gates;
+- unsigned alpha artifacts bound to an exact verified source commit with published SHA-256 checksums.
 
 Never commit signing identities, private keys, certificates with private material, API tokens, `.env` files, provisioning profiles containing sensitive material, or other credentials.
