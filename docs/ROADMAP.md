@@ -365,7 +365,7 @@ Requirements:
 
 R5 is complete when a user can scan, inspect, search, identify large files, act on them safely, and rescan without unnecessary repeated setup.
 
-R5 completion was verified by the separate repository-wide exit review tracked in #82 and master issue #69. The final automated verification on exact `main` commit `7c85fb42f267909478b254cff822ac07e74b8886` passed Debug/Release, Actions Policy, Gitleaks, SonarCloud Quality Gate, CodeQL Actions, and CodeQL Swift. Repository ruleset `Protect release tags` is active for `refs/tags/v*`, prohibits tag update/deletion without bypass actors, permits creation of future release tags, and the published `v0.1.0-alpha.1` remains bound to exact source commit `23355eeed05f777022a2f2aed19ccf90d6e55a27`.
+R5 completion was verified by the separate repository-wide exit review tracked in #82 and master issue #69. The final closure commit `104c2a55146055299def52f2888cfec2144182cf` passed Debug/Release, Actions Policy, Gitleaks, SonarCloud Quality Gate, CodeQL Actions, and CodeQL Swift. Repository ruleset `Protect release tags` is active for `refs/tags/v*`, prohibits tag update/deletion without bypass actors, permits creation of future release tags, and the published `v0.1.0-alpha.1` remains bound to exact source commit `23355eeed05f777022a2f2aed19ccf90d6e55a27`.
 
 ## Owner-approved prerelease distribution exception
 
@@ -383,13 +383,23 @@ This exception did not itself mark R5 complete and does not complete the R7 rele
 
 # R6 — Large-scale resilience and measured optimization
 
-**Status: PLANNED**
+**Status: IN PROGRESS**
 
 R6 is evidence-driven. It must not become speculative performance engineering.
 
 ## Scope
 
-Profile representative large synthetic or disposable filesystem trees and identify actual bottlenecks in:
+### R6.1 Large-scale scan measurement baseline — CURRENT
+
+Establish repeatable end-to-end scanner evidence before changing runtime behavior:
+
+- use a deterministic disposable filesystem fixture whose creation is outside the measured block;
+- record scanner wall-clock evidence with the existing XCTest measurement approach without a brittle CI threshold;
+- verify the fixture's file/folder counts and allocated-byte semantics separately from timing;
+- document Time Profiler, Allocations, Hangs/responsiveness, and repeated scan/cancel/rescan investigation procedures;
+- do not introduce a runtime optimization in this slice.
+
+Then profile representative large synthetic or disposable filesystem trees and identify actual bottlenecks in:
 
 - enumeration;
 - resource-value reads;
@@ -462,6 +472,6 @@ These are not assumed future stages.
 
 **R4 — Sunburst 2.0: DiskUsage visual identity is complete.** All five R4 slices are implemented and verified, and the separate master exit review found no remaining visual, interaction, responsiveness, synchronization, accessibility, safety, or verification gap.
 
-**R5 — Core productivity workflow is complete.** R5.1–R5.5 are implemented and verified, the full repository-wide exit review passed, and release-tag immutability is enforced for `v*` while the published `v0.1.0-alpha.1` remains bound to its verified source commit.
+**R5 — Core productivity workflow is complete.** R5.1–R5.5 are implemented and verified, the full repository-wide exit review passed, final exact-main verification is green, and release-tag immutability is enforced for `v*` while the published `v0.1.0-alpha.1` remains bound to its verified source commit.
 
-**R6 — Large-scale resilience and measured optimization is the next planned stage and has not started.**
+**R6 — Large-scale resilience and measured optimization is in progress.** R6.1 is the current measurement-only slice; no runtime optimization is permitted until profiling evidence identifies an actual hotspot.
