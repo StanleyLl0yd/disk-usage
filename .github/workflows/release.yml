@@ -35,6 +35,22 @@ jobs:
       - name: Select Xcode 26.6
         run: sudo xcode-select -s /Applications/Xcode_26.6.app/Contents/Developer
 
+      - name: Reject unapproved prerelease channels
+        shell: bash
+        run: |
+          set -euo pipefail
+          approved_tag="$(plutil -extract tag raw .release/request.json)"
+          version="${approved_tag%%-alpha.*}"
+          for channel in beta rc; do
+            request="$RUNNER_TEMP/rejected-${channel}.json"
+            cp .release/request.json "$request"
+            plutil -replace tag -string "${version}-${channel}.1" "$request"
+            if scripts/package_release.sh "$request" "$RUNNER_TEMP/rejected-${channel}"; then
+              echo "::error::Unsigned ${channel} prerelease unexpectedly passed validation."
+              exit 1
+            fi
+          done
+
       - name: Verify unsigned prerelease package
         run: scripts/package_release.sh .release/request.json "$RUNNER_TEMP/release"
 
