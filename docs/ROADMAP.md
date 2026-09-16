@@ -317,7 +317,7 @@ R4 is complete when the sunburst is visually distinctive to DiskUsage, understan
 
 # R5 — Core productivity workflow
 
-**Status: IN PROGRESS**
+**Status: COMPLETE**
 
 R5 adds the high-value capabilities that make repeated real-world disk analysis efficient.
 
@@ -365,6 +365,8 @@ Requirements:
 
 R5 is complete when a user can scan, inspect, search, identify large files, act on them safely, and rescan without unnecessary repeated setup.
 
+R5 completion was verified by the separate repository-wide exit review tracked in #82 and master issue #69. The final automated verification on exact `main` commit `7c85fb42f267909478b254cff822ac07e74b8886` passed Debug/Release, Actions Policy, Gitleaks, SonarCloud Quality Gate, CodeQL Actions, and CodeQL Swift. Repository ruleset `Protect release tags` is active for `refs/tags/v*`, prohibits tag update/deletion without bypass actors, permits creation of future release tags, and the published `v0.1.0-alpha.1` remains bound to exact source commit `23355eeed05f777022a2f2aed19ccf90d6e55a27`.
+
 ## Owner-approved prerelease distribution exception
 
 After R5.3, the project owner explicitly approved an unsigned `v0.1.0-alpha.1` binary prerelease before R5.4.
@@ -375,7 +377,7 @@ After R5.3, the project owner explicitly approved an unsigned `v0.1.0-alpha.1` b
 - The release publishes a universal app archive, DMG, and SHA-256 checksums with explicit Gatekeeper guidance.
 - The prerelease was successfully published and verified from exact `main` commit `23355eeed05f777022a2f2aed19ccf90d6e55a27`; execution returned to R5.4 Search and filtering.
 
-This exception does not mark R5 complete and does not complete the R7 release-quality stage.
+This exception did not itself mark R5 complete and does not complete the R7 release-quality stage.
 
 ---
 
@@ -460,4 +462,6 @@ These are not assumed future stages.
 
 **R4 — Sunburst 2.0: DiskUsage visual identity is complete.** All five R4 slices are implemented and verified, and the separate master exit review found no remaining visual, interaction, responsiveness, synchronization, accessibility, safety, or verification gap.
 
-**R5 — Core productivity workflow is in progress.** R5.1 Rescan current target, R5.2 Drag and drop, R5.3 Full Disk Access UX, R5.4 Search and filtering, and R5.5 Largest Files are implemented and verified. The owner-approved unsigned `v0.1.0-alpha.1` prerelease is published and verified. The separate R5 exit review is next.
+**R5 — Core productivity workflow is complete.** R5.1–R5.5 are implemented and verified, the full repository-wide exit review passed, and release-tag immutability is enforced for `v*` while the published `v0.1.0-alpha.1` remains bound to its verified source commit.
+
+**R6 — Large-scale resilience and measured optimization is the next planned stage and has not started.**
