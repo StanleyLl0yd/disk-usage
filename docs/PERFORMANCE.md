@@ -117,6 +117,40 @@ Profile a scan of a disposable tree large enough to produce a stable call tree. 
 
 Do not add per-entry timing instrumentation to production traversal merely to profile these phases; that instrumentation can materially distort the workload.
 
+### R6.2 scanner CPU attribution
+
+R6.2 profiled the unchanged R6.1 scanner baseline before selecting any runtime optimization. The source baseline was exact `main` commit `abcac2b18c698f9e997ec3ac485dd413fe3a8409`; the research workflow itself lived only on a temporary branch and changed no production runtime file.
+
+The final attribution run used:
+
+- GitHub-hosted `macos-26-arm64`, runner image `20260907.0351.1`;
+- macOS 26.6.2 (`25G83`) and Xcode 26.6;
+- `build-for-testing` before profiling so compilation was outside the trace;
+- only `DiskScannerTests.testDiskScannerDisposableFilesystemSyntheticPerformance` through `test-without-building`;
+- 8 XCTest iterations per capture;
+- 3 independent 10-second `xcrun xctrace` Time Profiler captures;
+- the same 4,096-file / 72-directory disposable fixture from R6.1;
+- ephemeral `.trace` and exported XML files under the hosted runner temporary directory; raw profiling data was not uploaded or committed.
+
+The initial repeated traces showed stable **inclusive stack presence**: path-related frames appeared in roughly 35–37% of scanner stacks, `Node.addFile` in roughly 21–23%, resource-value frames in roughly 19–20%, conversion in roughly 14%, and enumeration in roughly 3–4%. Those categories overlap, so their percentages must not be added or treated as exclusive CPU shares.
+
+For the final attribution, each symbolized stack containing `DiskScanner.scan`, `Node.addFile`, or `Node.toFolderUsage` was walked from the sampled leaf toward the async root and assigned to the first recognized scanner phase. That produces mutually exclusive **nearest-labeled-phase** buckets. It is sampled, label-based call-stack attribution rather than a machine-independent wall-clock percentage.
+
+| Nearest labeled phase | Capture 1 | Capture 2 | Capture 3 | Pooled, 9,187 scanner stacks |
+| --- | ---: | ---: | ---: | ---: |
+| Path processing | 32.05% | 30.55% | 32.56% | **31.71%** (2,913) |
+| `Node.addFile` | 24.39% | 23.71% | 24.02% | **24.03%** (2,208) |
+| Resource-value reads | 15.96% | 16.94% | 15.21% | **16.04%** (1,474) |
+| `Node.toFolderUsage` | 14.10% | 15.26% | 14.23% | **14.54%** (1,336) |
+| Filesystem enumeration | 3.17% | 3.62% | 3.96% | **3.59%** (330) |
+| Unclassified scanner stack | 10.32% | 9.92% | 10.01% | **10.08%** (926) |
+
+The ranking is stable across the three independent captures. Path processing is the largest labeled CPU phase for this synthetic scanner workload, with `Node.addFile` second. Frequent symbolized frames inside scanner stacks include `URL.standardizedFileURL`, `URLByStandardizingPath`, `_NSStandardizePathUsingCache`, NSString path standardization, filesystem-representation conversion, and Unicode normalization. `Node.addFile`, `Node.toFolderUsage`, string sorting/comparison, and `URL.resourceValues(forKeys:)` also appear as expected.
+
+This evidence justifies investigating the narrow repeated path-normalization/path-derivation work before redesigning tree construction or resource reads. A follow-up change must preserve exact path and filesystem identity semantics and should add regression coverage for normalization/symlink behavior before altering scanner path handling.
+
+The ordinary R6.1 CI run reported the scanner performance testcase completing in 2.856 seconds on that hosted runner. That console testcase duration was unprofiled, is not the exact `XCTClockMetric` mean, and is not directly comparable to the instrumented testcase durations observed during Time Profiler capture.
+
 ### Allocations
 
 Use Allocations with disposable data to inspect peak/retained memory across:
