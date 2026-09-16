@@ -15,6 +15,7 @@ A fast, privacy-first disk space analyzer for macOS built with SwiftUI.
 - Sortable tree view with inline size bars.
 - Sunburst view for at-a-glance hotspots.
 - Local search by file/folder name or path over completed scan results.
+- Transient Top 100 largest-files view derived from the completed scan.
 - Settings for default view, language, delete confirmation, and hidden files.
 - English and Russian localization.
 

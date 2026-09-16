@@ -300,7 +300,19 @@ Do not weaken or bypass a required security gate merely to make a pull request m
 
 ## Release integrity
 
-DiskUsage is currently source-only. Do not add signing, release secrets, provenance, attestation, or release-tag automation until binary distribution is intentionally introduced.
+DiskUsage is developed source-first and also has an explicit project-owner-approved unsigned alpha distribution path. The current alpha path intentionally uses no Developer ID identity, notarization, signing secrets, or privileged signing credentials.
+
+For owner-approved unsigned alpha releases:
+
+- build artifacts only from an exact verified `main` commit;
+- bind artifacts to the exact release tag and source commit;
+- protect release tags against modification and deletion before treating the release-integrity requirement as satisfied;
+- publish checksums for downloadable artifacts;
+- state clearly that the artifacts are unsigned and not notarized, with safe Gatekeeper guidance;
+- keep release publishing isolated from ordinary pull-request workflows and use least-privilege permissions;
+- do not introduce signing or notarization secrets under the unsigned-alpha exception.
+
+Do not expand the unsigned-alpha exception into signed/notarized production distribution, automatic updates, signing secrets, or additional release channels without explicit project-owner approval.
 
 When signed or notarized binary releases are introduced:
 
@@ -326,9 +338,9 @@ The canonical platform baseline is:
 - Swift 6 language mode;
 - Xcode 26.6 stable for CI and canonical verification;
 - minimum supported macOS 14.0;
-- pre-release marketing versions remain in the `0.x.y` range until R7 release readiness and an explicit binary-release decision.
+- pre-release marketing versions remain in the `0.x.y` range until R7 release readiness and an explicit production-release decision.
 
-The current source-only project version is `0.1.0` with build number `1`. Any platform-baseline or versioning change requires explicit project-owner review and synchronized updates to the Xcode project, CI, and both READMEs.
+The current project version is `0.1.0` with build number `1`. The owner-approved unsigned alpha exception does not mark R7 release readiness complete. Any platform-baseline or versioning change requires explicit project-owner review and synchronized updates to the Xcode project, CI, and both READMEs.
 
 Do not silently raise the deployment target.
 
