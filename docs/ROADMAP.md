@@ -389,7 +389,7 @@ R6 is evidence-driven. It must not become speculative performance engineering.
 
 ## Scope
 
-### R6.1 Large-scale scan measurement baseline — CURRENT
+### R6.1 Large-scale scan measurement baseline — COMPLETE
 
 Establish repeatable end-to-end scanner evidence before changing runtime behavior:
 
@@ -399,7 +399,33 @@ Establish repeatable end-to-end scanner evidence before changing runtime behavio
 - document Time Profiler, Allocations, Hangs/responsiveness, and repeated scan/cancel/rescan investigation procedures;
 - do not introduce a runtime optimization in this slice.
 
-Then profile representative large synthetic or disposable filesystem trees and identify actual bottlenecks in:
+R6.1 merged through #88 and closed through #87. The exact completion main was `abcac2b18c698f9e997ec3ac485dd413fe3a8409`; the slice added the disposable 4,096-file / 72-directory scanner baseline without changing production runtime behavior.
+
+### R6.2 Scanner CPU hotspot attribution — COMPLETE
+
+Use the R6.1 workload to identify actual scanner CPU costs before choosing an optimization:
+
+- build the test bundle outside the profiling interval;
+- use Time Profiler against only the synthetic scanner workload;
+- repeat captures rather than selecting one favorable sample;
+- keep raw traces ephemeral and publish only aggregate/symbol evidence;
+- distinguish overlapping inclusive call-stack presence from mutually exclusive attribution;
+- do not change production runtime behavior in the measurement slice.
+
+Three independent final Time Profiler captures produced 9,187 symbolized scanner stacks. Nearest-labeled-phase attribution was stable: path processing 31.71%, `Node.addFile` 24.03%, resource-value reads 16.04%, `Node.toFolderUsage` conversion 14.54%, enumeration 3.59%, and unclassified scanner work 10.08%. These values are sampled stack attribution, not machine-independent wall-clock percentages. Full methodology and evidence are recorded in [`docs/PERFORMANCE.md`](PERFORMANCE.md) and tracked in #89.
+
+The measured first optimization target is repeated path normalization/path derivation. Tree construction remains the second-largest labeled phase, but R6 must test the narrower path opportunity before considering a broader internal-tree redesign.
+
+### R6.3 Reduce redundant scanner path normalization — NEXT / PLANNED
+
+Investigate the measured path-processing hotspot narrowly:
+
+- add regression coverage for normalization and symbolic-link/path-identity behavior before changing scanner path handling;
+- remove only demonstrably redundant normalization/path derivation while preserving exact scan identity, allocated-size semantics, restricted-location behavior, cancellation, and authoritative `FolderUsage` output;
+- compare before/after with the same R6.1 workload and profiling method;
+- do not combine this slice with `Node` architecture, enumeration, resource-key, caching, or concurrency redesign unless new measurements independently justify that work.
+
+Then continue profiling representative large synthetic or disposable filesystem trees and identify actual bottlenecks in:
 
 - enumeration;
 - resource-value reads;
@@ -474,4 +500,4 @@ These are not assumed future stages.
 
 **R5 — Core productivity workflow is complete.** R5.1–R5.5 are implemented and verified, the full repository-wide exit review passed, final exact-main verification is green, and release-tag immutability is enforced for `v*` while the published `v0.1.0-alpha.1` remains bound to its verified source commit.
 
-**R6 — Large-scale resilience and measured optimization is in progress.** R6.1 is the current measurement-only slice; no runtime optimization is permitted until profiling evidence identifies an actual hotspot.
+**R6 — Large-scale resilience and measured optimization is in progress.** R6.1 baseline measurement and R6.2 CPU attribution are complete; the next planned slice is R6.3, narrowly testing the measured repeated path-normalization/path-derivation hotspot before any broader scanner redesign.
