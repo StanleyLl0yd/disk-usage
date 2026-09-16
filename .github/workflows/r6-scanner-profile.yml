@@ -164,8 +164,8 @@ jobs:
           last_frames = collections.Counter()
           all_frames = collections.Counter()
           inclusive = collections.Counter()
-          first_phase = collections.Counter()
-          last_phase = collections.Counter()
+          nearest = collections.Counter()
+          unclassified_first = collections.Counter()
 
           for row in rows:
               names = [name for name in (frame_name(frame) for frame in row.iter("frame")) if name]
@@ -181,27 +181,45 @@ jobs:
               for phase, pattern in phase_patterns.items():
                   if pattern.search(joined):
                       inclusive[phase] += 1
-                  if pattern.search(names[0]):
-                      first_phase[phase] += 1
-                  if pattern.search(names[-1]):
-                      last_phase[phase] += 1
 
+              nearest_phase = None
+              for name in names:
+                  for phase, pattern in phase_patterns.items():
+                      if pattern.search(name):
+                          nearest_phase = phase
+                          break
+                  if nearest_phase is not None:
+                      break
+
+              if nearest_phase is None:
+                  nearest["unclassified_scanner_stack"] += 1
+                  unclassified_first[names[0]] += 1
+              else:
+                  nearest[nearest_phase] += 1
+
+          total = len(scanner_stacks)
           print(f"profile_round={os.environ['PROFILE_ROUND']}")
           print(f"time_profile_rows={len(rows)}")
-          print(f"scanner_stack_rows={len(scanner_stacks)}")
+          print(f"scanner_stack_rows={total}")
           for phase in phase_patterns:
               print(f"inclusive_stack_rows[{phase}]={inclusive[phase]}")
-          for phase in phase_patterns:
-              print(f"first_frame_rows[{phase}]={first_phase[phase]}")
-          for phase in phase_patterns:
-              print(f"last_frame_rows[{phase}]={last_phase[phase]}")
+
+          print("nearest_labeled_phase_rows:")
+          for phase in list(phase_patterns) + ["unclassified_scanner_stack"]:
+              count = nearest[phase]
+              share = (100.0 * count / total) if total else 0.0
+              print(f"  {phase}={count} ({share:.2f}%)")
 
           print("top_first_frames:")
           for name, count in first_frames.most_common(25):
               print(f"  {count:6d}  {name}")
 
+          print("top_unclassified_first_frames:")
+          for name, count in unclassified_first.most_common(20):
+              print(f"  {count:6d}  {name}")
+
           print("top_last_frames:")
-          for name, count in last_frames.most_common(25):
+          for name, count in last_frames.most_common(10):
               print(f"  {count:6d}  {name}")
 
           print("top_frames_within_scanner_stacks:")
