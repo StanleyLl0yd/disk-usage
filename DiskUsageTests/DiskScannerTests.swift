@@ -78,6 +78,50 @@ final class DiskScannerTests: XCTestCase {
         XCTAssertEqual(scanner.progress.bytesFound, result.summary.allocatedBytes)
     }
 
+    func testScannerPublishesStandardizedPathsForLexicalRoot() async throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let scope = root.appendingPathComponent("scope", isDirectory: true)
+        let nested = scope.appendingPathComponent("nested", isDirectory: true)
+        try FileManager.default.createDirectory(at: nested, withIntermediateDirectories: true)
+
+        let payload = nested.appendingPathComponent("payload.dat")
+        try Data(repeating: 1, count: 4096).write(to: payload)
+
+        let lexicalScope = scope
+            .appendingPathComponent("..", isDirectory: true)
+            .appendingPathComponent("scope", isDirectory: true)
+        let result = await DiskScanner().scan(at: lexicalScope, showHiddenFiles: true)
+        let paths = flatten(result.root).map(\.path)
+
+        XCTAssertEqual(result.root.path, scope.standardizedFileURL.path)
+        XCTAssertTrue(paths.contains(nested.standardizedFileURL.path))
+        XCTAssertTrue(paths.contains(payload.standardizedFileURL.path))
+        XCTAssertFalse(paths.contains { $0.contains("/../") })
+    }
+
+    func testDirectorySymlinkDoesNotDuplicateTargetTraversal() async throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let target = root.appendingPathComponent("target", isDirectory: true)
+        try FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
+        let payload = target.appendingPathComponent("payload.dat")
+        try Data(repeating: 1, count: 4096).write(to: payload)
+
+        let alias = root.appendingPathComponent("target-alias", isDirectory: true)
+        try FileManager.default.createSymbolicLink(at: alias, withDestinationURL: target)
+
+        let result = await DiskScanner().scan(at: root, showHiddenFiles: true)
+        let paths = flatten(result.root).map(\.path)
+        let aliasPayloadPath = alias.appendingPathComponent("payload.dat").path
+
+        XCTAssertEqual(paths.filter { $0 == payload.standardizedFileURL.path }.count, 1)
+        XCTAssertFalse(paths.contains(aliasPayloadPath))
+        XCTAssertFalse(paths.contains { $0.hasPrefix(alias.path + "/") })
+    }
+
     func testDiskScannerDisposableFilesystemSyntheticPerformance() throws {
         let root = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
