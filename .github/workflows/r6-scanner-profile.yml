@@ -1,0 +1,185 @@
+name: R6 Scanner CPU Profile
+
+on:
+  push:
+    branches: ['r6/scanner-cpu-profile']
+    paths:
+      - '.github/workflows/r6-scanner-profile.yml'
+      - 'DiskUsageTests/DiskScannerTests.swift'
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: r6-scanner-profile-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  profile:
+    runs-on: macos-26
+    timeout-minutes: 20
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Select Xcode 26.6
+        run: sudo xcode-select -s /Applications/Xcode_26.6.app/Contents/Developer
+
+      - name: Build scanner test bundle outside profile
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project DiskUsage.xcodeproj \
+            -scheme DiskUsage \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            -derivedDataPath "$RUNNER_TEMP/DiskUsageProfileDerivedData" \
+            CODE_SIGNING_ALLOWED=NO \
+            build-for-testing
+
+      - name: Capture scanner Time Profiler evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          derived="$RUNNER_TEMP/DiskUsageProfileDerivedData"
+          test_log="$RUNNER_TEMP/scanner-profile-test.log"
+          trace="$RUNNER_TEMP/scanner-time-profile.trace"
+          xml="$RUNNER_TEMP/scanner-time-profile.xml"
+
+          xcodebuild \
+            -project DiskUsage.xcodeproj \
+            -scheme DiskUsage \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            -derivedDataPath "$derived" \
+            -only-testing:DiskUsageTests/DiskScannerTests/testDiskScannerDisposableFilesystemSyntheticPerformance \
+            -test-iterations 5 \
+            CODE_SIGNING_ALLOWED=NO \
+            test-without-building >"$test_log" 2>&1 &
+          test_pid=$!
+
+          app_pid=""
+          for _ in {1..300}; do
+            app_pid="$(pgrep -x DiskUsage | head -n 1 || true)"
+            if [[ -n "$app_pid" ]]; then
+              break
+            fi
+            if ! kill -0 "$test_pid" 2>/dev/null; then
+              break
+            fi
+            sleep 0.1
+          done
+
+          if [[ -z "$app_pid" ]]; then
+            echo "::error::DiskUsage test host did not become available for profiling."
+            grep -E 'testDiskScannerDisposableFilesystemSyntheticPerformance|TEST (SUCCEEDED|FAILED)' "$test_log" || true
+            wait "$test_pid"
+            exit 1
+          fi
+
+          echo "Profiling synthetic DiskUsage test host PID ${app_pid}; raw trace remains ephemeral."
+
+          profile_status=0
+          xcrun xctrace record \
+            --template 'Time Profiler' \
+            --attach "$app_pid" \
+            --time-limit 10s \
+            --output "$trace" \
+            --no-prompt || profile_status=$?
+
+          test_status=0
+          wait "$test_pid" || test_status=$?
+
+          grep -E 'testDiskScannerDisposableFilesystemSyntheticPerformance.*passed|TEST (SUCCEEDED|FAILED)' "$test_log" || true
+
+          if [[ "$test_status" -ne 0 ]]; then
+            echo "::error::Scanner performance test failed with status ${test_status}."
+            exit "$test_status"
+          fi
+
+          if [[ "$profile_status" -ne 0 ]]; then
+            echo "::error::xctrace attach failed with status ${profile_status}; hosted-runner profiling may be restricted."
+            exit "$profile_status"
+          fi
+
+          xcrun xctrace export \
+            --input "$trace" \
+            --xpath '/trace-toc/run[@number="1"]/data/table[@schema="time-profile"]' \
+            --output "$xml"
+
+          PROFILE_XML="$xml" python3 - <<'PY'
+          import collections
+          import os
+          import re
+          import xml.etree.ElementTree as ET
+
+          root = ET.parse(os.environ["PROFILE_XML"]).getroot()
+          by_id = {element.get("id"): element for element in root.iter() if element.get("id")}
+
+          def resolved(element):
+              ref = element.get("ref")
+              return by_id.get(ref, element) if ref else element
+
+          def element_text(element, seen=None):
+              if seen is None:
+                  seen = set()
+              target = resolved(element)
+              marker = id(target)
+              if marker in seen:
+                  return ""
+              seen.add(marker)
+              parts = []
+              for key in ("name", "label", "fmt", "value"):
+                  value = target.get(key)
+                  if value:
+                      parts.append(value)
+              if target.text and target.text.strip():
+                  parts.append(target.text.strip())
+              for child in target:
+                  parts.append(element_text(child, seen.copy()))
+              return " ".join(part for part in parts if part)
+
+          rows = list(root.iter("row"))
+          scanner_rows = []
+          frame_counts = collections.Counter()
+          phase_patterns = {
+              "filesystem_enumeration": re.compile(r"DirectoryEnumerator|NSDirectoryEnumerator|enumerator|nextObject", re.I),
+              "resource_values": re.compile(r"resourceValues|getResourceValue|resource value", re.I),
+              "path_processing": re.compile(r"standardized|pathComponents|lastPathComponent|NSString", re.I),
+              "node_add_file": re.compile(r"addFile", re.I),
+              "folder_usage_conversion": re.compile(r"toFolderUsage", re.I),
+          }
+          phase_counts = collections.Counter()
+
+          for row in rows:
+              text = element_text(row)
+              if "DiskUsage" not in text and "DiskScanner" not in text:
+                  continue
+              scanner_rows.append(row)
+              for phase, pattern in phase_patterns.items():
+                  if pattern.search(text):
+                      phase_counts[phase] += 1
+              for frame in row.iter("frame"):
+                  target = resolved(frame)
+                  name = target.get("name") or target.get("label") or (target.text or "").strip()
+                  if name and ("DiskScanner" in name or "Node" in name or "FolderUsage" in name):
+                      frame_counts[name] += 1
+
+          print(f"time_profile_rows={len(rows)}")
+          print(f"scanner_related_rows={len(scanner_rows)}")
+          for phase in phase_patterns:
+              print(f"phase_rows[{phase}]={phase_counts[phase]}")
+          print("top_scanner_frames:")
+          for name, count in frame_counts.most_common(20):
+              print(f"  {count:6d}  {name}")
+
+          if not scanner_rows:
+              raise SystemExit("No symbolized DiskUsage/DiskScanner samples were found in Time Profiler export")
+          PY
