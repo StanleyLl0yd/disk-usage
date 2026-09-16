@@ -165,17 +165,14 @@ jobs:
           cat > "$RUNNER_TEMP/release-notes.md" <<EOF
           ## DiskUsage ${version}
 
-          Early alpha build for real-world testing after completion of R5.3.
+          Early alpha build for real-world testing.
 
           **Not Developer ID signed / not notarized:** these binaries intentionally have no Developer ID identity and are not notarized. macOS Gatekeeper may block a normal first launch. Do not disable Gatekeeper globally; follow the testing guidance in docs/RELEASE.md if you choose to run this alpha.
 
           - macOS 14.0+
           - universal binary: arm64 + x86_64
-          - app version: 0.1.0 (build 1)
           - source commit: ${GITHUB_SHA}
           - artifacts: app ZIP, DMG, and SHA256SUMS
-
-          Search/filtering and Largest Files are not part of this alpha yet; R5.4 and R5.5 remain planned.
           EOF
 
       - name: Publish GitHub prerelease
