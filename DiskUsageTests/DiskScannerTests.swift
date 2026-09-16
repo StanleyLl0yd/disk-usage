@@ -78,6 +78,40 @@ final class DiskScannerTests: XCTestCase {
         XCTAssertEqual(scanner.progress.bytesFound, result.summary.allocatedBytes)
     }
 
+    func testDiskScannerDisposableFilesystemSyntheticPerformance() throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let topLevelCount = 8
+        let nestedCount = 8
+        let filesPerNestedFolder = 64
+        let expectedFiles = Int64(topLevelCount * nestedCount * filesPerNestedFolder)
+        let expectedFolders = Int64(topLevelCount + topLevelCount * nestedCount)
+
+        try makeScannerPerformanceFixture(
+            at: root,
+            topLevelCount: topLevelCount,
+            nestedCount: nestedCount,
+            filesPerNestedFolder: filesPerNestedFolder
+        )
+
+        let verificationSummary = try XCTUnwrap(
+            scanSynchronously(DiskScanner(), at: root),
+            "Disposable scanner fixture must complete before performance measurement"
+        )
+        XCTAssertEqual(verificationSummary.filesScanned, expectedFiles)
+        XCTAssertEqual(verificationSummary.foldersScanned, expectedFolders)
+        XCTAssertEqual(verificationSummary.restrictedLocations, 0)
+        XCTAssertGreaterThan(verificationSummary.allocatedBytes, 0)
+
+        measure(metrics: [XCTClockMetric()]) {
+            XCTAssertNotNil(
+                scanSynchronously(DiskScanner(), at: root),
+                "Measured disposable scan must complete"
+            )
+        }
+    }
+
     @MainActor
     func testViewModelLifecycleTransitionsImmediatelyOnStartAndCancel() throws {
         let root = try makeTemporaryDirectory()
@@ -251,8 +285,65 @@ final class DiskScannerTests: XCTestCase {
         return url
     }
 
+    private func makeScannerPerformanceFixture(
+        at root: URL,
+        topLevelCount: Int,
+        nestedCount: Int,
+        filesPerNestedFolder: Int
+    ) throws {
+        let payload = Data(repeating: 0xA5, count: 4_096)
+
+        for topIndex in 0..<topLevelCount {
+            let top = root.appendingPathComponent("top-\(topIndex)", isDirectory: true)
+            for nestedIndex in 0..<nestedCount {
+                let nested = top.appendingPathComponent("nested-\(nestedIndex)", isDirectory: true)
+                try FileManager.default.createDirectory(at: nested, withIntermediateDirectories: true)
+
+                for fileIndex in 0..<filesPerNestedFolder {
+                    let file = nested.appendingPathComponent("file-\(fileIndex).dat")
+                    try payload.write(to: file)
+                }
+            }
+        }
+    }
+
+    private func scanSynchronously(_ scanner: DiskScanner, at root: URL) -> CompletedScanSummary? {
+        let semaphore = DispatchSemaphore(value: 0)
+        let summary = LockedScanSummary()
+
+        Task.detached {
+            let result = await scanner.scan(at: root, showHiddenFiles: true)
+            summary.store(result.summary)
+            semaphore.signal()
+        }
+
+        switch semaphore.wait(timeout: .now() + 30) {
+        case .success:
+            return summary.load()
+        case .timedOut:
+            return nil
+        }
+    }
+
     private func flatten(_ item: FolderUsage) -> [FolderUsage] {
         [item] + item.children.flatMap(flatten)
+    }
+}
+
+private final class LockedScanSummary: @unchecked Sendable {
+    private let lock = NSLock()
+    private var summary: CompletedScanSummary?
+
+    func store(_ summary: CompletedScanSummary) {
+        lock.lock()
+        self.summary = summary
+        lock.unlock()
+    }
+
+    func load() -> CompletedScanSummary? {
+        lock.lock()
+        defer { lock.unlock() }
+        return summary
     }
 }
 
