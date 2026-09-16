@@ -126,34 +126,42 @@ jobs:
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "title=$title" >> "$GITHUB_OUTPUT"
 
-      - name: Verify release target is new
+      - name: Verify release target is safe
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.request.outputs.tag }}
         shell: bash
         run: |
           set -euo pipefail
-          if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${TAG}" >/dev/null 2>&1; then
-            echo "::error::Tag ${TAG} already exists; refusing to overwrite it."
-            exit 1
+          if tag_sha="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${TAG}" --jq '.object.sha' 2>/dev/null)"; then
+            if [[ "$tag_sha" != "$GITHUB_SHA" ]]; then
+              echo "::error::Tag ${TAG} already points to ${tag_sha}; refusing to move or overwrite it."
+              exit 1
+            fi
+            echo "Tag ${TAG} already points to exact source commit ${GITHUB_SHA}; safe to resume publication."
           fi
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "::error::Release ${TAG} already exists; refusing to overwrite it."
             exit 1
           fi
 
-      - name: Create release tag
+      - name: Create or verify release tag
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.request.outputs.tag }}
         shell: bash
         run: |
           set -euo pipefail
-          gh api --method POST "repos/${GITHUB_REPOSITORY}/git/refs" \
-            -f ref="refs/tags/${TAG}" \
-            -f sha="${GITHUB_SHA}" >/dev/null
+          if ! gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${TAG}" >/dev/null 2>&1; then
+            gh api --method POST "repos/${GITHUB_REPOSITORY}/git/refs" \
+              -f ref="refs/tags/${TAG}" \
+              -f sha="${GITHUB_SHA}" >/dev/null
+          fi
           tag_sha="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${TAG}" --jq '.object.sha')"
-          test "$tag_sha" = "$GITHUB_SHA"
+          if [[ "$tag_sha" != "$GITHUB_SHA" ]]; then
+            echo "::error::Tag ${TAG} points to ${tag_sha}, expected ${GITHUB_SHA}."
+            exit 1
+          fi
 
       - name: Write release notes
         env:
