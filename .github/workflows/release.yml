@@ -52,7 +52,15 @@ jobs:
           done
 
       - name: Verify unsigned prerelease package
-        run: scripts/package_release.sh .release/request.json "$RUNNER_TEMP/release"
+        shell: bash
+        run: |
+          set -euo pipefail
+          output="$RUNNER_TEMP/release"
+          sentinel="$output/.preserve-output-sentinel"
+          mkdir -p "$output"
+          printf 'preserve\n' > "$sentinel"
+          scripts/package_release.sh .release/request.json "$output"
+          test -f "$sentinel"
 
   publish:
     if: github.event_name == 'push'
