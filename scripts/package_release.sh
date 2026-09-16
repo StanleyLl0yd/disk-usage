@@ -24,10 +24,10 @@ fi
 TAG="$(plutil -extract tag raw "$REQUEST_FILE")"
 BUILD="$(plutil -extract build raw "$REQUEST_FILE")"
 
-if [[ "$TAG" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)-(alpha|beta|rc)\.([1-9][0-9]*)$ ]]; then
+if [[ "$TAG" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)-alpha\.([1-9][0-9]*)$ ]]; then
   VERSION="${BASH_REMATCH[1]}"
 else
-  echo "Unsupported prerelease tag: $TAG" >&2
+  echo "Unsupported alpha prerelease tag: $TAG" >&2
   exit 1
 fi
 
@@ -37,9 +37,9 @@ if [[ ! "$BUILD" =~ ^[1-9][0-9]*$ ]]; then
 fi
 
 DERIVED_BASE="${RUNNER_TEMP:-$ROOT/.build}"
-DERIVED_DATA="${DERIVED_DATA_PATH:-$DERIVED_BASE/DiskUsageReleaseDerivedData}"
+DERIVED_DATA="$DERIVED_BASE/DiskUsageReleaseDerivedData"
 
-rm -rf "$DERIVED_DATA" "$OUTPUT_DIR"
+rm -rf "$DERIVED_DATA"
 mkdir -p "$OUTPUT_DIR"
 
 xcodebuild \
@@ -110,7 +110,10 @@ fi
 RELEASE_NAME="${TAG#v}"
 APP_ZIP="$OUTPUT_DIR/DiskUsage-${RELEASE_NAME}.app.zip"
 DMG_PATH="$OUTPUT_DIR/DiskUsage-${RELEASE_NAME}.dmg"
+CHECKSUMS_PATH="$OUTPUT_DIR/SHA256SUMS"
 DMG_STAGING="$DERIVED_DATA/DMG"
+
+rm -f "$APP_ZIP" "$DMG_PATH" "$CHECKSUMS_PATH"
 
 # Preserve the application bundle structure and resource metadata in the standalone archive.
 ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$APP_ZIP"
@@ -128,8 +131,8 @@ hdiutil create \
 
 (
   cd "$OUTPUT_DIR"
-  shasum -a 256 "$(basename "$APP_ZIP")" "$(basename "$DMG_PATH")" > SHA256SUMS
-  shasum -a 256 -c SHA256SUMS
+  shasum -a 256 "$(basename "$APP_ZIP")" "$(basename "$DMG_PATH")" > "$(basename "$CHECKSUMS_PATH")"
+  shasum -a 256 -c "$(basename "$CHECKSUMS_PATH")"
 )
 
 echo "Packaged DiskUsage ${RELEASE_NAME} (build ${BUILD}) without Developer ID signing"

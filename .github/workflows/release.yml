@@ -35,8 +35,32 @@ jobs:
       - name: Select Xcode 26.6
         run: sudo xcode-select -s /Applications/Xcode_26.6.app/Contents/Developer
 
+      - name: Reject unapproved prerelease channels
+        shell: bash
+        run: |
+          set -euo pipefail
+          approved_tag="$(plutil -extract tag raw .release/request.json)"
+          version="${approved_tag%%-alpha.*}"
+          for channel in beta rc; do
+            request="$RUNNER_TEMP/rejected-${channel}.json"
+            cp .release/request.json "$request"
+            plutil -replace tag -string "${version}-${channel}.1" "$request"
+            if scripts/package_release.sh "$request" "$RUNNER_TEMP/rejected-${channel}"; then
+              echo "::error::Unsigned ${channel} prerelease unexpectedly passed validation."
+              exit 1
+            fi
+          done
+
       - name: Verify unsigned prerelease package
-        run: scripts/package_release.sh .release/request.json "$RUNNER_TEMP/release"
+        shell: bash
+        run: |
+          set -euo pipefail
+          output="$RUNNER_TEMP/release"
+          sentinel="$output/.preserve-output-sentinel"
+          mkdir -p "$output"
+          printf 'preserve\n' > "$sentinel"
+          scripts/package_release.sh .release/request.json "$output"
+          test -f "$sentinel"
 
   publish:
     if: github.event_name == 'push'
@@ -126,34 +150,42 @@ jobs:
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "title=$title" >> "$GITHUB_OUTPUT"
 
-      - name: Verify release target is new
+      - name: Verify release target is safe
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.request.outputs.tag }}
         shell: bash
         run: |
           set -euo pipefail
-          if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${TAG}" >/dev/null 2>&1; then
-            echo "::error::Tag ${TAG} already exists; refusing to overwrite it."
-            exit 1
+          if tag_sha="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${TAG}" --jq '.object.sha' 2>/dev/null)"; then
+            if [[ "$tag_sha" != "$GITHUB_SHA" ]]; then
+              echo "::error::Tag ${TAG} already points to ${tag_sha}; refusing to move or overwrite it."
+              exit 1
+            fi
+            echo "Tag ${TAG} already points to exact source commit ${GITHUB_SHA}; safe to resume publication."
           fi
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "::error::Release ${TAG} already exists; refusing to overwrite it."
             exit 1
           fi
 
-      - name: Create release tag
+      - name: Create or verify release tag
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.request.outputs.tag }}
         shell: bash
         run: |
           set -euo pipefail
-          gh api --method POST "repos/${GITHUB_REPOSITORY}/git/refs" \
-            -f ref="refs/tags/${TAG}" \
-            -f sha="${GITHUB_SHA}" >/dev/null
+          if ! gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${TAG}" >/dev/null 2>&1; then
+            gh api --method POST "repos/${GITHUB_REPOSITORY}/git/refs" \
+              -f ref="refs/tags/${TAG}" \
+              -f sha="${GITHUB_SHA}" >/dev/null
+          fi
           tag_sha="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${TAG}" --jq '.object.sha')"
-          test "$tag_sha" = "$GITHUB_SHA"
+          if [[ "$tag_sha" != "$GITHUB_SHA" ]]; then
+            echo "::error::Tag ${TAG} points to ${tag_sha}, expected ${GITHUB_SHA}."
+            exit 1
+          fi
 
       - name: Write release notes
         env:
@@ -165,17 +197,14 @@ jobs:
           cat > "$RUNNER_TEMP/release-notes.md" <<EOF
           ## DiskUsage ${version}
 
-          Early alpha build for real-world testing after completion of R5.3.
+          Early alpha build for real-world testing.
 
           **Not Developer ID signed / not notarized:** these binaries intentionally have no Developer ID identity and are not notarized. macOS Gatekeeper may block a normal first launch. Do not disable Gatekeeper globally; follow the testing guidance in docs/RELEASE.md if you choose to run this alpha.
 
           - macOS 14.0+
           - universal binary: arm64 + x86_64
-          - app version: 0.1.0 (build 1)
           - source commit: ${GITHUB_SHA}
           - artifacts: app ZIP, DMG, and SHA256SUMS
-
-          Search/filtering and Largest Files are not part of this alpha yet; R5.4 and R5.5 remain planned.
           EOF
 
       - name: Publish GitHub prerelease

@@ -1,6 +1,6 @@
 # Alpha release testing
 
-DiskUsage alpha binaries are intended for early testing before the full R5 workflow and R7 release-quality pass are complete.
+DiskUsage alpha binaries are intended for early testing before the R7 release-quality pass is complete.
 
 ## Current distribution policy
 
