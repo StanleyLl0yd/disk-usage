@@ -24,10 +24,10 @@ fi
 TAG="$(plutil -extract tag raw "$REQUEST_FILE")"
 BUILD="$(plutil -extract build raw "$REQUEST_FILE")"
 
-if [[ "$TAG" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)-(alpha|beta|rc)\.([1-9][0-9]*)$ ]]; then
+if [[ "$TAG" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)-alpha\.([1-9][0-9]*)$ ]]; then
   VERSION="${BASH_REMATCH[1]}"
 else
-  echo "Unsupported prerelease tag: $TAG" >&2
+  echo "Unsupported alpha prerelease tag: $TAG" >&2
   exit 1
 fi
 
