@@ -1,0 +1,201 @@
+name: R6 Path Normalization Timing
+
+on:
+  push:
+    branches: ['r6/path-normalization']
+    paths:
+      - '.github/workflows/r6-path-normalization-timing.yml'
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: r6-path-normalization-timing-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compare:
+    runs-on: macos-26
+    timeout-minutes: 30
+    permissions:
+      contents: read
+
+    env:
+      BASE_SHA: 10d80e7913b18f9c0f4e9d65bca40f5df5687299
+
+    steps:
+      - name: Checkout candidate with baseline history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Select Xcode 26.6
+        run: sudo xcode-select -s /Applications/Xcode_26.6.app/Contents/Developer
+
+      - name: Build both variants outside timing window
+        shell: bash
+        run: |
+          set -euo pipefail
+          CANDIDATE_SHA="$GITHUB_SHA"
+
+          git checkout --detach "$BASE_SHA"
+          xcodebuild \
+            -project DiskUsage.xcodeproj \
+            -scheme DiskUsage \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            -derivedDataPath "$RUNNER_TEMP/R63Timing-baseline" \
+            CODE_SIGNING_ALLOWED=NO \
+            build-for-testing >/dev/null
+
+          git checkout --detach "$CANDIDATE_SHA"
+          xcodebuild \
+            -project DiskUsage.xcodeproj \
+            -scheme DiskUsage \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            -derivedDataPath "$RUNNER_TEMP/R63Timing-candidate" \
+            CODE_SIGNING_ALLOWED=NO \
+            build-for-testing >/dev/null
+
+      - name: Run same-runner paired whole-test timing
+        shell: bash
+        run: |
+          set -euo pipefail
+          : > "$RUNNER_TEMP/r63-timing.tsv"
+
+          run_variant() {
+            local round="$1"
+            local variant="$2"
+            local derived="$RUNNER_TEMP/R63Timing-${variant}"
+            local log="$RUNNER_TEMP/r63-timing-${variant}-${round}.log"
+            local start_ns end_ns elapsed_ns
+
+            start_ns="$(python3 - <<'PY'
+          import time
+          print(time.monotonic_ns())
+          PY
+            )"
+
+            set +e
+            xcodebuild \
+              -project DiskUsage.xcodeproj \
+              -scheme DiskUsage \
+              -configuration Debug \
+              -destination 'platform=macOS' \
+              -derivedDataPath "$derived" \
+              -only-testing:DiskUsageTests/DiskScannerTests/testDiskScannerDisposableFilesystemSyntheticPerformance \
+              -test-iterations 3 \
+              CODE_SIGNING_ALLOWED=NO \
+              test-without-building >"$log" 2>&1
+            status=$?
+            set -e
+
+            end_ns="$(python3 - <<'PY'
+          import time
+          print(time.monotonic_ns())
+          PY
+            )"
+
+            if [[ "$status" -ne 0 ]]; then
+              cat "$log"
+              exit "$status"
+            fi
+
+            elapsed_ns=$((end_ns - start_ns))
+            printf '%s\t%s\t%s\n' "$round" "$variant" "$elapsed_ns" >> "$RUNNER_TEMP/r63-timing.tsv"
+            python3 - "$round" "$variant" "$elapsed_ns" <<'PY'
+          import sys
+          print(f"round={sys.argv[1]} variant={sys.argv[2]} elapsed={int(sys.argv[3])/1e9:.3f}s")
+          PY
+          }
+
+          # Warm both already-built variants once; warmups are intentionally excluded.
+          run_warmup() {
+            local variant="$1"
+            local derived="$RUNNER_TEMP/R63Timing-${variant}"
+            xcodebuild \
+              -project DiskUsage.xcodeproj \
+              -scheme DiskUsage \
+              -configuration Debug \
+              -destination 'platform=macOS' \
+              -derivedDataPath "$derived" \
+              -only-testing:DiskUsageTests/DiskScannerTests/testDiskScannerDisposableFilesystemSyntheticPerformance \
+              CODE_SIGNING_ALLOWED=NO \
+              test-without-building >/dev/null
+          }
+          run_warmup baseline
+          run_warmup candidate
+
+          # Alternate ordering to reduce systematic first/second-run bias.
+          for round in 1 2 3 4 5 6; do
+            if (( round % 2 == 1 )); then
+              run_variant "$round" baseline
+              run_variant "$round" candidate
+            else
+              run_variant "$round" candidate
+              run_variant "$round" baseline
+            fi
+          done
+
+      - name: Summarize paired timing evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os
+          import statistics
+
+          rows = []
+          with open(os.path.join(os.environ['RUNNER_TEMP'], 'r63-timing.tsv'), encoding='utf-8') as handle:
+              for line in handle:
+                  round_s, variant, ns_s = line.rstrip('\n').split('\t')
+                  rows.append((int(round_s), variant, int(ns_s) / 1e9))
+
+          by_variant = {
+              variant: [seconds for _, v, seconds in rows if v == variant]
+              for variant in ('baseline', 'candidate')
+          }
+          paired = {}
+          for round_no, variant, seconds in rows:
+              paired.setdefault(round_no, {})[variant] = seconds
+
+          print('=== same-runner whole-test invocation timing ===')
+          for variant, values in by_variant.items():
+              print(
+                  f"{variant}: n={len(values)} mean={statistics.fmean(values):.3f}s "
+                  f"median={statistics.median(values):.3f}s min={min(values):.3f}s max={max(values):.3f}s"
+              )
+
+          deltas = []
+          wins = 0
+          for round_no in sorted(paired):
+              before = paired[round_no]['baseline']
+              after = paired[round_no]['candidate']
+              delta = after - before
+              pct = 100.0 * delta / before
+              deltas.append(delta)
+              if delta < 0:
+                  wins += 1
+              print(
+                  f"round={round_no}: baseline={before:.3f}s candidate={after:.3f}s "
+                  f"delta={delta:+.3f}s ({pct:+.2f}%)"
+              )
+
+          baseline_mean = statistics.fmean(by_variant['baseline'])
+          candidate_mean = statistics.fmean(by_variant['candidate'])
+          mean_pct = 100.0 * (candidate_mean - baseline_mean) / baseline_mean
+          print(
+              f"paired_candidate_faster={wins}/{len(deltas)}; "
+              f"mean_delta={statistics.fmean(deltas):+.3f}s; aggregate_mean_delta={mean_pct:+.2f}%"
+          )
+          print('Interpretation: runner-local supporting evidence only; not a stable benchmark or CI threshold.')
+          PY
+
+      - name: Confirm timing evidence stays ephemeral
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo 'No timing logs/results are uploaded or committed; all timing files remain under RUNNER_TEMP.'
