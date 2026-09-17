@@ -88,12 +88,13 @@ nonisolated final class DiskScanner: @unchecked Sendable {
                 guard values.isRegularFile == true else { return }
 
                 totalFiles += 1
-                let folderPath = item.deletingLastPathComponent().standardizedFileURL.path
+                let standardizedItem = item.standardizedFileURL
+                let folderPath = standardizedItem.deletingLastPathComponent().path
 
                 if let size = values.totalFileAllocatedSize ?? values.fileAllocatedSize,
                    size > 0 {
                     let fileSize = Int64(size)
-                    let filePath = item.standardizedFileURL.path
+                    let filePath = standardizedItem.path
 
                     rootNode.addFile(
                         path: filePath,
