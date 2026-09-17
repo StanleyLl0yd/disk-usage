@@ -151,6 +151,27 @@ This evidence justifies investigating the narrow repeated path-normalization/pat
 
 The ordinary R6.1 CI run reported the scanner performance testcase completing in 2.856 seconds on that hosted runner. That console testcase duration was unprofiled, is not the exact `XCTClockMetric` mean, and is not directly comparable to the instrumented testcase durations observed during Time Profiler capture.
 
+### R6.3 scanner path-standardization A/B
+
+R6.3 tested the first narrow optimization selected by R6.2. The production change computes `item.standardizedFileURL` once for each regular-file path derivation, derives the parent path from that standardized URL, and reuses the same URL for the file path when a positive allocated-size file is added. It does not resolve symbolic links or change path identity, package traversal, hidden-file, allocation, cancellation, progress, or snapshot semantics.
+
+Before changing production path handling, focused regression tests were added and proven against the unchanged R6.2 baseline. They protect lexical standardization of a non-standard scan-root path and the existing rule that a directory symlink encountered inside the scan scope does not cause duplicate traversal/publication of the target subtree. The same tests pass with the candidate.
+
+The same-runner Time Profiler comparison used exact baseline `10d80e7913b18f9c0f4e9d65bca40f5df5687299` and the candidate runtime change at `ce37b0de2be4c82604867367d1bab8ebf1297021`. On one GitHub-hosted `macos-26-arm64` runner (image `20260907.0351.1`, macOS 26.6.2 / `25G83`, Xcode 26.6), each variant was built outside the trace and profiled with three independent 10-second captures, 8 XCTest iterations per capture, and the R6.1 4,096-file / 72-directory fixture. Raw `.trace` and XML files stayed ephemeral under the runner temporary directory.
+
+The mutually exclusive nearest-labeled-phase classifier showed the targeted path-processing bucket decrease in every capture:
+
+| Variant | Capture 1 | Capture 2 | Capture 3 | Pooled |
+| --- | ---: | ---: | ---: | ---: |
+| R6.2 baseline | 32.46% | 33.53% | 33.83% | **33.27%** (3,460 / 10,401 scanner stacks) |
+| R6.3 candidate | 26.10% | 28.00% | 28.60% | **27.55%** (2,947 / 10,694 scanner stacks) |
+
+The pooled targeted bucket moved by **-5.72 percentage points**. As in R6.2, these values are sampled stack attribution, not wall-clock CPU percentages. Relative shares of other mutually exclusive buckets can rise when one bucket falls; that alone does not show those phases became slower in absolute time.
+
+A separate research-only same-runner timing run supplied end-to-end supporting evidence without turning timing into a CI threshold. Both variants were built before measurement and warmed once. Six paired rounds then alternated baseline/candidate order; each timed `xcodebuild test-without-building` invocation executed three iterations of only the scanner synthetic performance test. Baseline mean/median were 13.252/13.133 seconds; candidate mean/median were 12.762/12.749 seconds. The candidate was faster in 5 of 6 pairs, with a mean paired delta of -0.491 seconds and an aggregate mean difference of **-3.70%**. Individual pair noise ranged from +1.48% to -10.10%.
+
+That timing is runner-local whole-invocation evidence and includes test-launch/xcodebuild overhead; it is not a machine-independent scanner benchmark and does not justify a hard threshold or an exact product speedup claim. In combination with the repeated targeted Time Profiler reduction, however, it provides no sign that the narrow change merely moved cost into an end-to-end regression. The minimal optimization is therefore retained.
+
 ### Allocations
 
 Use Allocations with disposable data to inspect peak/retained memory across:

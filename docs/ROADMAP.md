@@ -416,14 +416,28 @@ Three independent final Time Profiler captures produced 9,187 symbolized scanner
 
 The measured first optimization target is repeated path normalization/path derivation. Tree construction remains the second-largest labeled phase, but R6 must test the narrower path opportunity before considering a broader internal-tree redesign.
 
-### R6.3 Reduce redundant scanner path normalization — NEXT / PLANNED
+### R6.3 Reduce redundant scanner path normalization — COMPLETE
 
-Investigate the measured path-processing hotspot narrowly:
+R6.3 kept the first R6.2 optimization deliberately narrow:
 
-- add regression coverage for normalization and symbolic-link/path-identity behavior before changing scanner path handling;
-- remove only demonstrably redundant normalization/path derivation while preserving exact scan identity, allocated-size semantics, restricted-location behavior, cancellation, and authoritative `FolderUsage` output;
-- compare before/after with the same R6.1 workload and profiling method;
-- do not combine this slice with `Node` architecture, enumeration, resource-key, caching, or concurrency redesign unless new measurements independently justify that work.
+- focused lexical-normalization and directory-symlink regression coverage was proven against the unchanged R6.2 baseline before changing scanner path handling;
+- the scanner now standardizes each regular-file URL once for path derivation and reuses that standardized URL for both parent and file paths;
+- no symlink resolution, package, hidden-file, allocation, cancellation, progress, or authoritative-snapshot semantics changed;
+- same-runner Time Profiler A/B reduced the targeted path-processing bucket from 33.27% to 27.55% pooled across three captures per variant, a -5.72 percentage-point change in sampled nearest-labeled-phase attribution;
+- separate six-pair whole-test invocation timing was directionally consistent (candidate faster in 5/6 pairs; runner-local aggregate mean -3.70%) and showed no end-to-end regression signal;
+- raw profiling/timing data and the temporary research workflows were not retained in the final product diff.
+
+These percentages are measurement evidence for this workload, not machine-independent wall-clock CPU shares or a promise of an exact product speedup. Full methodology is recorded in [`docs/PERFORMANCE.md`](PERFORMANCE.md).
+
+### R6.4 Establish scanner allocation and retention evidence — NEXT / PLANNED
+
+Measure memory behavior before choosing another runtime optimization:
+
+- use representative disposable scanner workloads, including repeated scan/cancel/rescan where practical;
+- inspect allocation and retained-memory behavior across enumeration, transient URL/resource-value work, internal `Node` lifetime, `FolderUsage` conversion, and result publication;
+- distinguish temporary allocation churn from memory retained by the authoritative completed snapshot and derived presentation state;
+- record the largest practical tested workload and observed peak/retained behavior without a brittle shared-runner threshold;
+- do not introduce caching, incremental-result, alternative-tree, or concurrency architecture unless the measurements identify a concrete problem that justifies it.
 
 Then continue profiling representative large synthetic or disposable filesystem trees and identify actual bottlenecks in:
 
