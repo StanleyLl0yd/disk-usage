@@ -1,0 +1,75 @@
+from pathlib import Path
+
+perf_path = Path("docs/PERFORMANCE.md")
+perf = perf_path.read_text()
+marker = "### Allocations\n"
+if marker not in perf:
+    raise SystemExit("PERFORMANCE marker not found")
+if "### R6.3 scanner path-standardization A/B" in perf:
+    raise SystemExit("R6.3 PERFORMANCE section already present")
+
+section = """### R6.3 scanner path-standardization A/B
+
+R6.3 tested the first narrow optimization selected by R6.2. The production change computes `item.standardizedFileURL` once for each regular-file path derivation, derives the parent path from that standardized URL, and reuses the same URL for the file path when a positive allocated-size file is added. It does not resolve symbolic links or change path identity, package traversal, hidden-file, allocation, cancellation, progress, or snapshot semantics.
+
+Before changing production path handling, focused regression tests were added and proven against the unchanged R6.2 baseline. They protect lexical standardization of a non-standard scan-root path and the existing rule that a directory symlink encountered inside the scan scope does not cause duplicate traversal/publication of the target subtree. The same tests pass with the candidate.
+
+The same-runner Time Profiler comparison used exact baseline `10d80e7913b18f9c0f4e9d65bca40f5df5687299` and the candidate runtime change at `ce37b0de2be4c82604867367d1bab8ebf1297021`. On one GitHub-hosted `macos-26-arm64` runner (image `20260907.0351.1`, macOS 26.6.2 / `25G83`, Xcode 26.6), each variant was built outside the trace and profiled with three independent 10-second captures, 8 XCTest iterations per capture, and the R6.1 4,096-file / 72-directory fixture. Raw `.trace` and XML files stayed ephemeral under the runner temporary directory.
+
+The mutually exclusive nearest-labeled-phase classifier showed the targeted path-processing bucket decrease in every capture:
+
+| Variant | Capture 1 | Capture 2 | Capture 3 | Pooled |
+| --- | ---: | ---: | ---: | ---: |
+| R6.2 baseline | 32.46% | 33.53% | 33.83% | **33.27%** (3,460 / 10,401 scanner stacks) |
+| R6.3 candidate | 26.10% | 28.00% | 28.60% | **27.55%** (2,947 / 10,694 scanner stacks) |
+
+The pooled targeted bucket moved by **-5.72 percentage points**. As in R6.2, these values are sampled stack attribution, not wall-clock CPU percentages. Relative shares of other mutually exclusive buckets can rise when one bucket falls; that alone does not show those phases became slower in absolute time.
+
+A separate research-only same-runner timing run supplied end-to-end supporting evidence without turning timing into a CI threshold. Both variants were built before measurement and warmed once. Six paired rounds then alternated baseline/candidate order; each timed `xcodebuild test-without-building` invocation executed three iterations of only the scanner synthetic performance test. Baseline mean/median were 13.252/13.133 seconds; candidate mean/median were 12.762/12.749 seconds. The candidate was faster in 5 of 6 pairs, with a mean paired delta of -0.491 seconds and an aggregate mean difference of **-3.70%**. Individual pair noise ranged from +1.48% to -10.10%.
+
+That timing is runner-local whole-invocation evidence and includes test-launch/xcodebuild overhead; it is not a machine-independent scanner benchmark and does not justify a hard threshold or an exact product speedup claim. In combination with the repeated targeted Time Profiler reduction, however, it provides no sign that the narrow change merely moved cost into an end-to-end regression. The minimal optimization is therefore retained.
+
+"""
+perf_path.write_text(perf.replace(marker, section + marker, 1))
+
+roadmap_path = Path("docs/ROADMAP.md")
+roadmap = roadmap_path.read_text()
+old = """### R6.3 Reduce redundant scanner path normalization — NEXT / PLANNED
+
+Investigate the measured path-processing hotspot narrowly:
+
+- add regression coverage for normalization and symbolic-link/path-identity behavior before changing scanner path handling;
+- remove only demonstrably redundant normalization/path derivation while preserving exact scan identity, allocated-size semantics, restricted-location behavior, cancellation, and authoritative `FolderUsage` output;
+- compare before/after with the same R6.1 workload and profiling method;
+- do not combine this slice with `Node` architecture, enumeration, resource-key, caching, or concurrency redesign unless new measurements independently justify that work.
+
+Then continue profiling representative large synthetic or disposable filesystem trees and identify actual bottlenecks in:
+"""
+new = """### R6.3 Reduce redundant scanner path normalization — COMPLETE
+
+R6.3 kept the first R6.2 optimization deliberately narrow:
+
+- focused lexical-normalization and directory-symlink regression coverage was proven against the unchanged R6.2 baseline before changing scanner path handling;
+- the scanner now standardizes each regular-file URL once for path derivation and reuses that standardized URL for both parent and file paths;
+- no symlink resolution, package, hidden-file, allocation, cancellation, progress, or authoritative-snapshot semantics changed;
+- same-runner Time Profiler A/B reduced the targeted path-processing bucket from 33.27% to 27.55% pooled across three captures per variant, a -5.72 percentage-point change in sampled nearest-labeled-phase attribution;
+- separate six-pair whole-test invocation timing was directionally consistent (candidate faster in 5/6 pairs; runner-local aggregate mean -3.70%) and showed no end-to-end regression signal;
+- raw profiling/timing data and the temporary research workflows were not retained in the final product diff.
+
+These percentages are measurement evidence for this workload, not machine-independent wall-clock CPU shares or a promise of an exact product speedup. Full methodology is recorded in [`docs/PERFORMANCE.md`](PERFORMANCE.md).
+
+### R6.4 Establish scanner allocation and retention evidence — NEXT / PLANNED
+
+Measure memory behavior before choosing another runtime optimization:
+
+- use representative disposable scanner workloads, including repeated scan/cancel/rescan where practical;
+- inspect allocation and retained-memory behavior across enumeration, transient URL/resource-value work, internal `Node` lifetime, `FolderUsage` conversion, and result publication;
+- distinguish temporary allocation churn from memory retained by the authoritative completed snapshot and derived presentation state;
+- record the largest practical tested workload and observed peak/retained behavior without a brittle shared-runner threshold;
+- do not introduce caching, incremental-result, alternative-tree, or concurrency architecture unless the measurements identify a concrete problem that justifies it.
+
+Then continue profiling representative large synthetic or disposable filesystem trees and identify actual bottlenecks in:
+"""
+if old not in roadmap:
+    raise SystemExit("ROADMAP R6.3 block not found exactly")
+roadmap_path.write_text(roadmap.replace(old, new, 1))
