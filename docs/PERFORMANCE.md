@@ -172,6 +172,55 @@ A separate research-only same-runner timing run supplied end-to-end supporting e
 
 That timing is runner-local whole-invocation evidence and includes test-launch/xcodebuild overhead; it is not a machine-independent scanner benchmark and does not justify a hard threshold or an exact product speedup claim. In combination with the repeated targeted Time Profiler reduction, however, it provides no sign that the narrow change merely moved cost into an end-to-end regression. The minimal optimization is therefore retained.
 
+### R6.4 scanner allocation and retention evidence
+
+R6.4 measured scanner memory behavior on the unchanged R6.3 production baseline at exact `main` commit `42974eb573d43361581dd0866084fc73ddc1d725`. The research harness and workflow lived only on temporary draft PR #94 and were closed without merge after evidence collection.
+
+The final footprint run used:
+
+- a GitHub-hosted macOS virtual machine running macOS 26.6.2 (`25G83`);
+- Xcode 26.6 and Instruments 16.0 (`17F113`);
+- disposable fixtures created outside the measured XCTest process;
+- 8 top-level directories and 8 nested directories under each top-level directory, for 72 directories total;
+- 4 KiB regular files, with isolated 4,096-file, 16,384-file, and 32,768-file workloads;
+- a fresh XCTest host process for each workload size so fixture construction and a previous workload could not contaminate the starting footprint;
+- `task_info(TASK_VM_INFO).phys_footprint` sampled every 5 ms during scanning;
+- separate before, sampled-peak, completed-snapshot-held, and post-return observations;
+- repeated full scans in the 16,384-file process and a cancel/rescan lifecycle in the 32,768-file process.
+
+The observed hosted-runner values were:
+
+| Workload | Before | Sampled peak / held | Increase from start |
+| --- | ---: | ---: | ---: |
+| 4,096 files, first full scan | 29.36 MiB | 30.63 MiB | +1.27 MiB |
+| 16,384 files, first full scan | 30.08 MiB | 34.85 MiB | +4.77 MiB |
+| 16,384 files, repeat 2 | 34.85 MiB | 35.13 MiB | +0.28 MiB |
+| 16,384 files, repeat 3 | 35.13 MiB | 35.22 MiB | +0.09 MiB |
+| 32,768 files, first full scan | 30.02 MiB | 39.53 MiB | +9.52 MiB |
+| 32,768-file fixture, cancelled after 447 files | 39.53 MiB | 39.53 MiB | no sampled increase |
+| 32,768-file full rescan after cancellation | 39.53 MiB | 39.66 MiB | +0.13 MiB |
+
+The first full-scan footprint increase for 16,384 and 32,768 files was approximately linear for this fixture, at about 305 bytes per file of additional process physical footprint. This is a runner-local Debug/XCTest observation, not a stable per-file product-memory coefficient and not a CI threshold.
+
+The 16,384-file process added only about 0.38 MiB after its first high-water across two more complete scans. The 32,768-file cancellation did not raise the existing sampled high-water, and the subsequent full rescan added about 0.13 MiB. Within the tested lifecycle there is therefore no evidence of unbounded process-footprint growth across repeated scan/cancel/rescan.
+
+The post-return `phys_footprint` observation remained at the process high-water in these samples. That does **not** prove that completed snapshot objects remained live: malloc zones and VM pages can remain resident for reuse after objects are released. The repeated-run plateau is the useful retention signal. Likewise, no sampled peak above the completed-snapshot-held value was observed; a 5 ms footprint sampler cannot prove that shorter-lived transient allocations never exceeded that value.
+
+A separate research-only Allocations capture successfully attached `xctrace` to the XCTest host for the 32,768-file full/cancel/rescan lifecycle. Raw `.trace` and XML data stayed ephemeral under the hosted runner temporary directory and were not uploaded or committed. The Allocations statistics reported roughly 233.1 MB of transient Heap + Anonymous VM activity, including about 220.4 MB of transient heap activity. Large typed churn included:
+
+- immutable `CFString`: about 30.9 MB transient;
+- resource-value dictionary storage: about 17.3 MB;
+- `CFURL`: about 11.1 MB;
+- `NSPathStore2`: about 6.8 MB;
+- `Substring` array storage: about 6.2 MB;
+- `_DictionaryStorage<String, Node>`: about 4.35 MB;
+- `FolderUsage` array storage: about 3.16 MB;
+- `Node` objects: about 2.47 MB.
+
+These allocation totals cover the instrumented test-host lifecycle and include Foundation/XCTest overhead; they are diagnostic churn evidence rather than scanner-exclusive byte accounting. Some Allocations “persistent” rows were negative because the trace attached after process startup and could observe frees for allocations made before attachment. Those values are therefore not used as retained-memory totals.
+
+The evidence shows substantial temporary URL/path/string/resource-value allocation churn, but the retained process footprint for the tested scanner lifecycle is bounded and reaches a rapid high-water plateau. R6.4 therefore does not justify a `Node.addFile` redesign, a cache or index, incremental-result architecture, or another memory-driven runtime change. Current memory behavior is accepted for the largest tested 32,768-file disposable workload. Any subsequent optimization must be selected from fresh measured hotspot evidence rather than from a presumed retention problem.
+
 ### Allocations
 
 Use Allocations with disposable data to inspect peak/retained memory across:
