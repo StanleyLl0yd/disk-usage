@@ -1,4 +1,4 @@
-name: R6 Allocation Retention Measurement
+name: R6 Retained Snapshot Control
 
 on:
   push:
@@ -15,9 +15,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  measure:
+  compare:
     runs-on: macos-26
-    timeout-minutes: 35
+    timeout-minutes: 25
     permissions:
       contents: read
 
@@ -30,16 +30,7 @@ jobs:
       - name: Select Xcode 26.6
         run: sudo xcode-select -s /Applications/Xcode_26.6.app/Contents/Developer
 
-      - name: Report runner and toolchain
-        shell: bash
-        run: |
-          set -euo pipefail
-          sw_vers
-          xcodebuild -version
-          uname -m
-          xcrun xctrace list templates | grep -F 'Allocations'
-
-      - name: Build scanner test bundle outside measurement
+      - name: Build research test bundle
         shell: bash
         run: |
           set -euo pipefail
@@ -48,164 +39,77 @@ jobs:
             -scheme DiskUsage \
             -configuration Debug \
             -destination 'platform=macOS' \
-            -derivedDataPath "$RUNNER_TEMP/R64DerivedData" \
+            -derivedDataPath "$RUNNER_TEMP/R64ControlDerivedData" \
             CODE_SIGNING_ALLOWED=NO \
             build-for-testing
 
-      - name: Run XCTest memory metric baseline
-        shell: bash
-        run: |
-          set -euo pipefail
-          log="$RUNNER_TEMP/r64-memory-metric.log"
-          xcodebuild \
-            -project DiskUsage.xcodeproj \
-            -scheme DiskUsage \
-            -configuration Debug \
-            -destination 'platform=macOS' \
-            -derivedDataPath "$RUNNER_TEMP/R64DerivedData" \
-            -only-testing:DiskUsageTests/DiskScannerTests/testDiskScannerDisposableFilesystemSyntheticMemoryPerformance \
-            CODE_SIGNING_ALLOWED=NO \
-            test-without-building 2>&1 | tee "$log"
-
-          echo '=== memory metric lines ==='
-          grep -Ei 'memory|XCTMemoryMetric|Physical Memory|kB|MB' "$log" | tail -n 80 || true
-
-          xcresult="$(find "$RUNNER_TEMP/R64DerivedData/Logs/Test" -maxdepth 1 -name '*.xcresult' -type d -print | sort | tail -n 1)"
-          if [[ -z "$xcresult" ]]; then
-            echo "::error::No xcresult bundle found for memory measurement."
-            exit 1
-          fi
-          echo "memory_xcresult=$xcresult"
-
-          echo '=== xcresulttool metrics help ==='
-          xcrun xcresulttool help get test-results metrics || true
-
-          metrics_json="$RUNNER_TEMP/r64-memory-metrics.json"
-          if xcrun xcresulttool get test-results metrics --path "$xcresult" --format json >"$metrics_json" 2>"$RUNNER_TEMP/r64-xcresulttool.err"; then
-            METRICS_JSON="$metrics_json" python3 - <<'PY'
-          import json
-          import os
-
-          target = "testDiskScannerDisposableFilesystemSyntheticMemoryPerformance"
-          data = json.load(open(os.environ["METRICS_JSON"], encoding="utf-8"))
-
-          def walk(value, path=""):
-              if isinstance(value, dict):
-                  for key, child in value.items():
-                      yield from walk(child, f"{path}.{key}" if path else key)
-              elif isinstance(value, list):
-                  for index, child in enumerate(value):
-                      yield from walk(child, f"{path}[{index}]")
-              else:
-                  text = str(value)
-                  if target in text or any(token in path.lower() for token in ("memory", "metric", "value", "unit", "test")):
-                      yield path, value
-
-          print("=== xcresult memory metric relevant fields ===")
-          rows = list(walk(data))
-          for path, value in rows[:400]:
-              print(f"{path}={value}")
-          if not rows:
-              print("no metric-like fields found")
-          PY
-          else
-            echo 'modern metrics command unavailable; falling back to legacy xcresult JSON'
-            cat "$RUNNER_TEMP/r64-xcresulttool.err" || true
-            legacy_json="$RUNNER_TEMP/r64-memory-legacy.json"
-            xcrun xcresulttool get --legacy --path "$xcresult" --format json >"$legacy_json"
-            LEGACY_JSON="$legacy_json" python3 - <<'PY'
-          import json
-          import os
-
-          target = "testDiskScannerDisposableFilesystemSyntheticMemoryPerformance"
-          data = json.load(open(os.environ["LEGACY_JSON"], encoding="utf-8"))
-          hits = []
-
-          def walk(value, path=""):
-              if isinstance(value, dict):
-                  for key, child in value.items():
-                      walk(child, f"{path}.{key}" if path else key)
-              elif isinstance(value, list):
-                  for index, child in enumerate(value):
-                      walk(child, f"{path}[{index}]")
-              else:
-                  text = str(value)
-                  low = path.lower()
-                  if target in text or "memory" in low or "metric" in low:
-                      hits.append((path, value))
-
-          walk(data)
-          print("=== legacy xcresult memory metric relevant fields ===")
-          for path, value in hits[:400]:
-              print(f"{path}={value}")
-          if not hits:
-              print("no memory/metric fields found in legacy JSON")
-          PY
-          fi
-
-      - name: Sample repeated-scan test-host RSS without profiler attachment
+      - name: Compare retained-snapshot RSS with and without cancel-rescan
         shell: bash
         run: |
           set -euo pipefail
 
-          test_log="$RUNNER_TEMP/r64-rss-test.log"
-          samples="$RUNNER_TEMP/r64-rss.tsv"
-          : > "$samples"
+          sample_case() {
+            local test_name="$1"
+            local label="$2"
+            local test_log="$RUNNER_TEMP/r64-${label}.log"
+            local samples="$RUNNER_TEMP/r64-${label}.tsv"
+            : > "$samples"
 
-          xcodebuild \
-            -project DiskUsage.xcodeproj \
-            -scheme DiskUsage \
-            -configuration Debug \
-            -destination 'platform=macOS' \
-            -derivedDataPath "$RUNNER_TEMP/R64DerivedData" \
-            -only-testing:DiskUsageTests/DiskScannerTests/testDiskScannerDisposableFilesystemSyntheticPerformance \
-            -test-iterations 8 \
-            CODE_SIGNING_ALLOWED=NO \
-            test-without-building >"$test_log" 2>&1 &
-          test_pid=$!
+            xcodebuild \
+              -project DiskUsage.xcodeproj \
+              -scheme DiskUsage \
+              -configuration Debug \
+              -destination 'platform=macOS' \
+              -derivedDataPath "$RUNNER_TEMP/R64ControlDerivedData" \
+              "-only-testing:DiskUsageTests/DiskScannerTests/${test_name}" \
+              CODE_SIGNING_ALLOWED=NO \
+              test-without-building >"$test_log" 2>&1 &
+            local test_pid=$!
 
-          app_pid=""
-          for _ in {1..300}; do
-            app_pid="$(pgrep -x DiskUsage | tail -n 1 || true)"
-            if [[ -n "$app_pid" ]]; then
-              break
+            local app_pid=""
+            for _ in {1..300}; do
+              app_pid="$(pgrep -x DiskUsage | tail -n 1 || true)"
+              if [[ -n "$app_pid" ]]; then
+                break
+              fi
+              if ! kill -0 "$test_pid" 2>/dev/null; then
+                break
+              fi
+              sleep 0.1
+            done
+
+            if [[ -z "$app_pid" ]]; then
+              echo "::error::DiskUsage host did not become available for $label."
+              cat "$test_log"
+              wait "$test_pid"
+              return 1
             fi
-            if ! kill -0 "$test_pid" 2>/dev/null; then
-              break
+
+            local index=0
+            while kill -0 "$test_pid" 2>/dev/null; do
+              local rss
+              rss="$(ps -o rss= -p "$app_pid" 2>/dev/null | tr -d ' ' || true)"
+              if [[ "$rss" =~ ^[0-9]+$ ]]; then
+                printf '%d\t%s\n' "$index" "$rss" >> "$samples"
+                index=$((index + 1))
+              fi
+              sleep 0.20
+            done
+
+            local status=0
+            wait "$test_pid" || status=$?
+            grep -E "${test_name}.*passed|TEST (SUCCEEDED|FAILED)" "$test_log" || true
+            if [[ "$status" -ne 0 ]]; then
+              cat "$test_log"
+              return "$status"
             fi
-            sleep 0.1
-          done
 
-          if [[ -z "$app_pid" ]]; then
-            echo "::error::DiskUsage test host did not become available."
-            cat "$test_log"
-            wait "$test_pid"
-            exit 1
-          fi
-
-          echo "sampled_pid=$app_pid"
-          index=0
-          while kill -0 "$test_pid" 2>/dev/null; do
-            rss="$(ps -o rss= -p "$app_pid" 2>/dev/null | tr -d ' ' || true)"
-            if [[ "$rss" =~ ^[0-9]+$ ]]; then
-              printf '%d\t%s\n' "$index" "$rss" >> "$samples"
-              index=$((index + 1))
-            fi
-            sleep 0.25
-          done
-
-          test_status=0
-          wait "$test_pid" || test_status=$?
-          grep -E 'testDiskScannerDisposableFilesystemSyntheticPerformance.*passed|TEST (SUCCEEDED|FAILED)' "$test_log" || true
-          if [[ "$test_status" -ne 0 ]]; then
-            echo "::error::Repeated scanner performance test failed with status $test_status."
-            exit "$test_status"
-          fi
-
-          SAMPLES="$samples" python3 - <<'PY'
+            LABEL="$label" SAMPLES="$samples" python3 - <<'PY'
+          import json
           import os
           import statistics
 
+          label = os.environ["LABEL"]
           values = []
           with open(os.environ["SAMPLES"], encoding="utf-8") as handle:
               for line in handle:
@@ -213,207 +117,48 @@ jobs:
                   values.append(int(rss))
 
           if len(values) < 8:
-              raise SystemExit(f"Too few RSS samples: {len(values)}")
+              raise SystemExit(f"Too few RSS samples for {label}: {len(values)}")
 
-          ordered = sorted(values)
-          p95 = ordered[min(len(ordered) - 1, int(round(0.95 * (len(ordered) - 1))))]
-          q = max(1, len(values) // 4)
-          first = values[:q]
-          last = values[-q:]
-
-          warm = values[min(12, len(values) // 3):]
-          warm_ordered = sorted(warm)
-          warm_p95 = warm_ordered[min(len(warm_ordered) - 1, int(round(0.95 * (len(warm_ordered) - 1))))]
-          warm_q = max(1, len(warm) // 4)
-          warm_first = warm[:warm_q]
-          warm_last = warm[-warm_q:]
-
-          print("=== repeated-scan test-host RSS ===")
-          print(f"samples={len(values)}")
-          print(f"rss_kib_min={min(values)}")
-          print(f"rss_kib_median={statistics.median(values):.1f}")
-          print(f"rss_kib_p95={p95}")
-          print(f"rss_kib_max={max(values)}")
-          print(f"rss_kib_final={values[-1]}")
-          print(f"first_quartile_median_kib={statistics.median(first):.1f}")
-          print(f"last_quartile_median_kib={statistics.median(last):.1f}")
-          print(f"quartile_median_delta_kib={statistics.median(last)-statistics.median(first):+.1f}")
-          print("=== warm-state RSS after discarding first ~3 seconds ===")
-          print(f"warm_samples={len(warm)}")
-          print(f"warm_rss_kib_min={min(warm)}")
-          print(f"warm_rss_kib_median={statistics.median(warm):.1f}")
-          print(f"warm_rss_kib_p95={warm_p95}")
-          print(f"warm_rss_kib_max={max(warm)}")
-          print(f"warm_rss_kib_final={warm[-1]}")
-          print(f"warm_first_quartile_median_kib={statistics.median(warm_first):.1f}")
-          print(f"warm_last_quartile_median_kib={statistics.median(warm_last):.1f}")
-          print(f"warm_quartile_median_delta_kib={statistics.median(warm_last)-statistics.median(warm_first):+.1f}")
+          # Use the final second as the matched retained-snapshot hold window.
+          hold_count = min(5, len(values))
+          hold = values[-hold_count:]
+          summary = {
+              "label": label,
+              "samples": len(values),
+              "rss_kib_max": max(values),
+              "rss_kib_final": values[-1],
+              "hold_samples": hold_count,
+              "hold_median_kib": statistics.median(hold),
+              "hold_min_kib": min(hold),
+              "hold_max_kib": max(hold),
+          }
+          with open(f"/Users/runner/work/_temp/r64-{label}-summary.json", "w", encoding="utf-8") as out:
+              json.dump(summary, out)
+          print(f"=== {label} retained-snapshot RSS ===")
+          for key, value in summary.items():
+              print(f"{key}={value}")
           PY
+          }
 
-      - name: Run large research memory workload
-        shell: bash
-        run: |
-          set -euo pipefail
+          sample_case testLargeDisposableSingleViewModelScanMemoryResearch control
+          sample_case testLargeDisposableCancelRescanMemoryResearch lifecycle
 
-          before_list="$RUNNER_TEMP/r64-large-before.txt"
-          find "$RUNNER_TEMP/R64DerivedData/Logs/Test" -maxdepth 1 -name '*.xcresult' -type d -print | sort >"$before_list" || true
-
-          log="$RUNNER_TEMP/r64-large-memory.log"
-          xcodebuild \
-            -project DiskUsage.xcodeproj \
-            -scheme DiskUsage \
-            -configuration Debug \
-            -destination 'platform=macOS' \
-            -derivedDataPath "$RUNNER_TEMP/R64DerivedData" \
-            -only-testing:DiskUsageTests/DiskScannerTests/testDiskScannerLargeDisposableFilesystemMemoryResearch \
-            CODE_SIGNING_ALLOWED=NO \
-            test-without-building 2>&1 | tee "$log"
-
-          xcresult="$(find "$RUNNER_TEMP/R64DerivedData/Logs/Test" -maxdepth 1 -name '*.xcresult' -type d -print | sort | tail -n 1)"
-          if [[ -z "$xcresult" ]]; then
-            echo "::error::No xcresult bundle found for large memory workload."
-            exit 1
-          fi
-          echo "large_memory_xcresult=$xcresult"
-
-          metrics_json="$RUNNER_TEMP/r64-large-memory-metrics.json"
-          if xcrun xcresulttool get test-results metrics --path "$xcresult" --format json >"$metrics_json" 2>"$RUNNER_TEMP/r64-large-xcresulttool.err"; then
-            METRICS_JSON="$metrics_json" python3 - <<'PY'
+          python3 - <<'PY'
           import json
-          import os
-          import statistics
+          from pathlib import Path
 
-          target = "testDiskScannerLargeDisposableFilesystemMemoryResearch"
-          data = json.load(open(os.environ["METRICS_JSON"], encoding="utf-8"))
-          entries = data if isinstance(data, list) else [data]
-          matches = [entry for entry in entries if target in str(entry.get("testIdentifier", ""))]
+          base = Path("/Users/runner/work/_temp")
+          control = json.loads((base / "r64-control-summary.json").read_text())
+          lifecycle = json.loads((base / "r64-lifecycle-summary.json").read_text())
 
-          print("=== large-workload xcresult metrics ===")
-          if not matches:
-              raise SystemExit("large-workload test metric entry not found")
-
-          for entry in matches:
-              print(f"testIdentifier={entry.get('testIdentifier')}")
-              for run_index, run in enumerate(entry.get("testRuns", [])):
-                  for metric_index, metric in enumerate(run.get("metrics", [])):
-                      name = metric.get("displayName")
-                      unit = metric.get("unitOfMeasurement")
-                      measurements = metric.get("measurements", [])
-                      print(f"run={run_index} metric={metric_index} name={name} unit={unit}")
-                      print(f"measurements={measurements}")
-                      numeric = [float(v) for v in measurements if isinstance(v, (int, float))]
-                      if numeric:
-                          print(
-                              f"mean={statistics.fmean(numeric):.3f} "
-                              f"median={statistics.median(numeric):.3f} "
-                              f"min={min(numeric):.3f} max={max(numeric):.3f}"
-                          )
-          PY
-          else
-            echo 'modern metrics command unavailable for large workload'
-            cat "$RUNNER_TEMP/r64-large-xcresulttool.err" || true
-          fi
-
-          echo '=== large workload testcase lines ==='
-          grep -E 'testDiskScannerLargeDisposableFilesystemMemoryResearch.*passed|TEST (SUCCEEDED|FAILED)' "$log" || true
-
-      - name: Sample cancel-rescan lifecycle RSS
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          test_log="$RUNNER_TEMP/r64-lifecycle-test.log"
-          samples="$RUNNER_TEMP/r64-lifecycle-rss.tsv"
-          : > "$samples"
-
-          xcodebuild \
-            -project DiskUsage.xcodeproj \
-            -scheme DiskUsage \
-            -configuration Debug \
-            -destination 'platform=macOS' \
-            -derivedDataPath "$RUNNER_TEMP/R64DerivedData" \
-            -only-testing:DiskUsageTests/DiskScannerTests/testLargeDisposableCancelRescanMemoryResearch \
-            CODE_SIGNING_ALLOWED=NO \
-            test-without-building >"$test_log" 2>&1 &
-          test_pid=$!
-
-          app_pid=""
-          for _ in {1..300}; do
-            app_pid="$(pgrep -x DiskUsage | tail -n 1 || true)"
-            if [[ -n "$app_pid" ]]; then
-              break
-            fi
-            if ! kill -0 "$test_pid" 2>/dev/null; then
-              break
-            fi
-            sleep 0.1
-          done
-
-          if [[ -z "$app_pid" ]]; then
-            echo "::error::DiskUsage lifecycle test host did not become available."
-            cat "$test_log"
-            wait "$test_pid"
-            exit 1
-          fi
-
-          echo "lifecycle_sampled_pid=$app_pid"
-          index=0
-          while kill -0 "$test_pid" 2>/dev/null; do
-            rss="$(ps -o rss= -p "$app_pid" 2>/dev/null | tr -d ' ' || true)"
-            if [[ "$rss" =~ ^[0-9]+$ ]]; then
-              printf '%d\t%s\n' "$index" "$rss" >> "$samples"
-              index=$((index + 1))
-            fi
-            sleep 0.25
-          done
-
-          test_status=0
-          wait "$test_pid" || test_status=$?
-          grep -E 'testLargeDisposableCancelRescanMemoryResearch.*passed|TEST (SUCCEEDED|FAILED)' "$test_log" || true
-          if [[ "$test_status" -ne 0 ]]; then
-            echo "::error::Lifecycle memory research test failed with status $test_status."
-            cat "$test_log"
-            exit "$test_status"
-          fi
-
-          SAMPLES="$samples" python3 - <<'PY'
-          import os
-          import statistics
-
-          values = []
-          with open(os.environ["SAMPLES"], encoding="utf-8") as handle:
-              for line in handle:
-                  _, rss = line.rstrip("\n").split("\t")
-                  values.append(int(rss))
-
-          if len(values) < 8:
-              raise SystemExit(f"Too few lifecycle RSS samples: {len(values)}")
-
-          discard = min(12, len(values) // 3)
-          warm = values[discard:]
-          ordered = sorted(warm)
-          p95 = ordered[min(len(ordered) - 1, int(round(0.95 * (len(ordered) - 1))))]
-          q = max(1, len(warm) // 4)
-          first = warm[:q]
-          last = warm[-q:]
-
-          print("=== cancel-rescan warm-state RSS ===")
-          print(f"all_samples={len(values)}")
-          print(f"discarded_startup_samples={discard}")
-          print(f"warm_samples={len(warm)}")
-          print(f"warm_rss_kib_min={min(warm)}")
-          print(f"warm_rss_kib_median={statistics.median(warm):.1f}")
-          print(f"warm_rss_kib_p95={p95}")
-          print(f"warm_rss_kib_max={max(warm)}")
-          print(f"warm_rss_kib_final={warm[-1]}")
-          print(f"warm_first_quartile_median_kib={statistics.median(first):.1f}")
-          print(f"warm_last_quartile_median_kib={statistics.median(last):.1f}")
-          print(f"warm_quartile_median_delta_kib={statistics.median(last)-statistics.median(first):+.1f}")
+          print("=== retained-snapshot comparison ===")
+          for key in ("rss_kib_final", "hold_median_kib", "rss_kib_max"):
+              delta = lifecycle[key] - control[key]
+              print(f"{key}_control={control[key]}")
+              print(f"{key}_lifecycle={lifecycle[key]}")
+              print(f"{key}_delta_kib={delta:+.1f}")
           PY
 
       - name: Confirm research evidence stays ephemeral
         if: always()
-        shell: bash
-        run: |
-          set -euo pipefail
-          echo 'No trace, XML, RSS sample, or test-log artifact is uploaded or committed; all research files remain under RUNNER_TEMP.'
+        run: echo 'No RSS samples or test logs are uploaded or committed.'
