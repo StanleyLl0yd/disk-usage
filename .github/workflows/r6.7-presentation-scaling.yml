@@ -62,9 +62,13 @@ jobs:
           set -euo pipefail
           log="$RUNNER_TEMP/r67-presentation-scaling.log"
           results="$RUNNER_TEMP/r67-results.log"
+          link="/tmp/diskusage-r67-results.log"
           : > "$results"
+          rm -f "$link"
+          ln -s "$results" "$link"
+          trap 'rm -f "$link"' EXIT
 
-          R67_RESULTS_FILE="$results" xcodebuild \
+          xcodebuild \
             -project DiskUsage.xcodeproj \
             -scheme DiskUsage \
             -configuration Debug \
