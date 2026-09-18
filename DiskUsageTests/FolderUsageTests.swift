@@ -780,9 +780,9 @@ final class FolderUsageTests: XCTestCase {
             + "files=\(filesText) samples=\(sampleText) "
             + "mean=\(String(format: "%.6f", mean)) "
             + "median=\(String(format: "%.6f", median))"
-        guard let resultsPath = ProcessInfo.processInfo.environment["R67_RESULTS_FILE"],
-              let handle = try? FileHandle(forWritingTo: URL(fileURLWithPath: resultsPath)) else {
-            XCTFail("R67_RESULTS_FILE is unavailable")
+        let resultsPath = "/tmp/diskusage-r67-results.log"
+        guard let handle = try? FileHandle(forWritingTo: URL(fileURLWithPath: resultsPath)) else {
+            XCTFail("R6.7 research results file is unavailable")
             return
         }
         handle.seekToEndOfFile()
