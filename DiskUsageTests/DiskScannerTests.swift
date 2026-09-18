@@ -190,6 +190,40 @@ final class DiskScannerTests: XCTestCase {
         }
     }
 
+    func testDiskScannerLargeDisposableFilesystemMemoryResearch() throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let topLevelCount = 16
+        let nestedCount = 8
+        let filesPerNestedFolder = 128
+        let expectedFiles = Int64(topLevelCount * nestedCount * filesPerNestedFolder)
+        let expectedFolders = Int64(topLevelCount + topLevelCount * nestedCount)
+
+        try makeScannerPerformanceFixture(
+            at: root,
+            topLevelCount: topLevelCount,
+            nestedCount: nestedCount,
+            filesPerNestedFolder: filesPerNestedFolder
+        )
+
+        let verificationSummary = try XCTUnwrap(
+            scanSynchronously(DiskScanner(), at: root),
+            "Large disposable scanner fixture must complete before memory measurement"
+        )
+        XCTAssertEqual(verificationSummary.filesScanned, expectedFiles)
+        XCTAssertEqual(verificationSummary.foldersScanned, expectedFolders)
+        XCTAssertEqual(verificationSummary.restrictedLocations, 0)
+        XCTAssertGreaterThan(verificationSummary.allocatedBytes, 0)
+
+        measure(metrics: [XCTMemoryMetric()]) {
+            XCTAssertNotNil(
+                scanSynchronously(DiskScanner(), at: root),
+                "Measured large disposable scan must complete"
+            )
+        }
+    }
+
     @MainActor
     func testViewModelLifecycleTransitionsImmediatelyOnStartAndCancel() throws {
         let root = try makeTemporaryDirectory()
