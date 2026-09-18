@@ -181,6 +181,18 @@ jobs:
             if xcrun xctrace export --input "$TRACE" --toc --output "$TOC"; then
               echo "=== Allocations trace table-of-contents ==="
               sed -n '1,260p' "$TOC"
+
+              STATS="$RUNNER_TEMP/r64-allocations-statistics.xml"
+              if xcrun xctrace export \
+                --input "$TRACE" \
+                --xpath '/trace-toc/run[@number="1"]/tracks/track[@name="Allocations"]/details/detail[@name="Statistics"]' \
+                --output "$STATS"; then
+                echo "=== Allocations Statistics export ==="
+                wc -c "$STATS"
+                sed -n '1,320p' "$STATS"
+              else
+                echo "R64_XCTRACE_LIMITATION=statistics_export_failed"
+              fi
             else
               echo "R64_XCTRACE_LIMITATION=trace_recorded_but_toc_export_failed"
             fi
