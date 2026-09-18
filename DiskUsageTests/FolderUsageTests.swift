@@ -780,7 +780,14 @@ final class FolderUsageTests: XCTestCase {
             + "files=\(filesText) samples=\(sampleText) "
             + "mean=\(String(format: "%.6f", mean)) "
             + "median=\(String(format: "%.6f", median))"
-        FileHandle.standardError.write(Data((line + "\\n").utf8))
+        guard let resultsPath = ProcessInfo.processInfo.environment["R67_RESULTS_FILE"],
+              let handle = try? FileHandle(forWritingTo: URL(fileURLWithPath: resultsPath)) else {
+            XCTFail("R67_RESULTS_FILE is unavailable")
+            return
+        }
+        handle.seekToEndOfFile()
+        handle.write(Data((line + "\\n").utf8))
+        handle.closeFile()
     }
 
     private func r67Seconds(_ duration: Duration) -> Double {
