@@ -174,6 +174,7 @@ jobs:
           inclusive = collections.Counter()
           nearest = collections.Counter()
           unclassified_first = collections.Counter()
+          phase_frames = collections.defaultdict(collections.Counter)
 
           for row in rows:
               names = [name for name in (frame_name(frame) for frame in row.iter("frame")) if name]
@@ -200,10 +201,14 @@ jobs:
                       break
 
               if nearest_phase is None:
-                  nearest["unclassified_scanner_stack"] += 1
+                  assigned_phase = "unclassified_scanner_stack"
+                  nearest[assigned_phase] += 1
                   unclassified_first[names[0]] += 1
               else:
-                  nearest[nearest_phase] += 1
+                  assigned_phase = nearest_phase
+                  nearest[assigned_phase] += 1
+
+              phase_frames[assigned_phase].update(names)
 
           total = len(scanner_stacks)
           print(f"profile_round={os.environ['PROFILE_ROUND']}")
@@ -232,6 +237,10 @@ jobs:
 
           print("top_frames_within_scanner_stacks:")
           for name, count in all_frames.most_common(30):
+              print(f"  {count:6d}  {name}")
+
+          print("top_frames_nearest_node_add_file:")
+          for name, count in phase_frames["node_add_file"].most_common(40):
               print(f"  {count:6d}  {name}")
 
           if not scanner_stacks:
