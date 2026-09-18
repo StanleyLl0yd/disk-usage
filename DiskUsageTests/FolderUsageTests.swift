@@ -776,12 +776,11 @@ final class FolderUsageTests: XCTestCase {
         let matchesText = matches.map(String.init) ?? "-"
         let filesText = files.map(String.init) ?? "-"
 
-        print(
-            "R67_RESULT label=\(label) size=\(size) matches=\(matchesText) "
-                + "files=\(filesText) samples=\(sampleText) "
-                + "mean=\(String(format: "%.6f", mean)) "
-                + "median=\(String(format: "%.6f", median))"
-        )
+        let line = "R67_RESULT label=\(label) size=\(size) matches=\(matchesText) "
+            + "files=\(filesText) samples=\(sampleText) "
+            + "mean=\(String(format: "%.6f", mean)) "
+            + "median=\(String(format: "%.6f", median))"
+        FileHandle.standardError.write(Data((line + "\\n").utf8))
     }
 
     private func r67Seconds(_ duration: Duration) -> Double {
