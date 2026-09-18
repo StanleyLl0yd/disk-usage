@@ -254,6 +254,25 @@ The refined workflow also printed representative frames inside stacks assigned t
 
 This evidence supports a narrow follow-up experiment around `Node.addFile` component parsing and dictionary lookup behavior, with correctness coverage and before/after profiling. It does **not** justify a broader tree-construction redesign, caching/indexing, incremental-result architecture, or another memory-driven change. R6.4's bounded-retention conclusion remains unchanged.
 
+### R6.6 terminal file-child lookup A/B
+
+R6.6 tested the smallest dictionary opportunity identified by R6.5: remove the lookup immediately before insertion of the terminal regular-file child in `Node.addFile`. Folder-component traversal, relative-path parsing, path standardization, resource-value reads, enumeration, conversion, cancellation, progress cadence, and the authoritative scan model are unchanged.
+
+Focused disposable-filesystem coverage was added before the runtime candidate and proven on the unchanged exact baseline `b6251549cf615bb65c61501cfc35bf23ac79c720`. The tests-only head `94af88e59fb3cbb0df559458a9a01a98dcca668a` passed Debug tests and Release build. The focused test protects multiple files in one directory, identical terminal names in different directories, exactly one published file node per enumerated path, per-file allocated sizes, parent aggregation, root aggregation, and the completed summary's allocated-byte total. The same focused test also passed with the candidate.
+
+Research draft PR #103 remained unmerged. Its exact measurement head was `693a0230d7c2706561201c4cca01dac9d1637702`; workflow run `35346964827`, job `105605717575`, used macOS 26.6.2 (`25G83`), Xcode 26.6, and xctrace 16.0 (`17F113`). Both baseline and candidate were built before measurement. Three independent 10-second Time Profiler captures per variant used 8 XCTest iterations of the existing 4,096-file / 72-directory fixture, with variant order alternated on the same hosted runner.
+
+| Variant | Capture 1 `Node.addFile` | Capture 2 | Capture 3 | Pooled | Pooled `Dictionary._Variant.lookup` rows |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Baseline | 24.84% (614 / 2,472) | 27.10% (773 / 2,852) | 25.42% (687 / 2,703) | **25.84% (2,074 / 8,027)** | **273** |
+| Candidate | 25.50% (619 / 2,427) | 24.42% (684 / 2,801) | 24.78% (644 / 2,599) | **24.88% (1,947 / 7,827)** | **33** |
+
+The targeted lookup signal fell in every capture. Pooled lookup frame occurrences moved from 279 to 38, while raw dictionary-find rows moved from 504 to 362. Setter work remains because direct dictionary assignment still performs insertion; setter rows rose from 449 to 534 and are not interpreted as an absolute slowdown because these are sampled stack counts. The pooled nearest-`Node.addFile` share moved by -0.96 percentage points. Other pooled nearest-labeled shares were close: path processing 25.90% → 25.90%, resource values 16.76% → 17.17%, `Node.toFolderUsage` 16.26% → 16.70%, enumeration 4.63% → 4.85%, and unclassified scanner work 10.61% → 10.50%.
+
+A separate warmed six-pair whole-test timing comparison alternated baseline/candidate order on the same runner. Each timed invocation used three iterations of only the synthetic scanner performance testcase. Baseline mean/median were 18.909/18.587 seconds; candidate mean/median were 17.799/17.878 seconds. The candidate was faster in 4 of 6 pairs, with mean paired delta -1.109 seconds and aggregate mean difference -5.87%. Individual pair deltas ranged from -14.25% to +8.36%, so this is noisy runner-local supporting evidence rather than a machine-independent speedup claim.
+
+The candidate is retained because the intended lookup cost fell sharply and repeatedly, focused correctness remained green, and end-to-end timing showed no regression signal. This result does not justify a folder-node cache/index, tree-construction redesign, component-parser rewrite, incremental-result architecture, or memory-driven change. Raw trace/XML/log/timing artifacts remained under runner temporary storage only and were not uploaded or committed.
+
 ### Allocations
 
 Use Allocations with disposable data to inspect peak/retained memory across:
