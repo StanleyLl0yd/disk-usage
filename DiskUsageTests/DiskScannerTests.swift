@@ -157,87 +157,109 @@ final class DiskScannerTests: XCTestCase {
         }
     }
 
-    func testR64ScannerMemoryResearch() async throws {
+    func testR64ScannerMemoryBaselineResearch() async throws {
+        try await runR64ScannerMemoryResearch(
+            label: "baseline",
+            expectedFiles: 4_096,
+            fullRuns: 1,
+            includeCancellationLifecycle: false
+        )
+    }
+
+    func testR64ScannerMemoryRepeatResearch() async throws {
+        try await runR64ScannerMemoryResearch(
+            label: "repeat",
+            expectedFiles: 16_384,
+            fullRuns: 3,
+            includeCancellationLifecycle: false
+        )
+    }
+
+    func testR64ScannerMemoryLargestLifecycleResearch() async throws {
+        try await runR64ScannerMemoryResearch(
+            label: "largest",
+            expectedFiles: 32_768,
+            fullRuns: 1,
+            includeCancellationLifecycle: true
+        )
+    }
+
+    private func runR64ScannerMemoryResearch(
+        label: String,
+        expectedFiles: Int64,
+        fullRuns: Int,
+        includeCancellationLifecycle: Bool
+    ) async throws {
         guard FileManager.default.fileExists(
             atPath: "/tmp/diskusage-r64-memory-research-enabled"
         ) else {
             throw XCTSkip("R6.4 memory research runs only in the temporary profiling workflow")
         }
 
-        var researchRecords: [String] = []
-        let workloads = [
-            (label: "baseline", filesPerNestedFolder: 64, fullRuns: 1),
-            (label: "repeat", filesPerNestedFolder: 256, fullRuns: 3),
-            (label: "largest", filesPerNestedFolder: 512, fullRuns: 1)
-        ]
+        let root = URL(fileURLWithPath: "/tmp/diskusage-r64-fixture", isDirectory: true)
+        var isDirectory: ObjCBool = false
+        XCTAssertTrue(FileManager.default.fileExists(atPath: root.path, isDirectory: &isDirectory))
+        XCTAssertTrue(isDirectory.boolValue)
 
-        for workload in workloads {
-            let root = try makeTemporaryDirectory()
-            defer { try? FileManager.default.removeItem(at: root) }
-
-            let topLevelCount = 8
-            let nestedCount = 8
-            let expectedFiles = Int64(topLevelCount * nestedCount * workload.filesPerNestedFolder)
-            let expectedFolders = Int64(topLevelCount + topLevelCount * nestedCount)
-
-            try makeScannerPerformanceFixture(
-                at: root,
-                topLevelCount: topLevelCount,
-                nestedCount: nestedCount,
-                filesPerNestedFolder: workload.filesPerNestedFolder
-            )
-
-            for run in 1...workload.fullRuns {
-                let probe = await measureScannerMemory(at: root)
-                XCTAssertEqual(probe.summary.filesScanned, expectedFiles)
-                XCTAssertEqual(probe.summary.foldersScanned, expectedFolders)
-                XCTAssertEqual(probe.summary.restrictedLocations, 0)
-                XCTAssertGreaterThan(probe.summary.allocatedBytes, 0)
-
-                try? await Task.sleep(for: .milliseconds(100))
-                let afterRelease = currentPhysicalFootprintBytes()
-
-                researchRecords.append(
-                    "R64_MEMORY mode=full label=\(workload.label) run=\(run) " +
-                    "files=\(expectedFiles) folders=\(expectedFolders) " +
-                    "before=\(probe.before) peak=\(probe.peak) held=\(probe.held) " +
-                    "after_release=\(afterRelease) allocated=\(probe.summary.allocatedBytes)"
-                )
-            }
-
-            if workload.label == "largest" {
-                let cancelled = await measureScannerMemory(at: root, cancelAfter: .milliseconds(20))
-                XCTAssertLessThan(
-                    cancelled.summary.filesScanned,
-                    expectedFiles,
-                    "Research cancellation should interrupt the largest disposable scan"
-                )
-
-                try? await Task.sleep(for: .milliseconds(100))
-                let afterCancelledRelease = currentPhysicalFootprintBytes()
-                researchRecords.append(
-                    "R64_MEMORY mode=cancel label=largest run=1 " +
-                    "files=\(cancelled.summary.filesScanned) expected_files=\(expectedFiles) " +
-                    "before=\(cancelled.before) peak=\(cancelled.peak) held=\(cancelled.held) " +
-                    "after_release=\(afterCancelledRelease) allocated=\(cancelled.summary.allocatedBytes)"
-                )
-
-                let rescan = await measureScannerMemory(at: root)
-                XCTAssertEqual(rescan.summary.filesScanned, expectedFiles)
-                XCTAssertEqual(rescan.summary.foldersScanned, expectedFolders)
-
-                try? await Task.sleep(for: .milliseconds(100))
-                let afterRescanRelease = currentPhysicalFootprintBytes()
-                researchRecords.append(
-                    "R64_MEMORY mode=rescan label=largest run=1 " +
-                    "files=\(expectedFiles) folders=\(expectedFolders) " +
-                    "before=\(rescan.before) peak=\(rescan.peak) held=\(rescan.held) " +
-                    "after_release=\(afterRescanRelease) allocated=\(rescan.summary.allocatedBytes)"
-                )
-            }
+        if FileManager.default.fileExists(atPath: "/tmp/diskusage-r64-xctrace-attach") {
+            try? await Task.sleep(for: .seconds(3))
         }
 
-        let resultsURL = URL(fileURLWithPath: "/tmp/diskusage-r64-memory-results.log")
+        let expectedFolders: Int64 = 72
+        var researchRecords: [String] = []
+
+        for run in 1...fullRuns {
+            let probe = await measureScannerMemory(at: root)
+            XCTAssertEqual(probe.summary.filesScanned, expectedFiles)
+            XCTAssertEqual(probe.summary.foldersScanned, expectedFolders)
+            XCTAssertEqual(probe.summary.restrictedLocations, 0)
+            XCTAssertGreaterThan(probe.summary.allocatedBytes, 0)
+
+            try? await Task.sleep(for: .milliseconds(100))
+            let afterRelease = currentPhysicalFootprintBytes()
+
+            researchRecords.append(
+                "R64_MEMORY mode=full label=\(label) run=\(run) " +
+                "files=\(expectedFiles) folders=\(expectedFolders) " +
+                "before=\(probe.before) peak=\(probe.peak) held=\(probe.held) " +
+                "after_release=\(afterRelease) allocated=\(probe.summary.allocatedBytes)"
+            )
+        }
+
+        if includeCancellationLifecycle {
+            let cancelled = await measureScannerMemory(at: root, cancelAfter: .milliseconds(20))
+            XCTAssertLessThan(
+                cancelled.summary.filesScanned,
+                expectedFiles,
+                "Research cancellation should interrupt the largest disposable scan"
+            )
+
+            try? await Task.sleep(for: .milliseconds(100))
+            let afterCancelledRelease = currentPhysicalFootprintBytes()
+            researchRecords.append(
+                "R64_MEMORY mode=cancel label=\(label) run=1 " +
+                "files=\(cancelled.summary.filesScanned) expected_files=\(expectedFiles) " +
+                "before=\(cancelled.before) peak=\(cancelled.peak) held=\(cancelled.held) " +
+                "after_release=\(afterCancelledRelease) allocated=\(cancelled.summary.allocatedBytes)"
+            )
+
+            let rescan = await measureScannerMemory(at: root)
+            XCTAssertEqual(rescan.summary.filesScanned, expectedFiles)
+            XCTAssertEqual(rescan.summary.foldersScanned, expectedFolders)
+
+            try? await Task.sleep(for: .milliseconds(100))
+            let afterRescanRelease = currentPhysicalFootprintBytes()
+            researchRecords.append(
+                "R64_MEMORY mode=rescan label=\(label) run=1 " +
+                "files=\(expectedFiles) folders=\(expectedFolders) " +
+                "before=\(rescan.before) peak=\(rescan.peak) held=\(rescan.held) " +
+                "after_release=\(afterRescanRelease) allocated=\(rescan.summary.allocatedBytes)"
+            )
+        }
+
+        let resultsURL = URL(
+            fileURLWithPath: "/tmp/diskusage-r64-memory-\(label).log"
+        )
         try researchRecords
             .joined(separator: "\n")
             .appending("\n")
