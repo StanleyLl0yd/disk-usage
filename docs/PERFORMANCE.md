@@ -273,6 +273,41 @@ A separate warmed six-pair whole-test timing comparison alternated baseline/cand
 
 The candidate is retained because the intended lookup cost fell sharply and repeatedly, focused correctness remained green, and end-to-end timing showed no regression signal. This result does not justify a folder-node cache/index, tree-construction redesign, component-parser rewrite, incremental-result architecture, or memory-driven change. Raw trace/XML/log/timing artifacts remained under runner temporary storage only and were not uploaded or committed.
 
+
+### R6.7 large-snapshot presentation scaling
+
+R6.7 measured the existing derived presentation transformations on the unchanged production baseline `1a6617d24e2819f91f8c03a780dc22f226e4cf6a` before selecting another runtime optimization. Research draft PR #107 was intentionally closed unmerged after evidence collection; it changed only temporary research tests/workflow code and no production source.
+
+The successful scaling and profiling head was `0e512f56820e15a54ead3fd8bf051b3813d0f94f`, workflow run `35354259942`, job `105629892602`. The runner used GitHub-hosted `macos-26-arm64` image release `20260907.0351`, macOS 26.6.2 (`25G83`), Xcode 26.6, and xctrace 16.0 (`17F113`).
+
+The research workload used deterministic in-memory `FolderUsage` snapshots only. Fixture construction and correctness checks were outside measured timing samples. Each timing point was warmed and measured five times. These are runner-local Debug/XCTest diagnostics, not hard CI thresholds or machine-independent product benchmarks.
+
+| Transformation | ~16K nodes | ~64K nodes | ~128K nodes |
+| --- | ---: | ---: | ---: |
+| Tree recursive sort | 0.030937 s (16,380) | 0.112400 s (64,350) | 0.195720 s (128,700) |
+| Search selective, 1 match | 0.077161 s | 0.249531 s | 0.451010 s |
+| Search broad | 0.191152 s / 16,352 matches | 0.683990 s / 64,240 matches | **1.073799 s / 128,480 matches** |
+| Largest Files top-100 | 0.058015 s (16,000 files) | 0.223265 s (64,000 files) | 0.365037 s (128,000 files) |
+| Sunburst preparation | 0.011866 s (16,468) | 0.053669 s (65,620) | 0.102321 s (131,156) |
+
+The table reports medians. Structural correctness was checked separately at every workload size: Tree preserved every node; selective Search returned exactly one expected deep target; broad Search returned the expected match count; Largest Files returned exactly 100 files in deterministic size-descending/path-ascending order; and Sunburst preserved total size, unique segment IDs, 84 ordinary segments, and 64 bounded aggregate segments for each tested shape.
+
+Broad Search was the largest tested derived-preprocessor cost at the largest snapshot. On the same 128,700-node shape, selective Search with one match had a 0.451010-second median while broad Search with 128,480 matches had a 1.073799-second median. That difference is diagnostic evidence that high-match workloads add substantial match/result/sort work beyond traversal alone; it is not an exact product-latency claim.
+
+The same successful workflow then collected three independent Time Profiler captures of repeated 128,700-node / 128,480-match broad Search work. A nearest-recognized Search-phase classifier produced stable sampled attribution:
+
+| Search phase | Capture 1 | Capture 2 | Capture 3 | Pooled, 7,975 Search stacks |
+| --- | ---: | ---: | ---: | ---: |
+| Name/path matching | 47.78% (1,348) | 46.92% (1,204) | 52.51% (1,359) | **49.04% (3,911)** |
+| Result sorting | 39.06% (1,102) | 39.48% (1,013) | 35.24% (912) | **37.96% (3,027)** |
+| Search recursion | 13.15% (371) | 13.60% (349) | 12.25% (317) | **13.00% (1,037)** |
+
+These values are sampled nearest-phase stack shares within symbolized Search stacks, not wall-clock CPU percentages. `SearchPresentationPreprocessor.collectMatches` appeared prominently in the captured stacks, but the phase classifier is preferred over raw top-frame counts because XCTest ancestor frames are also frequent in the attached test host.
+
+The measured next hotspot is therefore **Search name/path matching**, with result sorting retained as an important secondary cost to monitor. This evidence does not justify a Search index/cache, duplicate snapshot, presentation-model redesign, concurrency change, UI redesign, or broader architecture work. A follow-up must test the smallest behavior-preserving matching-path change first, with focused coverage for current case-insensitive name and full-path semantics and same-runner before/after evidence. If the targeted matching cost does not credibly fall without regression, the candidate should be rejected rather than expanded.
+
+Raw trace archives, exported XML, logs, temporary result files, and DerivedData remained under runner temporary storage and were not uploaded or committed. The temporary research workflow and research-only tests are absent from the clean final branch.
+
 ### Allocations
 
 Use Allocations with disposable data to inspect peak/retained memory across:
