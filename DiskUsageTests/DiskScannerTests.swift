@@ -262,6 +262,43 @@ final class DiskScannerTests: XCTestCase {
         XCTAssertTrue(viewModel.canRescan)
         XCTAssertFalse(viewModel.items.isEmpty)
         XCTAssertGreaterThan(viewModel.totalSize, 0)
+
+        // Keep the completed authoritative snapshot retained long enough for
+        // the external research-only RSS sampler to observe the steady state.
+        try await Task.sleep(for: .seconds(1))
+        XCTAssertEqual(viewModel.lifecycle, .completed)
+    }
+
+    @MainActor
+    func testLargeDisposableSingleViewModelScanMemoryResearch() async throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        try makeScannerPerformanceFixture(
+            at: root,
+            topLevelCount: 16,
+            nestedCount: 8,
+            filesPerNestedFolder: 128
+        )
+
+        let viewModel = DiskScannerViewModel()
+        viewModel.scan(root, description: "R6.4 memory control")
+
+        for _ in 0..<750 {
+            if viewModel.lifecycle == .completed {
+                break
+            }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+
+        XCTAssertEqual(viewModel.lifecycle, .completed)
+        XCTAssertTrue(viewModel.canRescan)
+        XCTAssertFalse(viewModel.items.isEmpty)
+        XCTAssertGreaterThan(viewModel.totalSize, 0)
+
+        // Matched retention hold for external RSS comparison with cancel/rescan.
+        try await Task.sleep(for: .seconds(1))
+        XCTAssertEqual(viewModel.lifecycle, .completed)
     }
 
     @MainActor
