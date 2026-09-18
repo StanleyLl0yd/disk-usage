@@ -181,13 +181,9 @@ nonisolated private final class Node {
         }
 
         let fileName = (filePath as NSString).lastPathComponent
-        if let existing = current.children[fileName] {
-            existing.size += size
-        } else {
-            let fileNode = Node(path: filePath, isFile: true)
-            fileNode.size = size
-            current.children[fileName] = fileNode
-        }
+        let fileNode = Node(path: filePath, isFile: true)
+        fileNode.size = size
+        current.children[fileName] = fileNode
     }
 
     func toFolderUsage() -> FolderUsage {

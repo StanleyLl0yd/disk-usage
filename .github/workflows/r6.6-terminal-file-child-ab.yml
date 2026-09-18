@@ -1,0 +1,364 @@
+name: R6.6 Terminal File-child Lookup A/B
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/r6.6-terminal-file-child-ab.yml'
+      - 'DiskScanner.swift'
+      - 'DiskUsageTests/DiskScannerTests.swift'
+
+permissions: {}
+
+concurrency:
+  group: r6-6-terminal-file-child-ab-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ab:
+    runs-on: macos-26
+    timeout-minutes: 35
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout exact candidate head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Select Xcode 26.6
+        run: sudo xcode-select -s /Applications/Xcode_26.6.app/Contents/Developer
+
+      - name: Prepare exact baseline worktree
+        shell: bash
+        run: |
+          set -euo pipefail
+          baseline=b6251549cf615bb65c61501cfc35bf23ac79c720
+          candidate="$(git rev-parse HEAD)"
+          echo "baseline=${baseline}"
+          echo "candidate=${candidate}"
+          sw_vers
+          xcodebuild -version
+          xcrun xctrace version
+          git worktree add --detach "$RUNNER_TEMP/r6.6-baseline" "$baseline"
+
+      - name: Build both variants outside measurement
+        shell: bash
+        run: |
+          set -euo pipefail
+          build_variant() {
+            local workdir="$1"
+            local derived="$2"
+            (
+              cd "$workdir"
+              xcodebuild \
+                -project DiskUsage.xcodeproj \
+                -scheme DiskUsage \
+                -configuration Debug \
+                -destination 'platform=macOS' \
+                -derivedDataPath "$derived" \
+                CODE_SIGNING_ALLOWED=NO \
+                build-for-testing
+            )
+          }
+          build_variant "$RUNNER_TEMP/r6.6-baseline" "$RUNNER_TEMP/r6.6-baseline-derived"
+          build_variant "$GITHUB_WORKSPACE" "$RUNNER_TEMP/r6.6-candidate-derived"
+
+      - name: Verify focused candidate correctness
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project DiskUsage.xcodeproj \
+            -scheme DiskUsage \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            -derivedDataPath "$RUNNER_TEMP/r6.6-candidate-derived" \
+            -only-testing:DiskUsageTests/DiskScannerTests/testScannerKeepsTerminalFileChildrenDistinctAndSized \
+            CODE_SIGNING_ALLOWED=NO \
+            test-without-building
+
+      - name: Capture same-runner Time Profiler A/B
+        shell: bash
+        run: |
+          set -euo pipefail
+          results="$RUNNER_TEMP/r6.6-profile.tsv"
+          printf 'variant\tround\tscanner\tnode\tlookup\tsetter\tfind\tsplit\tpath\tresource\tconvert\tenum\tunclassified\n' > "$results"
+
+          capture_variant() {
+            local variant="$1"
+            local round="$2"
+            local workdir="$3"
+            local derived="$4"
+            local prefix="$RUNNER_TEMP/r6.6-${variant}-${round}"
+            local test_log="${prefix}.test.log"
+            local trace="${prefix}.trace"
+            local xml="${prefix}.xml"
+
+            echo "=== profile variant=${variant} round=${round} ==="
+            for _ in {1..100}; do
+              if ! pgrep -x DiskUsage >/dev/null 2>&1; then break; fi
+              sleep 0.1
+            done
+
+            (
+              cd "$workdir"
+              xcodebuild \
+                -project DiskUsage.xcodeproj \
+                -scheme DiskUsage \
+                -configuration Debug \
+                -destination 'platform=macOS' \
+                -derivedDataPath "$derived" \
+                -only-testing:DiskUsageTests/DiskScannerTests/testDiskScannerDisposableFilesystemSyntheticPerformance \
+                -test-iterations 8 \
+                CODE_SIGNING_ALLOWED=NO \
+                test-without-building
+            ) >"$test_log" 2>&1 &
+            local test_pid=$!
+
+            local app_pid=""
+            for _ in {1..300}; do
+              app_pid="$(pgrep -x DiskUsage | tail -n 1 || true)"
+              if [[ -n "$app_pid" ]]; then break; fi
+              if ! kill -0 "$test_pid" 2>/dev/null; then break; fi
+              sleep 0.1
+            done
+            if [[ -z "$app_pid" ]]; then
+              echo "::error::DiskUsage test host did not appear for ${variant} round ${round}."
+              cat "$test_log"
+              wait "$test_pid" || true
+              exit 1
+            fi
+
+            local profile_status=0
+            xcrun xctrace record \
+              --template 'Time Profiler' \
+              --attach "$app_pid" \
+              --time-limit 10s \
+              --output "$trace" \
+              --no-prompt || profile_status=$?
+
+            local test_status=0
+            wait "$test_pid" || test_status=$?
+            grep -E 'testDiskScannerDisposableFilesystemSyntheticPerformance.*passed|TEST (SUCCEEDED|FAILED)' "$test_log" || true
+            if [[ "$test_status" -ne 0 ]]; then exit "$test_status"; fi
+            if [[ "$profile_status" -ne 0 ]]; then exit "$profile_status"; fi
+
+            xcrun xctrace export \
+              --input "$trace" \
+              --xpath '/trace-toc/run[@number="1"]/data/table[@schema="time-profile"]' \
+              --output "$xml"
+
+            PROFILE_XML="$xml" VARIANT="$variant" ROUND="$round" RESULTS="$results" python3 - <<'PY'
+          import collections
+          import os
+          import re
+          import xml.etree.ElementTree as ET
+
+          root = ET.parse(os.environ['PROFILE_XML']).getroot()
+          by_id = {e.get('id'): e for e in root.iter() if e.get('id')}
+
+          def resolved(e):
+              ref = e.get('ref')
+              return by_id.get(ref, e) if ref else e
+
+          def frame_name(frame):
+              target = resolved(frame)
+              return target.get('name') or target.get('label') or (target.text or '').strip()
+
+          phase_patterns = {
+              'filesystem_enumeration': re.compile(r'DirectoryEnumerator|NSDirectoryEnumerator|enumerator|nextObject', re.I),
+              'resource_values': re.compile(r'resourceValues|getResourceValue|NSURL.*resource|CFURL.*resource', re.I),
+              'path_processing': re.compile(r'standardizedFileURL|standardizedURL|deletingLastPathComponent|lastPathComponent|pathComponents|NSString.*lastPath|CFURL.*Path', re.I),
+              'node_add_file': re.compile(r'Node\.addFile', re.I),
+              'folder_usage_conversion': re.compile(r'Node\.toFolderUsage', re.I),
+          }
+          scanner_anchor = re.compile(r'DiskScanner\.scan|Node\.(addFile|toFolderUsage)')
+          lookup = re.compile(r'Dictionary\._Variant\.lookup\(_:\)')
+          setter = re.compile(r'Dictionary\.subscript\.setter|Dictionary\._Variant\.setValue|_NativeDictionary\.setValue')
+          find = re.compile(r'__RawDictionaryStorage\.find')
+          split = re.compile(r'Collection.*\.split|Collection<>\.split')
+
+          nearest = collections.Counter()
+          node_lookup = node_setter = node_find = node_split = 0
+          scanner_rows = 0
+          node_rows = 0
+
+          for row in root.iter('row'):
+              names = [n for n in (frame_name(f) for f in row.iter('frame')) if n]
+              if not names or not any(scanner_anchor.search(n) for n in names):
+                  continue
+              scanner_rows += 1
+              assigned = None
+              for name in names:
+                  for phase, pattern in phase_patterns.items():
+                      if pattern.search(name):
+                          assigned = phase
+                          break
+                  if assigned is not None:
+                      break
+              assigned = assigned or 'unclassified_scanner_stack'
+              nearest[assigned] += 1
+              if assigned == 'node_add_file':
+                  node_rows += 1
+                  joined = '\n'.join(names)
+                  node_lookup += bool(lookup.search(joined))
+                  node_setter += bool(setter.search(joined))
+                  node_find += bool(find.search(joined))
+                  node_split += bool(split.search(joined))
+
+          values = [
+              os.environ['VARIANT'], os.environ['ROUND'], scanner_rows, node_rows,
+              node_lookup, node_setter, node_find, node_split,
+              nearest['path_processing'], nearest['resource_values'],
+              nearest['folder_usage_conversion'], nearest['filesystem_enumeration'],
+              nearest['unclassified_scanner_stack'],
+          ]
+          with open(os.environ['RESULTS'], 'a', encoding='utf-8') as out:
+              out.write('\t'.join(map(str, values)) + '\n')
+
+          share = lambda n, d: (100.0 * n / d) if d else 0.0
+          print(f"variant={os.environ['VARIANT']} round={os.environ['ROUND']} scanner={scanner_rows} node={node_rows} ({share(node_rows, scanner_rows):.2f}%)")
+          print(f"node_lookup_stacks={node_lookup} ({share(node_lookup, node_rows):.2f}% of node stacks)")
+          print(f"node_setter_stacks={node_setter} ({share(node_setter, node_rows):.2f}% of node stacks)")
+          print(f"node_find_stacks={node_find} ({share(node_find, node_rows):.2f}% of node stacks)")
+          print(f"node_split_stacks={node_split} ({share(node_split, node_rows):.2f}% of node stacks)")
+          PY
+          }
+
+          for round in 1 2 3; do
+            if (( round % 2 == 1 )); then
+              capture_variant baseline "$round" "$RUNNER_TEMP/r6.6-baseline" "$RUNNER_TEMP/r6.6-baseline-derived"
+              capture_variant candidate "$round" "$GITHUB_WORKSPACE" "$RUNNER_TEMP/r6.6-candidate-derived"
+            else
+              capture_variant candidate "$round" "$GITHUB_WORKSPACE" "$RUNNER_TEMP/r6.6-candidate-derived"
+              capture_variant baseline "$round" "$RUNNER_TEMP/r6.6-baseline" "$RUNNER_TEMP/r6.6-baseline-derived"
+            fi
+          done
+
+          RESULTS="$results" python3 - <<'PY'
+          import csv
+          import os
+          from collections import defaultdict
+
+          rows = list(csv.DictReader(open(os.environ['RESULTS'], encoding='utf-8'), delimiter='\t'))
+          grouped = defaultdict(list)
+          for row in rows:
+              grouped[row['variant']].append(row)
+
+          def total(items, key):
+              return sum(int(item[key]) for item in items)
+
+          for variant in ('baseline', 'candidate'):
+              items = grouped[variant]
+              scanner = total(items, 'scanner')
+              node = total(items, 'node')
+              lookup = total(items, 'lookup')
+              setter = total(items, 'setter')
+              find = total(items, 'find')
+              split = total(items, 'split')
+              pct = lambda n, d: (100.0 * n / d) if d else 0.0
+              captures = ', '.join(f"{row['node']}/{row['scanner']}" for row in items)
+              print(f"pooled[{variant}] scanner={scanner} node={node} ({pct(node, scanner):.2f}%) node_captures={captures}")
+              print(f"pooled[{variant}] lookup={lookup} ({pct(lookup, node):.2f}% node stacks) setter={setter} ({pct(setter, node):.2f}%) find={find} ({pct(find, node):.2f}%) split={split} ({pct(split, node):.2f}%)")
+          PY
+
+      - name: Run paired whole-test timing
+        shell: bash
+        run: |
+          set -euo pipefail
+          timing="$RUNNER_TEMP/r6.6-timing.tsv"
+          printf 'round\tvariant\tseconds\n' > "$timing"
+
+          run_test() {
+            local workdir="$1"
+            local derived="$2"
+            local iterations="$3"
+            (
+              cd "$workdir"
+              xcodebuild \
+                -project DiskUsage.xcodeproj \
+                -scheme DiskUsage \
+                -configuration Debug \
+                -destination 'platform=macOS' \
+                -derivedDataPath "$derived" \
+                -only-testing:DiskUsageTests/DiskScannerTests/testDiskScannerDisposableFilesystemSyntheticPerformance \
+                -test-iterations "$iterations" \
+                CODE_SIGNING_ALLOWED=NO \
+                test-without-building
+            ) >/dev/null
+          }
+
+          run_test "$RUNNER_TEMP/r6.6-baseline" "$RUNNER_TEMP/r6.6-baseline-derived" 1
+          run_test "$GITHUB_WORKSPACE" "$RUNNER_TEMP/r6.6-candidate-derived" 1
+
+          timed_variant() {
+            local round="$1"
+            local variant="$2"
+            local workdir="$3"
+            local derived="$4"
+            local started finished seconds
+            started="$(python3 -c 'import time; print(time.perf_counter())')"
+            (
+              cd "$workdir"
+              xcodebuild \
+                -project DiskUsage.xcodeproj \
+                -scheme DiskUsage \
+                -configuration Debug \
+                -destination 'platform=macOS' \
+                -derivedDataPath "$derived" \
+                -only-testing:DiskUsageTests/DiskScannerTests/testDiskScannerDisposableFilesystemSyntheticPerformance \
+                -test-iterations 3 \
+                CODE_SIGNING_ALLOWED=NO \
+                test-without-building >/dev/null
+            )
+            finished="$(python3 -c 'import time; print(time.perf_counter())')"
+            seconds="$(python3 -c 'import sys; print(f"{float(sys.argv[2]) - float(sys.argv[1]):.6f}")' "$started" "$finished")"
+            printf '%s\t%s\t%s\n' "$round" "$variant" "$seconds" >> "$timing"
+            echo "timing round=${round} variant=${variant} seconds=${seconds}"
+          }
+
+          for round in 1 2 3 4 5 6; do
+            if (( round % 2 == 1 )); then
+              timed_variant "$round" baseline "$RUNNER_TEMP/r6.6-baseline" "$RUNNER_TEMP/r6.6-baseline-derived"
+              timed_variant "$round" candidate "$GITHUB_WORKSPACE" "$RUNNER_TEMP/r6.6-candidate-derived"
+            else
+              timed_variant "$round" candidate "$GITHUB_WORKSPACE" "$RUNNER_TEMP/r6.6-candidate-derived"
+              timed_variant "$round" baseline "$RUNNER_TEMP/r6.6-baseline" "$RUNNER_TEMP/r6.6-baseline-derived"
+            fi
+          done
+
+          TIMING="$timing" python3 - <<'PY'
+          import csv
+          import os
+          import statistics
+
+          rows = list(csv.DictReader(open(os.environ['TIMING'], encoding='utf-8'), delimiter='\t'))
+          values = {'baseline': [], 'candidate': []}
+          pairs = {}
+          for row in rows:
+              value = float(row['seconds'])
+              values[row['variant']].append(value)
+              pairs.setdefault(int(row['round']), {})[row['variant']] = value
+
+          for variant in ('baseline', 'candidate'):
+              xs = values[variant]
+              print(f"timing[{variant}] mean={statistics.mean(xs):.3f}s median={statistics.median(xs):.3f}s values={','.join(f'{x:.3f}' for x in xs)}")
+
+          deltas = []
+          faster = 0
+          for round_number in sorted(pairs):
+              baseline = pairs[round_number]['baseline']
+              candidate = pairs[round_number]['candidate']
+              delta = candidate - baseline
+              deltas.append(delta)
+              faster += candidate < baseline
+              print(f"pair[{round_number}] baseline={baseline:.3f}s candidate={candidate:.3f}s delta={delta:+.3f}s ({100.0 * delta / baseline:+.2f}%)")
+
+          baseline_mean = statistics.mean(values['baseline'])
+          candidate_mean = statistics.mean(values['candidate'])
+          print(f"paired_candidate_faster={faster}/6 mean_delta={statistics.mean(deltas):+.3f}s aggregate_mean_change={100.0 * (candidate_mean - baseline_mean) / baseline_mean:+.2f}%")
+          PY
