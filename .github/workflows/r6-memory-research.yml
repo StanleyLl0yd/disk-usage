@@ -38,10 +38,11 @@ jobs:
           build-for-testing
 
       - name: Measure scanner footprint and retention
-        env:
-          R64_MEMORY_RESEARCH: '1'
         run: |
           set -euo pipefail
+          MARKER=/tmp/diskusage-r64-memory-research-enabled
+          touch "$MARKER"
+          trap 'rm -f "$MARKER"' EXIT
           xcodebuild \
             -project DiskUsage.xcodeproj \
             -scheme DiskUsage \
