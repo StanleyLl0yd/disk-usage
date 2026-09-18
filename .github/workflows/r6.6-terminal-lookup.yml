@@ -1,0 +1,422 @@
+name: R6.6 Terminal Lookup A/B
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/r6.6-terminal-lookup.yml'
+      - 'DiskScanner.swift'
+      - 'DiskUsageTests/DiskScannerTests.swift'
+
+permissions: {}
+
+concurrency:
+  group: r6-6-terminal-lookup-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  experiment:
+    runs-on: macos-26
+    timeout-minutes: 35
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout exact research head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Select Xcode 26.6
+        run: sudo xcode-select -s /Applications/Xcode_26.6.app/Contents/Developer
+
+      - name: Prepare exact baseline and record environment
+        shell: bash
+        env:
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
+          BASELINE_SHA: b6251549cf615bb65c61501cfc35bf23ac79c720
+        run: |
+          set -euo pipefail
+          candidate_head="$(git rev-parse HEAD)"
+          echo "candidate_head=${candidate_head}"
+          echo "baseline_head=${BASELINE_SHA}"
+          test "${candidate_head}" = "${EXPECTED_HEAD}"
+          git cat-file -e "${BASELINE_SHA}^{commit}"
+          git worktree add --detach "$RUNNER_TEMP/r66-baseline" "$BASELINE_SHA"
+          echo "BASELINE_DIR=$RUNNER_TEMP/r66-baseline" >> "$GITHUB_ENV"
+          echo "BASELINE_DERIVED=$RUNNER_TEMP/r66-baseline-derived" >> "$GITHUB_ENV"
+          echo "CANDIDATE_DERIVED=$RUNNER_TEMP/r66-candidate-derived" >> "$GITHUB_ENV"
+          sw_vers
+          xcodebuild -version
+          xcrun xctrace version
+
+      - name: Build both variants outside measured intervals
+        shell: bash
+        run: |
+          set -euo pipefail
+          build_variant() {
+            local root="$1"
+            local derived="$2"
+            (
+              cd "$root"
+              xcodebuild                 -project DiskUsage.xcodeproj                 -scheme DiskUsage                 -configuration Debug                 -destination 'platform=macOS'                 -derivedDataPath "$derived"                 CODE_SIGNING_ALLOWED=NO                 build-for-testing
+            )
+          }
+
+          build_variant "$BASELINE_DIR" "$BASELINE_DERIVED"
+          build_variant "$GITHUB_WORKSPACE" "$CANDIDATE_DERIVED"
+
+      - name: Verify focused candidate correctness
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild             -project DiskUsage.xcodeproj             -scheme DiskUsage             -configuration Debug             -destination 'platform=macOS'             -derivedDataPath "$CANDIDATE_DERIVED"             -only-testing:DiskUsageTests/DiskScannerTests/testTerminalFileChildrenPreserveUniquePathsAndAllocatedTotals             CODE_SIGNING_ALLOWED=NO             test-without-building
+
+      - name: Capture same-runner baseline and candidate profiles
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          wait_for_host_exit() {
+            for _ in {1..200}; do
+              if ! pgrep -x DiskUsage >/dev/null 2>&1; then
+                return 0
+              fi
+              sleep 0.1
+            done
+            echo "::error::A prior DiskUsage test host did not exit."
+            return 1
+          }
+
+          profile_variant() {
+            local variant="$1"
+            local root="$2"
+            local derived="$3"
+            local round="$4"
+            local test_log="$RUNNER_TEMP/r66-${variant}-${round}.test.log"
+            local trace="$RUNNER_TEMP/r66-${variant}-${round}.trace"
+            local xml="$RUNNER_TEMP/r66-${variant}-${round}.xml"
+
+            wait_for_host_exit
+            echo "=== profile variant=${variant} round=${round} ==="
+
+            (
+              cd "$root"
+              xcodebuild                 -project DiskUsage.xcodeproj                 -scheme DiskUsage                 -configuration Debug                 -destination 'platform=macOS'                 -derivedDataPath "$derived"                 -only-testing:DiskUsageTests/DiskScannerTests/testDiskScannerDisposableFilesystemSyntheticPerformance                 -test-iterations 8                 CODE_SIGNING_ALLOWED=NO                 test-without-building
+            ) >"$test_log" 2>&1 &
+            local test_pid=$!
+
+            local app_pid=""
+            for _ in {1..300}; do
+              app_pid="$(pgrep -x DiskUsage | tail -n 1 || true)"
+              if [[ -n "$app_pid" ]]; then
+                break
+              fi
+              if ! kill -0 "$test_pid" 2>/dev/null; then
+                break
+              fi
+              sleep 0.1
+            done
+
+            if [[ -z "$app_pid" ]]; then
+              echo "::error::DiskUsage test host did not become available for ${variant} round ${round}."
+              grep -E 'testDiskScannerDisposableFilesystemSyntheticPerformance|TEST (SUCCEEDED|FAILED)' "$test_log" || true
+              wait "$test_pid"
+              return 1
+            fi
+
+            local profile_status=0
+            xcrun xctrace record               --template 'Time Profiler'               --attach "$app_pid"               --time-limit 10s               --output "$trace"               --no-prompt || profile_status=$?
+
+            local test_status=0
+            wait "$test_pid" || test_status=$?
+            grep -E 'testDiskScannerDisposableFilesystemSyntheticPerformance.*passed|TEST (SUCCEEDED|FAILED)' "$test_log" || true
+
+            if [[ "$test_status" -ne 0 ]]; then
+              echo "::error::Scanner performance test failed for ${variant} round ${round} with status ${test_status}."
+              return "$test_status"
+            fi
+            if [[ "$profile_status" -ne 0 ]]; then
+              echo "::error::xctrace failed for ${variant} round ${round} with status ${profile_status}."
+              return "$profile_status"
+            fi
+
+            xcrun xctrace export               --input "$trace"               --xpath '/trace-toc/run[@number="1"]/data/table[@schema="time-profile"]'               --output "$xml"
+          }
+
+          for round in 1 2 3; do
+            if (( round % 2 == 1 )); then
+              profile_variant baseline "$BASELINE_DIR" "$BASELINE_DERIVED" "$round"
+              profile_variant candidate "$GITHUB_WORKSPACE" "$CANDIDATE_DERIVED" "$round"
+            else
+              profile_variant candidate "$GITHUB_WORKSPACE" "$CANDIDATE_DERIVED" "$round"
+              profile_variant baseline "$BASELINE_DIR" "$BASELINE_DERIVED" "$round"
+            fi
+          done
+
+      - name: Summarize profile attribution and targeted dictionary frames
+        shell: bash
+        run: |
+          set -euo pipefail
+          PROFILE_ROOT="$RUNNER_TEMP" python3 - <<'PY'
+          import collections
+          import os
+          import re
+          import xml.etree.ElementTree as ET
+
+          phase_patterns = {
+              "filesystem_enumeration": re.compile(
+                  r"DirectoryEnumerator|NSDirectoryEnumerator|enumerator|nextObject", re.I
+              ),
+              "resource_values": re.compile(
+                  r"resourceValues|getResourceValue|NSURL.*resource|CFURL.*resource", re.I
+              ),
+              "path_processing": re.compile(
+                  r"standardizedFileURL|standardizedURL|deletingLastPathComponent|lastPathComponent|"
+                  r"pathComponents|NSString.*lastPath|CFURL.*Path", re.I
+              ),
+              "node_add_file": re.compile(r"Node\.addFile", re.I),
+              "folder_usage_conversion": re.compile(r"Node\.toFolderUsage", re.I),
+          }
+          scanner_anchor = re.compile(r"DiskScanner\.scan|Node\.(addFile|toFolderUsage)")
+          lookup_pattern = re.compile(r"Dictionary\._Variant\.lookup")
+          raw_find_pattern = re.compile(r"__RawDictionaryStorage\.find")
+          setter_pattern = re.compile(
+              r"Dictionary\.subscript\.setter|Dictionary\._Variant\.setValue|"
+              r"_NativeDictionary\.setValue"
+          )
+
+          pooled = {
+              variant: {
+                  "scanner": 0,
+                  "nearest": collections.Counter(),
+                  "lookup_rows": 0,
+                  "raw_find_rows": 0,
+                  "setter_rows": 0,
+                  "lookup_frames": 0,
+                  "raw_find_frames": 0,
+                  "setter_frames": 0,
+              }
+              for variant in ("baseline", "candidate")
+          }
+
+          def analyze(path):
+              root = ET.parse(path).getroot()
+              by_id = {element.get("id"): element for element in root.iter() if element.get("id")}
+
+              def resolved(element):
+                  ref = element.get("ref")
+                  return by_id.get(ref, element) if ref else element
+
+              def frame_name(frame):
+                  target = resolved(frame)
+                  return target.get("name") or target.get("label") or (target.text or "").strip()
+
+              nearest = collections.Counter()
+              node_frames = collections.Counter()
+              scanner_rows = 0
+              lookup_rows = raw_find_rows = setter_rows = 0
+              lookup_frames = raw_find_frames = setter_frames = 0
+
+              for row in root.iter("row"):
+                  names = [name for name in (frame_name(frame) for frame in row.iter("frame")) if name]
+                  if not names or not any(scanner_anchor.search(name) for name in names):
+                      continue
+                  scanner_rows += 1
+
+                  nearest_phase = None
+                  for name in names:
+                      for phase, pattern in phase_patterns.items():
+                          if pattern.search(name):
+                              nearest_phase = phase
+                              break
+                      if nearest_phase is not None:
+                          break
+
+                  assigned = nearest_phase or "unclassified_scanner_stack"
+                  nearest[assigned] += 1
+
+                  if assigned == "node_add_file":
+                      node_frames.update(names)
+                      lookup_matches = sum(bool(lookup_pattern.search(name)) for name in names)
+                      raw_find_matches = sum(bool(raw_find_pattern.search(name)) for name in names)
+                      setter_matches = sum(bool(setter_pattern.search(name)) for name in names)
+                      lookup_rows += int(lookup_matches > 0)
+                      raw_find_rows += int(raw_find_matches > 0)
+                      setter_rows += int(setter_matches > 0)
+                      lookup_frames += lookup_matches
+                      raw_find_frames += raw_find_matches
+                      setter_frames += setter_matches
+
+              return {
+                  "scanner": scanner_rows,
+                  "nearest": nearest,
+                  "node_frames": node_frames,
+                  "lookup_rows": lookup_rows,
+                  "raw_find_rows": raw_find_rows,
+                  "setter_rows": setter_rows,
+                  "lookup_frames": lookup_frames,
+                  "raw_find_frames": raw_find_frames,
+                  "setter_frames": setter_frames,
+              }
+
+          for variant in ("baseline", "candidate"):
+              for round_number in (1, 2, 3):
+                  path = os.path.join(
+                      os.environ["PROFILE_ROOT"],
+                      f"r66-{variant}-{round_number}.xml",
+                  )
+                  result = analyze(path)
+                  scanner = result["scanner"]
+                  node = result["nearest"]["node_add_file"]
+                  share = 100.0 * node / scanner if scanner else 0.0
+                  print(
+                      f"profile[{variant}][{round_number}] "
+                      f"scanner={scanner} node_add_file={node} ({share:.2f}%) "
+                      f"lookup_rows={result['lookup_rows']} raw_find_rows={result['raw_find_rows']} "
+                      f"setter_rows={result['setter_rows']}"
+                  )
+                  print(f"top_node_frames[{variant}][{round_number}]:")
+                  for name, count in result["node_frames"].most_common(15):
+                      print(f"  {count:6d}  {name}")
+
+                  aggregate = pooled[variant]
+                  aggregate["scanner"] += scanner
+                  aggregate["nearest"].update(result["nearest"])
+                  for key in (
+                      "lookup_rows", "raw_find_rows", "setter_rows",
+                      "lookup_frames", "raw_find_frames", "setter_frames",
+                  ):
+                      aggregate[key] += result[key]
+
+          print("pooled_profile_summary:")
+          for variant in ("baseline", "candidate"):
+              aggregate = pooled[variant]
+              scanner = aggregate["scanner"]
+              node = aggregate["nearest"]["node_add_file"]
+              node_share = 100.0 * node / scanner if scanner else 0.0
+              print(
+                  f"  {variant}: scanner={scanner} node_add_file={node} ({node_share:.2f}%) "
+                  f"lookup_rows={aggregate['lookup_rows']} lookup_frames={aggregate['lookup_frames']} "
+                  f"raw_find_rows={aggregate['raw_find_rows']} raw_find_frames={aggregate['raw_find_frames']} "
+                  f"setter_rows={aggregate['setter_rows']} setter_frames={aggregate['setter_frames']}"
+              )
+              for phase in list(phase_patterns) + ["unclassified_scanner_stack"]:
+                  count = aggregate["nearest"][phase]
+                  share = 100.0 * count / scanner if scanner else 0.0
+                  print(f"    {phase}={count} ({share:.2f}%)")
+
+          if not pooled["baseline"]["scanner"] or not pooled["candidate"]["scanner"]:
+              raise SystemExit("Missing symbolized scanner stacks for one or both variants")
+          PY
+
+      - name: Run warmed alternating paired whole-test timing
+        shell: bash
+        run: |
+          set -euo pipefail
+          timing_file="$RUNNER_TEMP/r66-timing.tsv"
+          : > "$timing_file"
+
+          wait_for_host_exit() {
+            for _ in {1..200}; do
+              if ! pgrep -x DiskUsage >/dev/null 2>&1; then
+                return 0
+              fi
+              sleep 0.1
+            done
+            echo "::error::A prior DiskUsage test host did not exit."
+            return 1
+          }
+
+          run_test() {
+            local root="$1"
+            local derived="$2"
+            (
+              cd "$root"
+              xcodebuild                 -project DiskUsage.xcodeproj                 -scheme DiskUsage                 -configuration Debug                 -destination 'platform=macOS'                 -derivedDataPath "$derived"                 -only-testing:DiskUsageTests/DiskScannerTests/testDiskScannerDisposableFilesystemSyntheticPerformance                 -test-iterations 3                 CODE_SIGNING_ALLOWED=NO                 test-without-building
+            )
+          }
+
+          echo "Warming baseline..."
+          run_test "$BASELINE_DIR" "$BASELINE_DERIVED" >"$RUNNER_TEMP/r66-warm-baseline.log" 2>&1
+          echo "Warming candidate..."
+          run_test "$GITHUB_WORKSPACE" "$CANDIDATE_DERIVED" >"$RUNNER_TEMP/r66-warm-candidate.log" 2>&1
+
+          timed_variant() {
+            local variant="$1"
+            local root="$2"
+            local derived="$3"
+            local round="$4"
+            local log="$RUNNER_TEMP/r66-timing-${variant}-${round}.log"
+
+            wait_for_host_exit
+            local start
+            local end
+            start="$(python3 -c 'import time; print(time.perf_counter())')"
+            run_test "$root" "$derived" >"$log" 2>&1
+            end="$(python3 -c 'import time; print(time.perf_counter())')"
+            local elapsed
+            elapsed="$(python3 - "$start" "$end" <<'PY'
+          import sys
+          print(f"{float(sys.argv[2]) - float(sys.argv[1]):.6f}")
+          PY
+          )"
+            echo -e "${round}\t${variant}\t${elapsed}" | tee -a "$timing_file"
+            grep -E 'testDiskScannerDisposableFilesystemSyntheticPerformance.*passed|TEST (SUCCEEDED|FAILED)' "$log" || true
+          }
+
+          for round in 1 2 3 4 5 6; do
+            if (( round % 2 == 1 )); then
+              timed_variant baseline "$BASELINE_DIR" "$BASELINE_DERIVED" "$round"
+              timed_variant candidate "$GITHUB_WORKSPACE" "$CANDIDATE_DERIVED" "$round"
+            else
+              timed_variant candidate "$GITHUB_WORKSPACE" "$CANDIDATE_DERIVED" "$round"
+              timed_variant baseline "$BASELINE_DIR" "$BASELINE_DERIVED" "$round"
+            fi
+          done
+
+          TIMING_FILE="$timing_file" python3 - <<'PY'
+          import os
+          import statistics
+
+          values = {"baseline": {}, "candidate": {}}
+          with open(os.environ["TIMING_FILE"], encoding="utf-8") as handle:
+              for line in handle:
+                  round_text, variant, elapsed_text = line.rstrip().split("\t")
+                  values[variant][int(round_text)] = float(elapsed_text)
+
+          baseline = [values["baseline"][round_number] for round_number in range(1, 7)]
+          candidate = [values["candidate"][round_number] for round_number in range(1, 7)]
+          deltas = [candidate[i] - baseline[i] for i in range(6)]
+          percentages = [
+              100.0 * (candidate[i] - baseline[i]) / baseline[i]
+              for i in range(6)
+          ]
+
+          print("paired_timing_summary:")
+          for index, round_number in enumerate(range(1, 7)):
+              print(
+                  f"  round={round_number} baseline={baseline[index]:.3f}s "
+                  f"candidate={candidate[index]:.3f}s delta={deltas[index]:+.3f}s "
+                  f"delta_pct={percentages[index]:+.2f}%"
+              )
+
+          baseline_mean = statistics.mean(baseline)
+          candidate_mean = statistics.mean(candidate)
+          aggregate_pct = 100.0 * (candidate_mean - baseline_mean) / baseline_mean
+          print(f"baseline_mean={baseline_mean:.3f}s median={statistics.median(baseline):.3f}s")
+          print(f"candidate_mean={candidate_mean:.3f}s median={statistics.median(candidate):.3f}s")
+          print(f"candidate_faster_pairs={sum(delta < 0 for delta in deltas)}/6")
+          print(f"mean_paired_delta={statistics.mean(deltas):+.3f}s")
+          print(f"aggregate_mean_difference={aggregate_pct:+.2f}%")
+          PY
+
+      - name: Confirm research artifacts remain ephemeral
+        shell: bash
+        run: |
+          set -euo pipefail
+          git status --short
+          test -z "$(git status --short)"
+          echo "Raw traces, XML, logs, worktrees, and timing data remain under RUNNER_TEMP only."
