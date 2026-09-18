@@ -158,7 +158,9 @@ final class DiskScannerTests: XCTestCase {
     }
 
     func testR64ScannerMemoryResearch() async throws {
-        guard ProcessInfo.processInfo.environment["R64_MEMORY_RESEARCH"] == "1" else {
+        guard FileManager.default.fileExists(
+            atPath: "/tmp/diskusage-r64-memory-research-enabled"
+        ) else {
             throw XCTSkip("R6.4 memory research runs only in the temporary profiling workflow")
         }
 
