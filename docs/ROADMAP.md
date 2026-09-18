@@ -441,6 +441,20 @@ R6.4 remains measurement-only and does not change production scanner behavior.
 
 Full methodology, runner-local measurements, limitations, and allocation evidence are recorded in [`docs/PERFORMANCE.md`](PERFORMANCE.md). Final documentation PR #95 merged as exact `main` `8cf883d28f1c4feb6d701ac345e22417c169b49e`; its merged tree is content-equivalent to fully green PR head `26ce54a0e4b5d18f8d2454cbc80752ffdb562693`, with successful macOS CI, Actions Policy, Gitleaks, Dependency Review, CodeQL Swift, and CodeQL Actions gates and no review threads. R6.4 is therefore complete. The next R6 slice must be selected from current measured evidence; absent a memory-retention problem, the safest next step is measurement-only post-R6.3 CPU re-attribution before proposing another runtime optimization.
 
+
+### R6.5 Re-attribute scanner CPU after R6.3 — MEASUREMENT COMPLETE / PENDING EXIT VERIFICATION
+
+R6.5 re-profiled the unchanged post-R6.3 production scanner before selecting another optimization.
+
+- research draft PR #98 was measurement-only and was closed without merge;
+- two successful three-capture Time Profiler run sets agreed that `Node.addFile` is now the largest labeled scanner bucket after R6.3, with path processing second;
+- the final diagnostic set pooled 8,527 scanner stacks: `Node.addFile` 27.20%, path processing 25.03%, resource-value reads 16.86%, `Node.toFolderUsage` 16.04%, enumeration 4.48%, and unclassified scanner work 10.39%;
+- representative nearest-`Node.addFile` frames point to dictionary lookup/set, path-component splitting/substring handling, and string hashing/comparison/Unicode normalization;
+- these are sampled nearest-labeled stack shares, not machine-independent wall-clock CPU percentages;
+- no production runtime behavior changed, and raw profiling artifacts/workflow code remain outside the final branch.
+
+The measured next candidate is a **narrow `Node.addFile` component-parsing/dictionary-lookup experiment** with correctness coverage and same-runner before/after evidence. This result does not justify a broader internal-tree redesign, cache/index, incremental-result architecture, or memory-driven optimization. Mark R6.5 COMPLETE only after the final documentation PR and merged exact-main applicable gates succeed.
+
 Then continue profiling representative large synthetic or disposable filesystem trees and identify actual bottlenecks in:
 
 - enumeration;
@@ -516,4 +530,4 @@ These are not assumed future stages.
 
 **R5 — Core productivity workflow is complete.** R5.1–R5.5 are implemented and verified, the full repository-wide exit review passed, final exact-main verification is green, and release-tag immutability is enforced for `v*` while the published `v0.1.0-alpha.1` remains bound to its verified source commit.
 
-**R6 — Large-scale resilience and measured optimization is in progress.** R6.1 baseline measurement, R6.2 CPU attribution, R6.3 narrow path-standardization optimization, and R6.4 scanner allocation/retention measurement are complete. The largest tested R6.4 workload is 32,768 files, repeated scan/cancel/rescan footprint reached a bounded high-water plateau, and no memory-driven architecture change is justified. The next slice should re-attribute scanner CPU on the current post-R6.3 code before selecting any further runtime optimization.
+**R6 — Large-scale resilience and measured optimization is in progress.** R6.1–R6.4 are complete. R6.5 post-R6.3 CPU re-attribution is measurement-complete and pending final documentation/exact-main verification: two independent three-capture run sets now place `Node.addFile` first and path processing second, with the refined run pooling 27.20% vs 25.03%. The measured next candidate, after R6.5 exit verification, is a narrow `Node.addFile` component-parsing/dictionary-lookup experiment; no broader tree-architecture or memory-driven redesign is justified.
