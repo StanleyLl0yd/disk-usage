@@ -1,22 +1,23 @@
-name: R6 Allocation Retention Probe
+name: R6 Allocation Retention Measurement
 
 on:
   push:
     branches: ['r6/allocation-retention']
     paths:
       - '.github/workflows/r6-allocation-retention-probe.yml'
+      - 'DiskUsageTests/DiskScannerTests.swift'
   workflow_dispatch:
 
 permissions: {}
 
 concurrency:
-  group: r6-allocation-retention-probe-${{ github.ref }}
+  group: r6-allocation-retention-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  probe:
+  measure:
     runs-on: macos-26
-    timeout-minutes: 30
+    timeout-minutes: 35
     permissions:
       contents: read
 
@@ -29,17 +30,16 @@ jobs:
       - name: Select Xcode 26.6
         run: sudo xcode-select -s /Applications/Xcode_26.6.app/Contents/Developer
 
-      - name: Report runner and Instruments templates
+      - name: Report runner and toolchain
         shell: bash
         run: |
           set -euo pipefail
           sw_vers
           xcodebuild -version
           uname -m
-          xcrun xctrace list templates
           xcrun xctrace list templates | grep -F 'Allocations'
 
-      - name: Build scanner test bundle outside probe interval
+      - name: Build scanner test bundle outside measurement
         shell: bash
         run: |
           set -euo pipefail
@@ -48,25 +48,43 @@ jobs:
             -scheme DiskUsage \
             -configuration Debug \
             -destination 'platform=macOS' \
-            -derivedDataPath "$RUNNER_TEMP/R64ProbeDerivedData" \
+            -derivedDataPath "$RUNNER_TEMP/R64DerivedData" \
             CODE_SIGNING_ALLOWED=NO \
             build-for-testing
 
-      - name: Capture one ephemeral Allocations trace and inspect schemas
+      - name: Run XCTest memory metric baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          log="$RUNNER_TEMP/r64-memory-metric.log"
+          xcodebuild \
+            -project DiskUsage.xcodeproj \
+            -scheme DiskUsage \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            -derivedDataPath "$RUNNER_TEMP/R64DerivedData" \
+            -only-testing:DiskUsageTests/DiskScannerTests/testDiskScannerDisposableFilesystemSyntheticMemoryPerformance \
+            CODE_SIGNING_ALLOWED=NO \
+            test-without-building 2>&1 | tee "$log"
+
+          echo '=== memory metric lines ==='
+          grep -Ei 'memory|XCTMemoryMetric|Physical Memory|kB|MB' "$log" | tail -n 80 || true
+
+      - name: Sample repeated-scan test-host RSS without profiler attachment
         shell: bash
         run: |
           set -euo pipefail
 
-          test_log="$RUNNER_TEMP/r64-probe-test.log"
-          trace="$RUNNER_TEMP/r64-probe.trace"
-          toc="$RUNNER_TEMP/r64-probe-toc.xml"
+          test_log="$RUNNER_TEMP/r64-rss-test.log"
+          samples="$RUNNER_TEMP/r64-rss.tsv"
+          : > "$samples"
 
           xcodebuild \
             -project DiskUsage.xcodeproj \
             -scheme DiskUsage \
             -configuration Debug \
             -destination 'platform=macOS' \
-            -derivedDataPath "$RUNNER_TEMP/R64ProbeDerivedData" \
+            -derivedDataPath "$RUNNER_TEMP/R64DerivedData" \
             -only-testing:DiskUsageTests/DiskScannerTests/testDiskScannerDisposableFilesystemSyntheticPerformance \
             -test-iterations 8 \
             CODE_SIGNING_ALLOWED=NO \
@@ -92,60 +110,59 @@ jobs:
             exit 1
           fi
 
-          echo "attached_pid=$app_pid"
-          profile_status=0
-          xcrun xctrace record \
-            --template 'Allocations' \
-            --attach "$app_pid" \
-            --time-limit 10s \
-            --output "$trace" \
-            --no-prompt || profile_status=$?
+          echo "sampled_pid=$app_pid"
+          index=0
+          while kill -0 "$test_pid" 2>/dev/null; do
+            rss="$(ps -o rss= -p "$app_pid" 2>/dev/null | tr -d ' ' || true)"
+            if [[ "$rss" =~ ^[0-9]+$ ]]; then
+              printf '%d\t%s\n' "$index" "$rss" >> "$samples"
+              index=$((index + 1))
+            fi
+            sleep 0.25
+          done
 
           test_status=0
           wait "$test_pid" || test_status=$?
-
           grep -E 'testDiskScannerDisposableFilesystemSyntheticPerformance.*passed|TEST (SUCCEEDED|FAILED)' "$test_log" || true
-
           if [[ "$test_status" -ne 0 ]]; then
-            echo "::error::Scanner performance test failed with status $test_status."
+            echo "::error::Repeated scanner performance test failed with status $test_status."
             exit "$test_status"
           fi
-          if [[ "$profile_status" -ne 0 ]]; then
-            echo "::error::Allocations xctrace attach failed with status $profile_status."
-            exit "$profile_status"
-          fi
 
-          xcrun xctrace export --input "$trace" --toc --output "$toc"
-
-          TOC="$toc" python3 - <<'PY'
+          SAMPLES="$samples" python3 - <<'PY'
           import os
-          import re
-          import xml.etree.ElementTree as ET
+          import statistics
 
-          root = ET.parse(os.environ["TOC"]).getroot()
-          schemas = []
-          for table in root.iter("table"):
-              schema = table.get("schema")
-              if schema:
-                  schemas.append(schema)
+          values = []
+          with open(os.environ["SAMPLES"], encoding="utf-8") as handle:
+              for line in handle:
+                  _, rss = line.rstrip("\n").split("\t")
+                  values.append(int(rss))
 
-          unique = sorted(set(schemas))
-          print("=== trace table schemas ===")
-          for schema in unique:
-              print(schema)
+          if len(values) < 8:
+              raise SystemExit(f"Too few RSS samples: {len(values)}")
 
-          memoryish = [s for s in unique if re.search(r"alloc|heap|memory|vm|life|retain", s, re.I)]
-          print("=== allocation/memory-like schemas ===")
-          for schema in memoryish:
-              print(schema)
+          ordered = sorted(values)
+          p95 = ordered[min(len(ordered) - 1, int(round(0.95 * (len(ordered) - 1))))]
+          q = max(1, len(values) // 4)
+          first = values[:q]
+          last = values[-q:]
 
-          if not memoryish:
-              print("no allocation/memory-like schemas matched by name; inspect full schema list above")
+          print("=== repeated-scan test-host RSS ===")
+          print(f"samples={len(values)}")
+          print(f"rss_kib_min={min(values)}")
+          print(f"rss_kib_median={statistics.median(values):.1f}")
+          print(f"rss_kib_p95={p95}")
+          print(f"rss_kib_max={max(values)}")
+          print(f"rss_kib_final={values[-1]}")
+          print(f"first_quartile_median_kib={statistics.median(first):.1f}")
+          print(f"last_quartile_median_kib={statistics.median(last):.1f}")
+          print(f"quartile_median_delta_kib={statistics.median(last)-statistics.median(first):+.1f}")
           PY
 
-      - name: Confirm probe evidence stays ephemeral
+      - name: Confirm research evidence stays ephemeral
         if: always()
         shell: bash
         run: |
           set -euo pipefail
-          echo 'No trace/XML artifact is uploaded or committed; probe files remain under RUNNER_TEMP.'
+          echo 'No trace, XML, RSS sample, or test-log artifact is uploaded or committed; all research files remain under RUNNER_TEMP.'
