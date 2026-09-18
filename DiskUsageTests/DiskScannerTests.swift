@@ -155,8 +155,10 @@ final class DiskScannerTests: XCTestCase {
 
         XCTAssertEqual(publishedFiles.count, files.count)
         XCTAssertEqual(Set(publishedFiles.map(\.path)), expectedPaths)
-        for path in expectedPaths {
+        for (file, allocatedSize) in zip(files, allocatedSizes) {
+            let path = file.standardizedFileURL.path
             XCTAssertEqual(nodes.filter { $0.path == path }.count, 1)
+            XCTAssertEqual(nodes.first { $0.path == path && $0.isFile }?.size, allocatedSize)
         }
 
         let expectedTotal = allocatedSizes.reduce(0, +)
