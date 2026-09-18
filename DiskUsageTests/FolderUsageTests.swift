@@ -743,6 +743,35 @@ final class FolderUsageTests: XCTestCase {
         }
     }
 
+    func testR67BroadSearchProfilerResearch() throws {
+        let source = makeR67TreeFixture(rootCount: 220)
+        let expectedMatches = 128_480
+        XCTAssertEqual(nodeCount(source), 128_700)
+
+        let warm = try XCTUnwrap(
+            SearchPresentationPreprocessor.matches(
+                in: source,
+                query: "node-",
+                sortedBy: .sizeDesc
+            )
+        )
+        XCTAssertEqual(warm.count, expectedMatches)
+
+        var observedMatches = 0
+        for _ in 0..<12 {
+            let matches = try XCTUnwrap(
+                SearchPresentationPreprocessor.matches(
+                    in: source,
+                    query: "node-",
+                    sortedBy: .sizeDesc
+                )
+            )
+            observedMatches += matches.count
+        }
+
+        XCTAssertEqual(observedMatches, expectedMatches * 12)
+    }
+
     private func reportR67Timing<Result>(
         label: String,
         size: Int,
