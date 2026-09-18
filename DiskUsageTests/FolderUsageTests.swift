@@ -595,4 +595,293 @@ final class FolderUsageTests: XCTestCase {
             partialResult + 1 + nodeCount(item.children)
         }
     }
+
+    func testR67LargeSnapshotPresentationScalingResearch() throws {
+        let treeRootCounts = [28, 110, 220]
+        for rootCount in treeRootCounts {
+            let source = makeR67TreeFixture(rootCount: rootCount)
+            let totalNodes = rootCount * 585
+            XCTAssertEqual(nodeCount(source), totalNodes)
+
+            do {
+                let prepared = try XCTUnwrap(
+                    TreePresentationPreprocessor.sorted(source, by: .sizeDesc)
+                )
+                XCTAssertEqual(nodeCount(prepared), totalNodes)
+            }
+
+            reportR67Timing(
+                label: "tree",
+                size: totalNodes,
+                resultCount: { $0?.count ?? -1 }
+            ) {
+                TreePresentationPreprocessor.sorted(source, by: .sizeDesc)
+            }
+
+            let selectiveQuery = source[rootCount - 1]
+                .children[7]
+                .children[7]
+                .children[7]
+                .path
+            do {
+                let matches = try XCTUnwrap(
+                    SearchPresentationPreprocessor.matches(
+                        in: source,
+                        query: selectiveQuery,
+                        sortedBy: .sizeDesc
+                    )
+                )
+                XCTAssertEqual(matches.count, 1)
+                XCTAssertEqual(matches.first?.path, selectiveQuery)
+            }
+
+            reportR67Timing(
+                label: "search-selective",
+                size: totalNodes,
+                matches: 1,
+                resultCount: { $0?.count ?? -1 }
+            ) {
+                SearchPresentationPreprocessor.matches(
+                    in: source,
+                    query: selectiveQuery,
+                    sortedBy: .sizeDesc
+                )
+            }
+
+            let broadExpected = totalNodes - rootCount
+            do {
+                let matches = try XCTUnwrap(
+                    SearchPresentationPreprocessor.matches(
+                        in: source,
+                        query: "node-",
+                        sortedBy: .sizeDesc
+                    )
+                )
+                XCTAssertEqual(matches.count, broadExpected)
+            }
+
+            reportR67Timing(
+                label: "search-broad",
+                size: totalNodes,
+                matches: broadExpected,
+                resultCount: { $0?.count ?? -1 }
+            ) {
+                SearchPresentationPreprocessor.matches(
+                    in: source,
+                    query: "node-",
+                    sortedBy: .sizeDesc
+                )
+            }
+        }
+
+        for folderCount in [16, 64, 128] {
+            let source = makeR67LargestFilesFixture(folderCount: folderCount)
+            let totalNodes = folderCount * 1_001
+            let totalFiles = folderCount * 1_000
+            XCTAssertEqual(nodeCount(source), totalNodes)
+
+            do {
+                let largest = try XCTUnwrap(
+                    LargestFilesPresentationPreprocessor.largestFiles(in: source)
+                )
+                XCTAssertEqual(largest.count, 100)
+                XCTAssertTrue(largest.allSatisfy(\.isFile))
+                XCTAssertTrue(
+                    zip(largest, largest.dropFirst()).allSatisfy { lhs, rhs in
+                        lhs.size > rhs.size || (lhs.size == rhs.size && lhs.path < rhs.path)
+                    }
+                )
+            }
+
+            reportR67Timing(
+                label: "largest-files",
+                size: totalNodes,
+                files: totalFiles,
+                resultCount: { $0?.count ?? -1 }
+            ) {
+                LargestFilesPresentationPreprocessor.largestFiles(in: source)
+            }
+        }
+
+        for leafCount in [256, 1_024, 2_048] {
+            let source = makeR67SunburstFixture(leafCountPerGroup: leafCount)
+            let totalNodes = 84 + 64 * leafCount
+            let totalSize = Int64(64 * leafCount)
+            XCTAssertEqual(nodeCount(source), totalNodes)
+
+            do {
+                let presentation = try XCTUnwrap(
+                    SunburstPresentationPreprocessor.presentation(
+                        for: source,
+                        totalSize: totalSize,
+                        levels: 4
+                    )
+                )
+                XCTAssertEqual(presentation.totalSize, totalSize)
+                XCTAssertEqual(presentation.segments.count, 84)
+                XCTAssertEqual(presentation.aggregates.count, 64)
+                XCTAssertEqual(presentation.visualSegmentCount, 148)
+                XCTAssertTrue(
+                    presentation.aggregates.allSatisfy { $0.itemCount == leafCount }
+                )
+                let allIDs = presentation.segments.map(\.id)
+                    + presentation.aggregates.map(\.id)
+                XCTAssertEqual(Set(allIDs).count, presentation.visualSegmentCount)
+            }
+
+            reportR67Timing(
+                label: "sunburst",
+                size: totalNodes,
+                resultCount: { $0?.visualSegmentCount ?? -1 }
+            ) {
+                SunburstPresentationPreprocessor.presentation(
+                    for: source,
+                    totalSize: totalSize,
+                    levels: 4
+                )
+            }
+        }
+    }
+
+    private func reportR67Timing<Result>(
+        label: String,
+        size: Int,
+        matches: Int? = nil,
+        files: Int? = nil,
+        iterations: Int = 5,
+        resultCount: (Result) -> Int,
+        operation: () -> Result
+    ) {
+        do {
+            let warm = operation()
+            XCTAssertGreaterThanOrEqual(resultCount(warm), 0)
+        }
+
+        let clock = ContinuousClock()
+        var samples: [Double] = []
+        samples.reserveCapacity(iterations)
+
+        for _ in 0..<iterations {
+            let start = clock.now
+            let result = operation()
+            let elapsed = start.duration(to: clock.now)
+            XCTAssertGreaterThanOrEqual(resultCount(result), 0)
+            samples.append(r67Seconds(elapsed))
+        }
+
+        let ordered = samples.sorted()
+        let mean = samples.reduce(0, +) / Double(samples.count)
+        let median = ordered[ordered.count / 2]
+        let sampleText = samples.map { String(format: "%.6f", $0) }.joined(separator: ",")
+        let matchesText = matches.map(String.init) ?? "-"
+        let filesText = files.map(String.init) ?? "-"
+
+        print(
+            "R67_RESULT label=\(label) size=\(size) matches=\(matchesText) "
+                + "files=\(filesText) samples=\(sampleText) "
+                + "mean=\(String(format: "%.6f", mean)) "
+                + "median=\(String(format: "%.6f", median))"
+        )
+    }
+
+    private func r67Seconds(_ duration: Duration) -> Double {
+        let components = duration.components
+        return Double(components.seconds)
+            + Double(components.attoseconds) / 1_000_000_000_000_000_000
+    }
+
+    private func makeR67TreeFixture(rootCount: Int) -> [FolderUsage] {
+        (0..<rootCount).map { rootIndex in
+            makeR67TreeNode(
+                path: String(format: "/r67/tree/root-%03d", rootIndex),
+                remainingDepth: 3,
+                ordinal: rootIndex + 1
+            )
+        }
+    }
+
+    private func makeR67TreeNode(
+        path: String,
+        remainingDepth: Int,
+        ordinal: Int
+    ) -> FolderUsage {
+        guard remainingDepth > 0 else {
+            return FolderUsage(
+                path: path,
+                size: Int64((ordinal % 997) + 1),
+                isFile: true
+            )
+        }
+
+        let children = (0..<8).map { childIndex in
+            makeR67TreeNode(
+                path: "\(path)/node-\(childIndex)",
+                remainingDepth: remainingDepth - 1,
+                ordinal: ordinal * 8 + childIndex + 1
+            )
+        }
+
+        return FolderUsage(
+            path: path,
+            size: children.reduce(Int64(0)) { $0 + $1.size },
+            children: children
+        )
+    }
+
+    private func makeR67LargestFilesFixture(folderCount: Int) -> [FolderUsage] {
+        (0..<folderCount).map { folderIndex in
+            let folderPath = String(format: "/r67/largest/folder-%03d", folderIndex)
+            let files = (0..<1_000).map { fileIndex in
+                let ordinal = folderIndex * 1_000 + fileIndex
+                return FolderUsage(
+                    path: String(format: "%@/file-%04d.dat", folderPath, fileIndex),
+                    size: Int64((ordinal % 100_003) + 1),
+                    isFile: true
+                )
+            }
+
+            return FolderUsage(
+                path: folderPath,
+                size: files.reduce(Int64(0)) { $0 + $1.size },
+                children: files
+            )
+        }
+    }
+
+    private func makeR67SunburstFixture(
+        leafCountPerGroup: Int
+    ) -> [FolderUsage] {
+        (0..<4).map { rootIndex in
+            let rootPath = "/r67/sunburst/root-\(rootIndex)"
+            let children = (0..<4).map { childIndex in
+                let childPath = "\(rootPath)/child-\(childIndex)"
+                let groups = (0..<4).map { groupIndex in
+                    let groupPath = "\(childPath)/group-\(groupIndex)"
+                    let leaves = (0..<leafCountPerGroup).map { leafIndex in
+                        FolderUsage(
+                            path: "\(groupPath)/leaf-\(leafIndex)",
+                            size: 1,
+                            isFile: true
+                        )
+                    }
+                    return FolderUsage(
+                        path: groupPath,
+                        size: Int64(leafCountPerGroup),
+                        children: leaves
+                    )
+                }
+                return FolderUsage(
+                    path: childPath,
+                    size: Int64(4 * leafCountPerGroup),
+                    children: groups
+                )
+            }
+            return FolderUsage(
+                path: rootPath,
+                size: Int64(16 * leafCountPerGroup),
+                children: children
+            )
+        }
+    }
+
 }
