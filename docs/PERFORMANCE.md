@@ -221,6 +221,39 @@ These allocation totals cover the instrumented test-host lifecycle and include F
 
 The evidence shows substantial temporary URL/path/string/resource-value allocation churn, but the retained process footprint for the tested scanner lifecycle is bounded and reaches a rapid high-water plateau. R6.4 therefore does not justify a `Node.addFile` redesign, a cache or index, incremental-result architecture, or another memory-driven runtime change. Current memory behavior is accepted for the largest tested 32,768-file disposable workload. Any subsequent optimization must be selected from fresh measured hotspot evidence rather than from a presumed retention problem.
 
+
+### R6.5 post-R6.3 scanner CPU re-attribution
+
+R6.5 re-profiled the unchanged post-R6.3 production scanner before selecting any further runtime optimization. The production baseline was exact `main` commit `ecaefa8724022603b9536fccbd2246029b3f9867`. The temporary profiling workflow lived only on research draft PR #98, changed no production source or test code, and was closed without merge after evidence collection.
+
+The final diagnostic run used the same R6.2/R6.3 nearest-labeled-phase classifier and the same canonical environment and fixture:
+
+- GitHub-hosted `macos-26-arm64`, runner image `20260907.0351.1`;
+- macOS 26.6.2 (`25G83`), Xcode 26.6, and xctrace 16.0 (`17F113`);
+- `build-for-testing` before profiling;
+- only `DiskScannerTests.testDiskScannerDisposableFilesystemSyntheticPerformance`;
+- 8 XCTest iterations per capture;
+- 3 independent 10-second Time Profiler captures;
+- the 4,096-file / 72-directory disposable R6.1 fixture;
+- ephemeral trace/XML data under runner temporary storage only.
+
+Nearest-labeled-phase attribution for the refined run was:
+
+| Nearest labeled phase | Capture 1 | Capture 2 | Capture 3 | Pooled, 8,527 scanner stacks |
+| --- | ---: | ---: | ---: | ---: |
+| `Node.addFile` | 26.97% (740) | 28.25% (869) | 26.23% (710) | **27.20% (2,319)** |
+| Path processing | 24.78% (680) | 24.09% (741) | 26.34% (713) | **25.03% (2,134)** |
+| Resource-value reads | 16.07% (441) | 17.26% (531) | 17.21% (466) | **16.86% (1,438)** |
+| `Node.toFolderUsage` | 16.87% (463) | 15.86% (488) | 15.40% (417) | **16.04% (1,368)** |
+| Filesystem enumeration | 4.85% (133) | 4.71% (145) | 3.84% (104) | **4.48% (382)** |
+| Unclassified scanner stack | 10.46% (287) | 9.82% (302) | 10.97% (297) | **10.39% (886)** |
+
+An earlier successful R6.5 run on the same production baseline independently produced the same ordering across another three captures: pooled `Node.addFile` 27.42%, path processing 24.38%, `Node.toFolderUsage` 17.01%, resource-value reads 16.15%, enumeration 4.49%, and unclassified work 10.55% across 8,860 scanner stacks. The two run sets therefore agree that `Node.addFile`, not path processing, is now the largest labeled bucket after R6.3. These values remain sampled stack attribution rather than machine-independent wall-clock CPU percentages.
+
+The refined workflow also printed representative frames inside stacks assigned to the nearest-`Node.addFile` bucket. Repeatedly prominent work included dictionary lookup/set operations (`Dictionary.subscript.setter`, `Dictionary._Variant.setValue`, `__RawDictionaryStorage.find`), `Collection.split` and substring handling, and string comparison/Unicode normalization/normalized hashing. Smaller array growth and indexing frames also appeared.
+
+This evidence supports a narrow follow-up experiment around `Node.addFile` component parsing and dictionary lookup behavior, with correctness coverage and before/after profiling. It does **not** justify a broader tree-construction redesign, caching/indexing, incremental-result architecture, or another memory-driven change. R6.4's bounded-retention conclusion remains unchanged.
+
 ### Allocations
 
 Use Allocations with disposable data to inspect peak/retained memory across:
