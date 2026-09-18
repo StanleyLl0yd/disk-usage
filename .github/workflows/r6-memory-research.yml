@@ -1,0 +1,110 @@
+name: R6.4 Memory Research
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: r6-memory-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  memory-research:
+    runs-on: macos-26
+    timeout-minutes: 30
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Select Xcode 26.6
+        run: sudo xcode-select -s /Applications/Xcode_26.6.app/Contents/Developer
+
+      - name: Build test bundle outside measurements
+        run: >-
+          xcodebuild
+          -project DiskUsage.xcodeproj
+          -scheme DiskUsage
+          -configuration Debug
+          -destination 'platform=macOS'
+          CODE_SIGNING_ALLOWED=NO
+          build-for-testing
+
+      - name: Measure scanner footprint and retention
+        env:
+          R64_MEMORY_RESEARCH: '1'
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project DiskUsage.xcodeproj \
+            -scheme DiskUsage \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            CODE_SIGNING_ALLOWED=NO \
+            test-without-building \
+            -only-testing:DiskUsageTests/DiskScannerTests/testR64ScannerMemoryResearch \
+            | tee "$RUNNER_TEMP/r64-memory.log"
+
+          echo "=== R6.4 memory markers ==="
+          grep 'R64_MEMORY' "$RUNNER_TEMP/r64-memory.log"
+
+      - name: Probe Allocations xctrace support
+        run: |
+          set -u
+          echo "=== Installed xctrace templates ==="
+          xcrun xctrace list templates || true
+
+          TRACE="$RUNNER_TEMP/r64-allocations.trace"
+          TOC="$RUNNER_TEMP/r64-allocations-toc.xml"
+          rm -rf "$TRACE" "$TOC"
+
+          echo "=== Starting research-only Allocations capture ==="
+          set +e
+          xcrun xctrace record \
+            --template 'Allocations' \
+            --all-processes \
+            --time-limit 30s \
+            --output "$TRACE" \
+            >/tmp/r64-xctrace.out 2>/tmp/r64-xctrace.err &
+          TRACE_PID=$!
+          sleep 3
+
+          xcodebuild \
+            -project DiskUsage.xcodeproj \
+            -scheme DiskUsage \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            CODE_SIGNING_ALLOWED=NO \
+            test-without-building \
+            -only-testing:DiskUsageTests/DiskScannerTests/testDiskScannerDisposableFilesystemSyntheticPerformance
+          TEST_STATUS=$?
+
+          wait "$TRACE_PID"
+          TRACE_STATUS=$?
+          set -e
+
+          cat /tmp/r64-xctrace.out || true
+          cat /tmp/r64-xctrace.err || true
+          echo "xctrace_status=$TRACE_STATUS test_status=$TEST_STATUS"
+
+          if [ "$TRACE_STATUS" -eq 0 ] && [ -d "$TRACE" ]; then
+            if xcrun xctrace export --input "$TRACE" --toc --output "$TOC"; then
+              echo "=== Allocations trace table-of-contents ==="
+              sed -n '1,220p' "$TOC"
+            else
+              echo "R64_XCTRACE_LIMITATION=trace_recorded_but_toc_export_failed"
+            fi
+          else
+            echo "R64_XCTRACE_LIMITATION=hosted_runner_allocations_capture_unavailable"
+          fi
+
+          if [ "$TEST_STATUS" -ne 0 ]; then
+            exit "$TEST_STATUS"
+          fi
