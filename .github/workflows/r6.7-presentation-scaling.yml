@@ -61,8 +61,10 @@ jobs:
         run: |
           set -euo pipefail
           log="$RUNNER_TEMP/r67-presentation-scaling.log"
+          results="$RUNNER_TEMP/r67-results.log"
+          : > "$results"
 
-          xcodebuild \
+          R67_RESULTS_FILE="$results" xcodebuild \
             -project DiskUsage.xcodeproj \
             -scheme DiskUsage \
             -configuration Debug \
@@ -73,7 +75,8 @@ jobs:
             test-without-building 2>&1 | tee "$log"
 
           echo "=== R6.7 scaling results ==="
-          grep 'R67_RESULT' "$log"
+          cat "$results"
+          grep 'R67_RESULT' "$results"
 
       - name: Confirm research artifacts remain ephemeral
         shell: bash
