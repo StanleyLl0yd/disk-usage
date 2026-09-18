@@ -41,46 +41,99 @@ jobs:
         run: |
           set -euo pipefail
           MARKER=/tmp/diskusage-r64-memory-research-enabled
-          RESULTS=/tmp/diskusage-r64-memory-results.log
-          rm -f "$RESULTS"
+          FIXTURE=/tmp/diskusage-r64-fixture
+          COMBINED="$RUNNER_TEMP/r64-memory.log"
+          rm -rf "$FIXTURE"
+          rm -f /tmp/diskusage-r64-memory-*.log "$COMBINED"
           touch "$MARKER"
-          trap 'rm -f "$MARKER" "$RESULTS"' EXIT
-          xcodebuild \
-            -project DiskUsage.xcodeproj \
-            -scheme DiskUsage \
-            -configuration Debug \
-            -destination 'platform=macOS' \
-            CODE_SIGNING_ALLOWED=NO \
-            test-without-building \
-            -only-testing:DiskUsageTests/DiskScannerTests/testR64ScannerMemoryResearch \
-            | tee "$RUNNER_TEMP/r64-memory.log"
+          trap 'rm -rf "$FIXTURE"; rm -f "$MARKER" /tmp/diskusage-r64-memory-*.log' EXIT
 
-          echo "=== R6.4 memory markers ==="
-          test -s "$RESULTS"
-          cat "$RESULTS"
-          cp "$RESULTS" "$RUNNER_TEMP/r64-memory.log"
+          make_fixture() {
+            python3 - "$1" <<'PY'
+          import shutil
+          import sys
+          from pathlib import Path
+
+          files_per_nested = int(sys.argv[1])
+          root = Path("/tmp/diskusage-r64-fixture")
+          shutil.rmtree(root, ignore_errors=True)
+          root.mkdir(parents=True)
+          payload = bytes([0xA5]) * 4096
+
+          for top_index in range(8):
+              top = root / f"top-{top_index}"
+              for nested_index in range(8):
+                  nested = top / f"nested-{nested_index}"
+                  nested.mkdir(parents=True)
+                  for file_index in range(files_per_nested):
+                      (nested / f"file-{file_index}.dat").write_bytes(payload)
+          PY
+          }
+
+          run_probe() {
+            local label="$1"
+            local test_name="$2"
+            local files_per_nested="$3"
+            local result="/tmp/diskusage-r64-memory-${label}.log"
+
+            make_fixture "$files_per_nested"
+            rm -f "$result"
+
+            xcodebuild \
+              -project DiskUsage.xcodeproj \
+              -scheme DiskUsage \
+              -configuration Debug \
+              -destination 'platform=macOS' \
+              CODE_SIGNING_ALLOWED=NO \
+              test-without-building \
+              "-only-testing:DiskUsageTests/DiskScannerTests/${test_name}"
+
+            test -s "$result"
+            cat "$result" | tee -a "$COMBINED"
+          }
+
+          run_probe baseline testR64ScannerMemoryBaselineResearch 64
+          run_probe repeat testR64ScannerMemoryRepeatResearch 256
+          run_probe largest testR64ScannerMemoryLargestLifecycleResearch 512
+
+          echo "=== R6.4 isolated-process memory markers ==="
+          cat "$COMBINED"
 
       - name: Probe Allocations xctrace support
         run: |
           set -u
+          MARKER=/tmp/diskusage-r64-memory-research-enabled
+          ATTACH_MARKER=/tmp/diskusage-r64-xctrace-attach
+          FIXTURE=/tmp/diskusage-r64-fixture
+          RESULT=/tmp/diskusage-r64-memory-largest.log
+          TRACE="$RUNNER_TEMP/r64-allocations.trace"
+          TOC="$RUNNER_TEMP/r64-allocations-toc.xml"
+          TEST_LOG="$RUNNER_TEMP/r64-xctrace-test.log"
+
+          rm -rf "$FIXTURE" "$TRACE"
+          rm -f "$RESULT" "$TOC" "$TEST_LOG" "$MARKER" "$ATTACH_MARKER"
+          touch "$MARKER" "$ATTACH_MARKER"
+          trap 'rm -rf "$FIXTURE" "$TRACE"; rm -f "$RESULT" "$TOC" "$MARKER" "$ATTACH_MARKER"' EXIT
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          root = Path("/tmp/diskusage-r64-fixture")
+          root.mkdir(parents=True)
+          payload = bytes([0xA5]) * 4096
+          for top_index in range(8):
+              top = root / f"top-{top_index}"
+              for nested_index in range(8):
+                  nested = top / f"nested-{nested_index}"
+                  nested.mkdir(parents=True)
+                  for file_index in range(512):
+                      (nested / f"file-{file_index}.dat").write_bytes(payload)
+          PY
+
           echo "=== Installed xctrace templates ==="
           xcrun xctrace list templates || true
 
-          TRACE="$RUNNER_TEMP/r64-allocations.trace"
-          TOC="$RUNNER_TEMP/r64-allocations-toc.xml"
-          rm -rf "$TRACE" "$TOC"
-
-          echo "=== Starting research-only Allocations capture ==="
           set +e
-          xcrun xctrace record \
-            --template 'Allocations' \
-            --all-processes \
-            --time-limit 30s \
-            --output "$TRACE" \
-            >/tmp/r64-xctrace.out 2>/tmp/r64-xctrace.err &
-          TRACE_PID=$!
-          sleep 3
-
           xcodebuild \
             -project DiskUsage.xcodeproj \
             -scheme DiskUsage \
@@ -88,13 +141,38 @@ jobs:
             -destination 'platform=macOS' \
             CODE_SIGNING_ALLOWED=NO \
             test-without-building \
-            -only-testing:DiskUsageTests/DiskScannerTests/testDiskScannerDisposableFilesystemSyntheticPerformance
-          TEST_STATUS=$?
+            -only-testing:DiskUsageTests/DiskScannerTests/testR64ScannerMemoryLargestLifecycleResearch \
+            >"$TEST_LOG" 2>&1 &
+          XCODE_PID=$!
 
-          wait "$TRACE_PID"
-          TRACE_STATUS=$?
+          TARGET_PID=""
+          for _ in {1..100}; do
+            TARGET_PID="$(pgrep -n -x DiskUsage || true)"
+            if [ -n "$TARGET_PID" ]; then
+              break
+            fi
+            sleep 0.1
+          done
+
+          TRACE_STATUS=99
+          if [ -n "$TARGET_PID" ]; then
+            echo "R64_XCTRACE_TARGET_PID=$TARGET_PID"
+            xcrun xctrace record \
+              --template 'Allocations' \
+              --attach "$TARGET_PID" \
+              --time-limit 30s \
+              --output "$TRACE" \
+              >/tmp/r64-xctrace.out 2>/tmp/r64-xctrace.err
+            TRACE_STATUS=$?
+          else
+            echo "R64_XCTRACE_LIMITATION=test_host_pid_not_found"
+          fi
+
+          wait "$XCODE_PID"
+          TEST_STATUS=$?
           set -e
 
+          cat "$TEST_LOG" || true
           cat /tmp/r64-xctrace.out || true
           cat /tmp/r64-xctrace.err || true
           echo "xctrace_status=$TRACE_STATUS test_status=$TEST_STATUS"
@@ -102,12 +180,12 @@ jobs:
           if [ "$TRACE_STATUS" -eq 0 ] && [ -d "$TRACE" ]; then
             if xcrun xctrace export --input "$TRACE" --toc --output "$TOC"; then
               echo "=== Allocations trace table-of-contents ==="
-              sed -n '1,220p' "$TOC"
+              sed -n '1,260p' "$TOC"
             else
               echo "R64_XCTRACE_LIMITATION=trace_recorded_but_toc_export_failed"
             fi
-          else
-            echo "R64_XCTRACE_LIMITATION=hosted_runner_allocations_capture_unavailable"
+          elif [ "$TRACE_STATUS" -ne 99 ]; then
+            echo "R64_XCTRACE_LIMITATION=hosted_runner_attach_capture_failed"
           fi
 
           if [ "$TEST_STATUS" -ne 0 ]; then
