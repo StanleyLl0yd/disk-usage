@@ -457,6 +457,23 @@ The measured next candidate is a **narrow `Node.addFile` component-parsing/dicti
 
 Final documentation PR #99 passed CI Debug/Release, Actions Policy, Gitleaks, Dependency Review, CodeQL Actions, and CodeQL Swift on exact head `010b4d93219006fa1fa5c34731211eb55133ab3d`, with no review threads, then squash-merged as exact `main` `9023b25f4e7738523f12fc9854119296d8fa116c`. The merge commit was verified as the current repository head; GitHub reported no additional commit status or PR-triggered workflow run on that squash commit. R6.5 is complete.
 
+### R6.6 Test redundant terminal file-child lookup in `Node.addFile` — MEASUREMENT COMPLETE / PENDING EXIT VERIFICATION
+
+R6.6 keeps the next optimization deliberately narrow:
+
+- focused disposable-filesystem coverage was proven on the unchanged exact baseline before the runtime candidate;
+- the candidate removes only the terminal regular-file `children[fileName]` lookup immediately before direct insertion;
+- folder-component traversal, parsing, path standardization, resource reads, enumeration, conversion, cancellation, progress cadence, and authoritative scan semantics are unchanged;
+- research draft PR #103 was closed unmerged after same-runner measurement;
+- three 10-second Time Profiler captures per variant reduced pooled `Dictionary._Variant.lookup` nearest-`Node.addFile` rows from 273 to 33 and raw dictionary-find rows from 504 to 362;
+- pooled nearest-`Node.addFile` attribution moved from 25.84% to 24.88%;
+- warmed six-pair whole-test timing showed no regression signal: candidate faster in 4/6 pairs, aggregate runner-local mean -5.87%, with substantial pair noise;
+- raw traces, XML, logs, timing data, and the temporary workflow remain outside the final production branch.
+
+The measurement decision is to retain the minimal runtime change. This result does **not** justify a folder cache/index, tree redesign, component-parser rewrite, incremental-result architecture, or memory-driven change.
+
+R6.6 remains pending until the clean final PR passes exact-head Debug/Release and standard security/static-analysis gates, merges, and the resulting exact `main` is verified.
+
 Then continue profiling representative large synthetic or disposable filesystem trees and identify actual bottlenecks in:
 
 - enumeration;
@@ -532,4 +549,4 @@ These are not assumed future stages.
 
 **R5 — Core productivity workflow is complete.** R5.1–R5.5 are implemented and verified, the full repository-wide exit review passed, final exact-main verification is green, and release-tag immutability is enforced for `v*` while the published `v0.1.0-alpha.1` remains bound to its verified source commit.
 
-**R6 — Large-scale resilience and measured optimization is in progress.** R6.1–R6.5 are complete. R6.5 post-R6.3 CPU re-attribution placed `Node.addFile` first and path processing second across two independent three-capture run sets, with the refined run pooling 27.20% vs 25.03%, and closed on exact `main` `9023b25f4e7738523f12fc9854119296d8fa116c`. The next R6 slice should be a narrow `Node.addFile` component-parsing/dictionary-lookup experiment with correctness coverage and same-runner profiling/timing; no broader tree-architecture or memory-driven redesign is justified.
+**R6 — Large-scale resilience and measured optimization is in progress.** R6.1–R6.5 are complete. R6.6 measurement is complete and its minimal terminal-file lookup removal is retained by targeted same-runner evidence, but final exact-head and merged-main exit verification are still pending. Current exact production `main` remains `b6251549cf615bb65c61501cfc35bf23ac79c720`; no broader tree-architecture, cache/index, parser, incremental-result, or memory-driven redesign is justified.
