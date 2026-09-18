@@ -164,6 +164,7 @@ final class DiskScannerTests: XCTestCase {
             throw XCTSkip("R6.4 memory research runs only in the temporary profiling workflow")
         }
 
+        var researchRecords: [String] = []
         let workloads = [
             (label: "baseline", filesPerNestedFolder: 64, fullRuns: 1),
             (label: "repeat", filesPerNestedFolder: 256, fullRuns: 3),
@@ -196,7 +197,7 @@ final class DiskScannerTests: XCTestCase {
                 try? await Task.sleep(for: .milliseconds(100))
                 let afterRelease = currentPhysicalFootprintBytes()
 
-                print(
+                researchRecords.append(
                     "R64_MEMORY mode=full label=\(workload.label) run=\(run) " +
                     "files=\(expectedFiles) folders=\(expectedFolders) " +
                     "before=\(probe.before) peak=\(probe.peak) held=\(probe.held) " +
@@ -214,7 +215,7 @@ final class DiskScannerTests: XCTestCase {
 
                 try? await Task.sleep(for: .milliseconds(100))
                 let afterCancelledRelease = currentPhysicalFootprintBytes()
-                print(
+                researchRecords.append(
                     "R64_MEMORY mode=cancel label=largest run=1 " +
                     "files=\(cancelled.summary.filesScanned) expected_files=\(expectedFiles) " +
                     "before=\(cancelled.before) peak=\(cancelled.peak) held=\(cancelled.held) " +
@@ -227,7 +228,7 @@ final class DiskScannerTests: XCTestCase {
 
                 try? await Task.sleep(for: .milliseconds(100))
                 let afterRescanRelease = currentPhysicalFootprintBytes()
-                print(
+                researchRecords.append(
                     "R64_MEMORY mode=rescan label=largest run=1 " +
                     "files=\(expectedFiles) folders=\(expectedFolders) " +
                     "before=\(rescan.before) peak=\(rescan.peak) held=\(rescan.held) " +
@@ -235,6 +236,12 @@ final class DiskScannerTests: XCTestCase {
                 )
             }
         }
+
+        let resultsURL = URL(fileURLWithPath: "/tmp/diskusage-r64-memory-results.log")
+        try researchRecords
+            .joined(separator: "\n")
+            .appending("\n")
+            .write(to: resultsURL, atomically: true, encoding: .utf8)
     }
 
     @MainActor
