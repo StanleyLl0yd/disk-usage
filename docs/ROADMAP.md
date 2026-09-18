@@ -474,6 +474,23 @@ The measurement decision is to retain the minimal runtime change. This result do
 
 Final PR #104 passed CI Debug/Release, Actions Policy, Gitleaks, Dependency Review, CodeQL Actions, and CodeQL Swift on exact head `773e5393ae99904d09a56cc4782a8b78f87f52d6`, with no review threads, then squash-merged as exact `main` `3492da8062029d7c8cebd6fbc0edffe94afff7e0`. The merge commit was verified as the current repository head; GitHub reported no additional commit status or PR-triggered workflow run on that squash commit. R6.6 is complete.
 
+
+### R6.7 Measure large-snapshot presentation derivations — MEASUREMENT COMPLETE / PENDING EXIT VERIFICATION
+
+R6.7 measured existing completed-snapshot derivations without changing production runtime behavior:
+
+- research draft PR #107 was closed unmerged and contained only temporary measurement tests/workflow code;
+- deterministic in-memory snapshots exercised Tree, selective and broad Search, Largest Files, and Sunburst at roughly 16K, 64K, and 128K nodes;
+- each timing point used five warmed samples with structural correctness verified separately;
+- at the largest tested scale, median timings were Tree 0.195720 s, selective Search 0.451010 s, broad Search **1.073799 s** for 128,480 matches, Largest Files 0.365037 s, and Sunburst 0.102321 s;
+- three independent broad-Search Time Profiler captures pooled 7,975 symbolized Search stacks: name/path matching **49.04%**, result sorting **37.96%**, and Search recursion **13.00%**;
+- these timings and sampled phase shares are runner/workload-specific diagnostics, not machine-independent product guarantees;
+- raw traces, XML, logs, temporary result files, DerivedData, and the temporary research workflow/tests remain outside the clean final branch.
+
+The measurement decision is to select **Search name/path matching** as the next narrow candidate. Result sorting remains a substantial secondary cost that any follow-up should monitor. R6.7 does **not** justify a Search index/cache, duplicate snapshot, broad Search redesign, concurrency/UI change, scanner expansion, or incremental-result architecture.
+
+R6.7 remains pending until this clean documentation-only PR passes exact-head Debug/Release and standard security/static-analysis gates, merges, and the resulting exact `main` is verified.
+
 Then continue profiling representative large synthetic or disposable filesystem trees and identify actual bottlenecks in:
 
 - enumeration;
@@ -549,4 +566,4 @@ These are not assumed future stages.
 
 **R5 — Core productivity workflow is complete.** R5.1–R5.5 are implemented and verified, the full repository-wide exit review passed, final exact-main verification is green, and release-tag immutability is enforced for `v*` while the published `v0.1.0-alpha.1` remains bound to its verified source commit.
 
-**R6 — Large-scale resilience and measured optimization is in progress.** R6.1–R6.6 are complete. R6.6 retained the minimal terminal-file lookup removal after targeted same-runner evidence and final exact-head verification; PR #104 squash-merged as current exact `main` `3492da8062029d7c8cebd6fbc0edffe94afff7e0`. The next R6 slice must be created only from measured findings; no broader tree-architecture, cache/index, parser, incremental-result, or memory-driven redesign is justified.
+**R6 — Large-scale resilience and measured optimization is in progress.** R6.1–R6.6 are complete. R6.7 large-snapshot presentation measurement is complete and pending clean final exit verification on current exact production `main` `1a6617d24e2819f91f8c03a780dc22f226e4cf6a`. The measured next candidate is a narrow Search name/path-matching experiment; result sorting remains a secondary measured cost. No Search index/cache, duplicate snapshot, presentation redesign, scanner expansion, incremental-result architecture, or memory-driven redesign is justified.
