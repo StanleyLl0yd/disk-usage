@@ -300,10 +300,11 @@ jobs:
             local variant="$2"
             local workdir="$3"
             local derived="$4"
-            local timefile="$RUNNER_TEMP/r6.6-time-${round}-${variant}.txt"
+            local started finished seconds
+            started="$(python3 -c 'import time; print(time.perf_counter())')"
             (
               cd "$workdir"
-              /usr/bin/time -p -o "$timefile" xcodebuild \
+              xcodebuild \
                 -project DiskUsage.xcodeproj \
                 -scheme DiskUsage \
                 -configuration Debug \
@@ -314,8 +315,8 @@ jobs:
                 CODE_SIGNING_ALLOWED=NO \
                 test-without-building >/dev/null
             )
-            local seconds
-            seconds="$(awk '$1 == "real" { print $2 }' "$timefile")"
+            finished="$(python3 -c 'import time; print(time.perf_counter())')"
+            seconds="$(python3 -c 'import sys; print(f"{float(sys.argv[2]) - float(sys.argv[1]):.6f}")' "$started" "$finished")"
             printf '%s\t%s\t%s\n' "$round" "$variant" "$seconds" >> "$timing"
             echo "timing round=${round} variant=${variant} seconds=${seconds}"
           }
