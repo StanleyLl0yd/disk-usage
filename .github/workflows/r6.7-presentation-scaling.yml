@@ -164,6 +164,13 @@ jobs:
               --output "$xml"
           }
 
+          profile_marker="$RUNNER_TEMP/r67-profile-enabled"
+          profile_link="/tmp/diskusage-r67-profile-enabled"
+          : > "$profile_marker"
+          rm -f "$profile_link"
+          ln -s "$profile_marker" "$profile_link"
+          trap 'rm -f "$profile_link"' EXIT
+
           xcrun xctrace version
           for round in 1 2 3; do
             profile_round "$round"
