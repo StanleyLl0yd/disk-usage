@@ -442,7 +442,7 @@ R6.4 remains measurement-only and does not change production scanner behavior.
 Full methodology, runner-local measurements, limitations, and allocation evidence are recorded in [`docs/PERFORMANCE.md`](PERFORMANCE.md). Final documentation PR #95 merged as exact `main` `8cf883d28f1c4feb6d701ac345e22417c169b49e`; its merged tree is content-equivalent to fully green PR head `26ce54a0e4b5d18f8d2454cbc80752ffdb562693`, with successful macOS CI, Actions Policy, Gitleaks, Dependency Review, CodeQL Swift, and CodeQL Actions gates and no review threads. R6.4 is therefore complete. The next R6 slice must be selected from current measured evidence; absent a memory-retention problem, the safest next step is measurement-only post-R6.3 CPU re-attribution before proposing another runtime optimization.
 
 
-### R6.5 Re-attribute scanner CPU after R6.3 — MEASUREMENT COMPLETE / PENDING EXIT VERIFICATION
+### R6.5 Re-attribute scanner CPU after R6.3 — COMPLETE
 
 R6.5 re-profiled the unchanged post-R6.3 production scanner before selecting another optimization.
 
@@ -453,7 +453,9 @@ R6.5 re-profiled the unchanged post-R6.3 production scanner before selecting ano
 - these are sampled nearest-labeled stack shares, not machine-independent wall-clock CPU percentages;
 - no production runtime behavior changed, and raw profiling artifacts/workflow code remain outside the final branch.
 
-The measured next candidate is a **narrow `Node.addFile` component-parsing/dictionary-lookup experiment** with correctness coverage and same-runner before/after evidence. This result does not justify a broader internal-tree redesign, cache/index, incremental-result architecture, or memory-driven optimization. Mark R6.5 COMPLETE only after the final documentation PR and merged exact-main applicable gates succeed.
+The measured next candidate is a **narrow `Node.addFile` component-parsing/dictionary-lookup experiment** with correctness coverage and same-runner before/after evidence. This result does not justify a broader internal-tree redesign, cache/index, incremental-result architecture, or memory-driven optimization.
+
+Final documentation PR #99 passed CI Debug/Release, Actions Policy, Gitleaks, Dependency Review, CodeQL Actions, and CodeQL Swift on exact head `010b4d93219006fa1fa5c34731211eb55133ab3d`, with no review threads, then squash-merged as exact `main` `9023b25f4e7738523f12fc9854119296d8fa116c`. The merge commit was verified as the current repository head; GitHub reported no additional commit status or PR-triggered workflow run on that squash commit. R6.5 is complete.
 
 Then continue profiling representative large synthetic or disposable filesystem trees and identify actual bottlenecks in:
 
@@ -530,4 +532,4 @@ These are not assumed future stages.
 
 **R5 — Core productivity workflow is complete.** R5.1–R5.5 are implemented and verified, the full repository-wide exit review passed, final exact-main verification is green, and release-tag immutability is enforced for `v*` while the published `v0.1.0-alpha.1` remains bound to its verified source commit.
 
-**R6 — Large-scale resilience and measured optimization is in progress.** R6.1–R6.4 are complete. R6.5 post-R6.3 CPU re-attribution is measurement-complete and pending final documentation/exact-main verification: two independent three-capture run sets now place `Node.addFile` first and path processing second, with the refined run pooling 27.20% vs 25.03%. The measured next candidate, after R6.5 exit verification, is a narrow `Node.addFile` component-parsing/dictionary-lookup experiment; no broader tree-architecture or memory-driven redesign is justified.
+**R6 — Large-scale resilience and measured optimization is in progress.** R6.1–R6.5 are complete. R6.5 post-R6.3 CPU re-attribution placed `Node.addFile` first and path processing second across two independent three-capture run sets, with the refined run pooling 27.20% vs 25.03%, and closed on exact `main` `9023b25f4e7738523f12fc9854119296d8fa116c`. The next R6 slice should be a narrow `Node.addFile` component-parsing/dictionary-lookup experiment with correctness coverage and same-runner profiling/timing; no broader tree-architecture or memory-driven redesign is justified.
