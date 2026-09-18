@@ -82,6 +82,212 @@ jobs:
           cat "$results"
           grep 'R67_RESULT' "$results"
 
+      - name: Profile large broad Search
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          wait_for_host_exit() {
+            for _ in {1..200}; do
+              if ! pgrep -x DiskUsage >/dev/null 2>&1; then
+                return 0
+              fi
+              sleep 0.1
+            done
+            echo "::error::A prior DiskUsage test host did not exit."
+            return 1
+          }
+
+          profile_round() {
+            local round="$1"
+            local log="$RUNNER_TEMP/r67-search-profile-${round}.log"
+            local trace="$RUNNER_TEMP/r67-search-profile-${round}.trace"
+            local xml="$RUNNER_TEMP/r67-search-profile-${round}.xml"
+
+            wait_for_host_exit
+
+            xcodebuild \
+              -project DiskUsage.xcodeproj \
+              -scheme DiskUsage \
+              -configuration Debug \
+              -destination 'platform=macOS' \
+              -derivedDataPath "$RUNNER_TEMP/r67-derived" \
+              -only-testing:DiskUsageTests/FolderUsageTests/testR67BroadSearchProfilerResearch \
+              CODE_SIGNING_ALLOWED=NO \
+              test-without-building >"$log" 2>&1 &
+            local test_pid=$!
+
+            local app_pid=""
+            for _ in {1..300}; do
+              app_pid="$(pgrep -x DiskUsage | tail -n 1 || true)"
+              if [[ -n "$app_pid" ]]; then
+                break
+              fi
+              if ! kill -0 "$test_pid" 2>/dev/null; then
+                break
+              fi
+              sleep 0.1
+            done
+
+            if [[ -z "$app_pid" ]]; then
+              echo "::error::DiskUsage test host did not become available for profile round ${round}."
+              cat "$log"
+              wait "$test_pid"
+              return 1
+            fi
+
+            local profile_status=0
+            xcrun xctrace record \
+              --template 'Time Profiler' \
+              --attach "$app_pid" \
+              --time-limit 10s \
+              --output "$trace" \
+              --no-prompt || profile_status=$?
+
+            local test_status=0
+            wait "$test_pid" || test_status=$?
+            grep -E 'testR67BroadSearchProfilerResearch.*passed|TEST (SUCCEEDED|FAILED)' "$log" || true
+
+            if [[ "$test_status" -ne 0 ]]; then
+              echo "::error::Broad Search profiler test failed in round ${round} with status ${test_status}."
+              cat "$log"
+              return "$test_status"
+            fi
+            if [[ "$profile_status" -ne 0 ]]; then
+              echo "::error::xctrace failed in profile round ${round} with status ${profile_status}."
+              return "$profile_status"
+            fi
+
+            xcrun xctrace export \
+              --input "$trace" \
+              --xpath '/trace-toc/run[@number="1"]/data/table[@schema="time-profile"]' \
+              --output "$xml"
+          }
+
+          xcrun xctrace version
+          for round in 1 2 3; do
+            profile_round "$round"
+          done
+
+          PROFILE_ROOT="$RUNNER_TEMP" python3 - <<'PY'
+          import collections
+          import os
+          import re
+          import xml.etree.ElementTree as ET
+
+          search_anchor = re.compile(
+              r"SearchPresentationPreprocessor\.(matches|collectMatches)"
+          )
+          phase_patterns = [
+              (
+                  "result_sorting",
+                  re.compile(
+                      r"SortOption\.sorted|sorted|sortImpl|pdq|partition|InsertionSort|introSort",
+                      re.I,
+                  ),
+              ),
+              (
+                  "name_path_matching",
+                  re.compile(
+                      r"localizedCaseInsensitiveContains|lastPathComponent|rangeOfString|"
+                      r"CFStringFind|FolderUsage.*name",
+                      re.I,
+                  ),
+              ),
+              (
+                  "search_recursion",
+                  re.compile(r"SearchPresentationPreprocessor\.collectMatches", re.I),
+              ),
+          ]
+
+          pooled_rows = 0
+          pooled_phases = collections.Counter()
+          pooled_frames = collections.Counter()
+
+          def analyze(path):
+              root = ET.parse(path).getroot()
+              by_id = {
+                  element.get("id"): element
+                  for element in root.iter()
+                  if element.get("id")
+              }
+
+              def resolved(element):
+                  ref = element.get("ref")
+                  return by_id.get(ref, element) if ref else element
+
+              def frame_name(frame):
+                  target = resolved(frame)
+                  return (
+                      target.get("name")
+                      or target.get("label")
+                      or (target.text or "").strip()
+                  )
+
+              rows = 0
+              phases = collections.Counter()
+              frames = collections.Counter()
+
+              for row in root.iter("row"):
+                  names = [
+                      name
+                      for name in (frame_name(frame) for frame in row.iter("frame"))
+                      if name
+                  ]
+                  if not names or not any(search_anchor.search(name) for name in names):
+                      continue
+
+                  rows += 1
+                  frames.update(names)
+
+                  assigned = "unclassified_search_stack"
+                  for name in names:
+                      for phase, pattern in phase_patterns:
+                          if pattern.search(name):
+                              assigned = phase
+                              break
+                      if assigned != "unclassified_search_stack":
+                          break
+                  phases[assigned] += 1
+
+              return rows, phases, frames
+
+          for round_number in (1, 2, 3):
+              path = os.path.join(
+                  os.environ["PROFILE_ROOT"],
+                  f"r67-search-profile-{round_number}.xml",
+              )
+              rows, phases, frames = analyze(path)
+              pooled_rows += rows
+              pooled_phases.update(phases)
+              pooled_frames.update(frames)
+
+              print(f"R67_PROFILE round={round_number} search_rows={rows}")
+              for phase, count in phases.most_common():
+                  share = 100.0 * count / rows if rows else 0.0
+                  print(
+                      f"R67_PROFILE_PHASE round={round_number} phase={phase} "
+                      f"rows={count} share={share:.2f}%"
+                  )
+              print(f"R67_PROFILE_TOP round={round_number}")
+              for name, count in frames.most_common(20):
+                  print(f"  {count:6d}  {name}")
+
+          print(f"R67_PROFILE_POOLED search_rows={pooled_rows}")
+          for phase, count in pooled_phases.most_common():
+              share = 100.0 * count / pooled_rows if pooled_rows else 0.0
+              print(
+                  f"R67_PROFILE_POOLED_PHASE phase={phase} "
+                  f"rows={count} share={share:.2f}%"
+              )
+          print("R67_PROFILE_POOLED_TOP")
+          for name, count in pooled_frames.most_common(30):
+              print(f"  {count:6d}  {name}")
+
+          if pooled_rows == 0:
+              raise SystemExit("No symbolized broad Search stacks found")
+          PY
+
       - name: Confirm research artifacts remain ephemeral
         shell: bash
         run: |
