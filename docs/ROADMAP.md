@@ -428,7 +428,7 @@ R6.3 kept the first R6.2 optimization deliberately narrow:
 
 These percentages are measurement evidence for this workload, not machine-independent wall-clock CPU shares or a promise of an exact product speedup. Full methodology is recorded in [`docs/PERFORMANCE.md`](PERFORMANCE.md).
 
-### R6.4 Establish scanner allocation and retention evidence — MEASUREMENT COMPLETE / PENDING EXIT VERIFICATION
+### R6.4 Establish scanner allocation and retention evidence — COMPLETE
 
 R6.4 remains measurement-only and does not change production scanner behavior.
 
@@ -439,7 +439,7 @@ R6.4 remains measurement-only and does not change production scanner behavior.
 - a research-only Allocations `xctrace --attach` capture confirmed substantial temporary URL/path/string/resource-value allocation churn while raw trace/XML data remained ephemeral and outside the final branch;
 - the observed retained process footprint is bounded for the tested lifecycle, so no memory-driven `Node.addFile` redesign, cache/index, incremental-result architecture, or alternative tree construction is justified by R6.4 evidence.
 
-Full methodology, runner-local measurements, limitations, and allocation evidence are recorded in [`docs/PERFORMANCE.md`](PERFORMANCE.md). R6.4 becomes complete only after the final documentation PR and exact merged `main` pass all applicable verification gates. The next R6 slice must be selected from current measured evidence; absent a memory-retention problem, the safest next step is measurement-only post-R6.3 CPU re-attribution before proposing another runtime optimization.
+Full methodology, runner-local measurements, limitations, and allocation evidence are recorded in [`docs/PERFORMANCE.md`](PERFORMANCE.md). Final documentation PR #95 merged as exact `main` `8cf883d28f1c4feb6d701ac345e22417c169b49e`; its merged tree is content-equivalent to fully green PR head `26ce54a0e4b5d18f8d2454cbc80752ffdb562693`, with successful macOS CI, Actions Policy, Gitleaks, Dependency Review, CodeQL Swift, and CodeQL Actions gates and no review threads. R6.4 is therefore complete. The next R6 slice must be selected from current measured evidence; absent a memory-retention problem, the safest next step is measurement-only post-R6.3 CPU re-attribution before proposing another runtime optimization.
 
 Then continue profiling representative large synthetic or disposable filesystem trees and identify actual bottlenecks in:
 
@@ -516,4 +516,4 @@ These are not assumed future stages.
 
 **R5 — Core productivity workflow is complete.** R5.1–R5.5 are implemented and verified, the full repository-wide exit review passed, final exact-main verification is green, and release-tag immutability is enforced for `v*` while the published `v0.1.0-alpha.1` remains bound to its verified source commit.
 
-**R6 — Large-scale resilience and measured optimization is in progress.** R6.1 baseline measurement, R6.2 CPU attribution, and R6.3 narrow path-standardization optimization are complete. R6.4 scanner allocation/retention measurement is complete pending final PR and exact-main exit verification: the largest tested workload is 32,768 files, repeated scan/cancel/rescan footprint reached a bounded high-water plateau, and no memory-driven architecture change is justified. After R6.4 closes, the next slice should re-attribute scanner CPU on the current post-R6.3 code before selecting any further runtime optimization.
+**R6 — Large-scale resilience and measured optimization is in progress.** R6.1 baseline measurement, R6.2 CPU attribution, R6.3 narrow path-standardization optimization, and R6.4 scanner allocation/retention measurement are complete. The largest tested R6.4 workload is 32,768 files, repeated scan/cancel/rescan footprint reached a bounded high-water plateau, and no memory-driven architecture change is justified. The next slice should re-attribute scanner CPU on the current post-R6.3 code before selecting any further runtime optimization.
