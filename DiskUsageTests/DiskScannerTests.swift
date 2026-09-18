@@ -122,6 +122,54 @@ final class DiskScannerTests: XCTestCase {
         XCTAssertFalse(paths.contains { $0.hasPrefix(alias.path + "/") })
     }
 
+    func testTerminalFileChildrenPreserveUniquePathsAndAllocatedTotals() async throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let left = root.appendingPathComponent("left", isDirectory: true)
+        let right = root.appendingPathComponent("right", isDirectory: true)
+        try FileManager.default.createDirectory(at: left, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: right, withIntermediateDirectories: true)
+
+        let files = [
+            left.appendingPathComponent("shared.dat"),
+            left.appendingPathComponent("unique.dat"),
+            right.appendingPathComponent("shared.dat")
+        ]
+        for file in files {
+            try Data(repeating: 0x5A, count: 4096).write(to: file)
+        }
+
+        let allocatedSizes = try files.map { file -> Int64 in
+            let values = try file.resourceValues(
+                forKeys: [.totalFileAllocatedSizeKey, .fileAllocatedSizeKey]
+            )
+            return Int64(values.totalFileAllocatedSize ?? values.fileAllocatedSize ?? 0)
+        }
+        XCTAssertTrue(allocatedSizes.allSatisfy { $0 > 0 })
+
+        let result = await DiskScanner().scan(at: root, showHiddenFiles: true)
+        let nodes = flatten(result.root)
+        let expectedPaths = Set(files.map { $0.standardizedFileURL.path })
+        let publishedFiles = nodes.filter(\.isFile)
+
+        XCTAssertEqual(publishedFiles.count, files.count)
+        XCTAssertEqual(Set(publishedFiles.map(\.path)), expectedPaths)
+        for path in expectedPaths {
+            XCTAssertEqual(nodes.filter { $0.path == path }.count, 1)
+        }
+
+        let expectedTotal = allocatedSizes.reduce(0, +)
+        XCTAssertEqual(result.summary.filesScanned, Int64(files.count))
+        XCTAssertEqual(result.root.size, expectedTotal)
+        XCTAssertEqual(result.summary.allocatedBytes, expectedTotal)
+
+        let leftPath = left.standardizedFileURL.path
+        let rightPath = right.standardizedFileURL.path
+        XCTAssertEqual(nodes.first { $0.path == leftPath }?.size, allocatedSizes[0] + allocatedSizes[1])
+        XCTAssertEqual(nodes.first { $0.path == rightPath }?.size, allocatedSizes[2])
+    }
+
     func testDiskScannerDisposableFilesystemSyntheticPerformance() throws {
         let root = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
