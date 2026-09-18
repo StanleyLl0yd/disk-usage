@@ -225,6 +225,46 @@ final class DiskScannerTests: XCTestCase {
     }
 
     @MainActor
+    func testLargeDisposableCancelRescanMemoryResearch() async throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        try makeScannerPerformanceFixture(
+            at: root,
+            topLevelCount: 16,
+            nestedCount: 8,
+            filesPerNestedFolder: 128
+        )
+
+        let viewModel = DiskScannerViewModel()
+        viewModel.scan(root, description: "R6.4 memory research")
+
+        for _ in 0..<3 {
+            try await Task.sleep(for: .milliseconds(20))
+            viewModel.cancel()
+            XCTAssertEqual(viewModel.lifecycle, .cancelled)
+            XCTAssertTrue(viewModel.canRescan)
+            XCTAssertTrue(viewModel.items.isEmpty)
+
+            viewModel.rescan()
+            XCTAssertEqual(viewModel.lifecycle, .scanning)
+            XCTAssertFalse(viewModel.canRescan)
+        }
+
+        for _ in 0..<750 {
+            if viewModel.lifecycle == .completed {
+                break
+            }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+
+        XCTAssertEqual(viewModel.lifecycle, .completed)
+        XCTAssertTrue(viewModel.canRescan)
+        XCTAssertFalse(viewModel.items.isEmpty)
+        XCTAssertGreaterThan(viewModel.totalSize, 0)
+    }
+
+    @MainActor
     func testViewModelLifecycleTransitionsImmediatelyOnStartAndCancel() throws {
         let root = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
