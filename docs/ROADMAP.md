@@ -386,7 +386,6 @@ This exception did not itself mark R5 complete and does not complete the R7 rele
 **Status: IN PROGRESS**
 
 R6 is evidence-driven. It must not become speculative performance engineering.
-
 ## Scope
 
 ### R6.1 Large-scale scan measurement baseline — COMPLETE
@@ -429,15 +428,18 @@ R6.3 kept the first R6.2 optimization deliberately narrow:
 
 These percentages are measurement evidence for this workload, not machine-independent wall-clock CPU shares or a promise of an exact product speedup. Full methodology is recorded in [`docs/PERFORMANCE.md`](PERFORMANCE.md).
 
-### R6.4 Establish scanner allocation and retention evidence — NEXT / PLANNED
+### R6.4 Establish scanner allocation and retention evidence — MEASUREMENT COMPLETE / PENDING EXIT VERIFICATION
 
-Measure memory behavior before choosing another runtime optimization:
+R6.4 remains measurement-only and does not change production scanner behavior.
 
-- use representative disposable scanner workloads, including repeated scan/cancel/rescan where practical;
-- inspect allocation and retained-memory behavior across enumeration, transient URL/resource-value work, internal `Node` lifetime, `FolderUsage` conversion, and result publication;
-- distinguish temporary allocation churn from memory retained by the authoritative completed snapshot and derived presentation state;
-- record the largest practical tested workload and observed peak/retained behavior without a brittle shared-runner threshold;
-- do not introduce caching, incremental-result, alternative-tree, or concurrency architecture unless the measurements identify a concrete problem that justifies it.
+- disposable 4,096-, 16,384-, and 32,768-file workloads were exercised with repeated complete scan/cancel/rescan lifecycles;
+- the largest tested workload was 32,768 regular files;
+- runner-local `phys_footprint` sampling distinguished the process high-water/plateau from transient allocation churn as far as the available tooling permits;
+- after the initial high-water, repeated complete scans and the 32,768-file cancel/rescan sequence showed only small additional footprint movement and no evidence of unbounded growth;
+- a research-only Allocations `xctrace --attach` capture confirmed substantial temporary URL/path/string/resource-value allocation churn while raw trace/XML data remained ephemeral and outside the final branch;
+- the observed retained process footprint is bounded for the tested lifecycle, so no memory-driven `Node.addFile` redesign, cache/index, incremental-result architecture, or alternative tree construction is justified by R6.4 evidence.
+
+Full methodology, runner-local measurements, limitations, and allocation evidence are recorded in [`docs/PERFORMANCE.md`](PERFORMANCE.md). R6.4 becomes complete only after the final documentation PR and exact merged `main` pass all applicable verification gates. The next R6 slice must be selected from current measured evidence; absent a memory-retention problem, the safest next step is measurement-only post-R6.3 CPU re-attribution before proposing another runtime optimization.
 
 Then continue profiling representative large synthetic or disposable filesystem trees and identify actual bottlenecks in:
 
@@ -514,4 +516,4 @@ These are not assumed future stages.
 
 **R5 — Core productivity workflow is complete.** R5.1–R5.5 are implemented and verified, the full repository-wide exit review passed, final exact-main verification is green, and release-tag immutability is enforced for `v*` while the published `v0.1.0-alpha.1` remains bound to its verified source commit.
 
-**R6 — Large-scale resilience and measured optimization is in progress.** R6.1 baseline measurement and R6.2 CPU attribution are complete; the next planned slice is R6.3, narrowly testing the measured repeated path-normalization/path-derivation hotspot before any broader scanner redesign.
+**R6 — Large-scale resilience and measured optimization is in progress.** R6.1 baseline measurement, R6.2 CPU attribution, and R6.3 narrow path-standardization optimization are complete. R6.4 scanner allocation/retention measurement is complete pending final PR and exact-main exit verification: the largest tested workload is 32,768 files, repeated scan/cancel/rescan footprint reached a bounded high-water plateau, and no memory-driven architecture change is justified. After R6.4 closes, the next slice should re-attribute scanner CPU on the current post-R6.3 code before selecting any further runtime optimization.
