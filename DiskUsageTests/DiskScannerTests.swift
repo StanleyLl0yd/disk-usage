@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 import XCTest
 @testable import DiskUsage
 
@@ -153,6 +154,84 @@ final class DiskScannerTests: XCTestCase {
                 scanSynchronously(DiskScanner(), at: root),
                 "Measured disposable scan must complete"
             )
+        }
+    }
+
+    func testR64ScannerMemoryResearch() async throws {
+        guard ProcessInfo.processInfo.environment["R64_MEMORY_RESEARCH"] == "1" else {
+            throw XCTSkip("R6.4 memory research runs only in the temporary profiling workflow")
+        }
+
+        let workloads = [
+            (label: "baseline", filesPerNestedFolder: 64, fullRuns: 1),
+            (label: "repeat", filesPerNestedFolder: 256, fullRuns: 3),
+            (label: "largest", filesPerNestedFolder: 512, fullRuns: 1)
+        ]
+
+        for workload in workloads {
+            let root = try makeTemporaryDirectory()
+            defer { try? FileManager.default.removeItem(at: root) }
+
+            let topLevelCount = 8
+            let nestedCount = 8
+            let expectedFiles = Int64(topLevelCount * nestedCount * workload.filesPerNestedFolder)
+            let expectedFolders = Int64(topLevelCount + topLevelCount * nestedCount)
+
+            try makeScannerPerformanceFixture(
+                at: root,
+                topLevelCount: topLevelCount,
+                nestedCount: nestedCount,
+                filesPerNestedFolder: workload.filesPerNestedFolder
+            )
+
+            for run in 1...workload.fullRuns {
+                let probe = await measureScannerMemory(at: root)
+                XCTAssertEqual(probe.summary.filesScanned, expectedFiles)
+                XCTAssertEqual(probe.summary.foldersScanned, expectedFolders)
+                XCTAssertEqual(probe.summary.restrictedLocations, 0)
+                XCTAssertGreaterThan(probe.summary.allocatedBytes, 0)
+
+                try? await Task.sleep(for: .milliseconds(100))
+                let afterRelease = currentPhysicalFootprintBytes()
+
+                print(
+                    "R64_MEMORY mode=full label=\(workload.label) run=\(run) " +
+                    "files=\(expectedFiles) folders=\(expectedFolders) " +
+                    "before=\(probe.before) peak=\(probe.peak) held=\(probe.held) " +
+                    "after_release=\(afterRelease) allocated=\(probe.summary.allocatedBytes)"
+                )
+            }
+
+            if workload.label == "largest" {
+                let cancelled = await measureScannerMemory(at: root, cancelAfter: .milliseconds(20))
+                XCTAssertLessThan(
+                    cancelled.summary.filesScanned,
+                    expectedFiles,
+                    "Research cancellation should interrupt the largest disposable scan"
+                )
+
+                try? await Task.sleep(for: .milliseconds(100))
+                let afterCancelledRelease = currentPhysicalFootprintBytes()
+                print(
+                    "R64_MEMORY mode=cancel label=largest run=1 " +
+                    "files=\(cancelled.summary.filesScanned) expected_files=\(expectedFiles) " +
+                    "before=\(cancelled.before) peak=\(cancelled.peak) held=\(cancelled.held) " +
+                    "after_release=\(afterCancelledRelease) allocated=\(cancelled.summary.allocatedBytes)"
+                )
+
+                let rescan = await measureScannerMemory(at: root)
+                XCTAssertEqual(rescan.summary.filesScanned, expectedFiles)
+                XCTAssertEqual(rescan.summary.foldersScanned, expectedFolders)
+
+                try? await Task.sleep(for: .milliseconds(100))
+                let afterRescanRelease = currentPhysicalFootprintBytes()
+                print(
+                    "R64_MEMORY mode=rescan label=largest run=1 " +
+                    "files=\(expectedFiles) folders=\(expectedFolders) " +
+                    "before=\(rescan.before) peak=\(rescan.peak) held=\(rescan.held) " +
+                    "after_release=\(afterRescanRelease) allocated=\(rescan.summary.allocatedBytes)"
+                )
+            }
         }
     }
 
@@ -367,6 +446,122 @@ final class DiskScannerTests: XCTestCase {
         case .timedOut:
             return nil
         }
+    }
+
+    private struct ScannerMemoryProbe {
+        let before: UInt64
+        let peak: UInt64
+        let held: UInt64
+        let summary: CompletedScanSummary
+    }
+
+    private final class LockedScanResult: @unchecked Sendable {
+        private let lock = NSLock()
+        private var result: DiskScanResult?
+        private var finished = false
+
+        func store(_ result: DiskScanResult) {
+            lock.lock()
+            self.result = result
+            finished = true
+            lock.unlock()
+        }
+
+        func isFinished() -> Bool {
+            lock.lock()
+            defer { lock.unlock() }
+            return finished
+        }
+
+        func take() -> DiskScanResult? {
+            lock.lock()
+            defer { lock.unlock() }
+            let value = result
+            result = nil
+            return value
+        }
+    }
+
+    private func measureScannerMemory(
+        at root: URL,
+        cancelAfter: Duration? = nil
+    ) async -> ScannerMemoryProbe {
+        let before = currentPhysicalFootprintBytes()
+        let resultBox = LockedScanResult()
+        let scanner = DiskScanner()
+
+        let scanTask = Task.detached(priority: .userInitiated) {
+            let result = await scanner.scan(at: root, showHiddenFiles: true)
+            resultBox.store(result)
+        }
+
+        let cancellationTask: Task<Void, Never>?
+        if let cancelAfter {
+            cancellationTask = Task {
+                try? await Task.sleep(for: cancelAfter)
+                scanTask.cancel()
+            }
+        } else {
+            cancellationTask = nil
+        }
+
+        var peak = before
+        while !resultBox.isFinished() {
+            peak = max(peak, currentPhysicalFootprintBytes())
+            try? await Task.sleep(for: .milliseconds(5))
+        }
+
+        await scanTask.value
+        cancellationTask?.cancel()
+        peak = max(peak, currentPhysicalFootprintBytes())
+
+        guard let result = resultBox.take() else {
+            XCTFail("R6.4 research scan completed without a result")
+            return ScannerMemoryProbe(
+                before: before,
+                peak: peak,
+                held: currentPhysicalFootprintBytes(),
+                summary: CompletedScanSummary(
+                    allocatedBytes: 0,
+                    filesScanned: 0,
+                    foldersScanned: 0,
+                    restrictedLocations: 0,
+                    elapsed: .zero
+                )
+            )
+        }
+
+        let held = currentPhysicalFootprintBytes()
+        let summary = result.summary
+        withExtendedLifetime(result) {}
+
+        return ScannerMemoryProbe(
+            before: before,
+            peak: peak,
+            held: held,
+            summary: summary
+        )
+    }
+
+    private func currentPhysicalFootprintBytes() -> UInt64 {
+        var info = task_vm_info_data_t()
+        var count = mach_msg_type_number_t(
+            MemoryLayout<task_vm_info_data_t>.size / MemoryLayout<natural_t>.size
+        )
+
+        let status = withUnsafeMutablePointer(to: &info) { pointer in
+            pointer.withMemoryRebound(to: integer_t.self, capacity: Int(count)) { rebound in
+                task_info(
+                    mach_task_self_,
+                    task_flavor_t(TASK_VM_INFO),
+                    rebound,
+                    &count
+                )
+            }
+        }
+
+        guard status == KERN_SUCCESS else { return 0 }
+        return info.phys_footprint
     }
 
     private func flatten(_ item: FolderUsage) -> [FolderUsage] {
