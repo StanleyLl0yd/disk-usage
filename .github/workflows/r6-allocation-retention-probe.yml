@@ -1,0 +1,151 @@
+name: R6 Allocation Retention Probe
+
+on:
+  push:
+    branches: ['r6/allocation-retention']
+    paths:
+      - '.github/workflows/r6-allocation-retention-probe.yml'
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: r6-allocation-retention-probe-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  probe:
+    runs-on: macos-26
+    timeout-minutes: 30
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Select Xcode 26.6
+        run: sudo xcode-select -s /Applications/Xcode_26.6.app/Contents/Developer
+
+      - name: Report runner and Instruments templates
+        shell: bash
+        run: |
+          set -euo pipefail
+          sw_vers
+          xcodebuild -version
+          uname -m
+          xcrun xctrace list templates
+          xcrun xctrace list templates | grep -F 'Allocations'
+
+      - name: Build scanner test bundle outside probe interval
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project DiskUsage.xcodeproj \
+            -scheme DiskUsage \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            -derivedDataPath "$RUNNER_TEMP/R64ProbeDerivedData" \
+            CODE_SIGNING_ALLOWED=NO \
+            build-for-testing
+
+      - name: Capture one ephemeral Allocations trace and inspect schemas
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          test_log="$RUNNER_TEMP/r64-probe-test.log"
+          trace="$RUNNER_TEMP/r64-probe.trace"
+          toc="$RUNNER_TEMP/r64-probe-toc.xml"
+
+          xcodebuild \
+            -project DiskUsage.xcodeproj \
+            -scheme DiskUsage \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            -derivedDataPath "$RUNNER_TEMP/R64ProbeDerivedData" \
+            -only-testing:DiskUsageTests/DiskScannerTests/testDiskScannerDisposableFilesystemSyntheticPerformance \
+            -test-iterations 8 \
+            CODE_SIGNING_ALLOWED=NO \
+            test-without-building >"$test_log" 2>&1 &
+          test_pid=$!
+
+          app_pid=""
+          for _ in {1..300}; do
+            app_pid="$(pgrep -x DiskUsage | tail -n 1 || true)"
+            if [[ -n "$app_pid" ]]; then
+              break
+            fi
+            if ! kill -0 "$test_pid" 2>/dev/null; then
+              break
+            fi
+            sleep 0.1
+          done
+
+          if [[ -z "$app_pid" ]]; then
+            echo "::error::DiskUsage test host did not become available."
+            cat "$test_log"
+            wait "$test_pid"
+            exit 1
+          fi
+
+          echo "attached_pid=$app_pid"
+          profile_status=0
+          xcrun xctrace record \
+            --template 'Allocations' \
+            --attach "$app_pid" \
+            --time-limit 10s \
+            --output "$trace" \
+            --no-prompt || profile_status=$?
+
+          test_status=0
+          wait "$test_pid" || test_status=$?
+
+          grep -E 'testDiskScannerDisposableFilesystemSyntheticPerformance.*passed|TEST (SUCCEEDED|FAILED)' "$test_log" || true
+
+          if [[ "$test_status" -ne 0 ]]; then
+            echo "::error::Scanner performance test failed with status $test_status."
+            exit "$test_status"
+          fi
+          if [[ "$profile_status" -ne 0 ]]; then
+            echo "::error::Allocations xctrace attach failed with status $profile_status."
+            exit "$profile_status"
+          fi
+
+          xcrun xctrace export --input "$trace" --toc --output "$toc"
+
+          TOC="$toc" python3 - <<'PY'
+          import os
+          import re
+          import xml.etree.ElementTree as ET
+
+          root = ET.parse(os.environ["TOC"]).getroot()
+          schemas = []
+          for table in root.iter("table"):
+              schema = table.get("schema")
+              if schema:
+                  schemas.append(schema)
+
+          unique = sorted(set(schemas))
+          print("=== trace table schemas ===")
+          for schema in unique:
+              print(schema)
+
+          memoryish = [s for s in unique if re.search(r"alloc|heap|memory|vm|life|retain", s, re.I)]
+          print("=== allocation/memory-like schemas ===")
+          for schema in memoryish:
+              print(schema)
+
+          if not memoryish:
+              print("no allocation/memory-like schemas matched by name; inspect full schema list above")
+          PY
+
+      - name: Confirm probe evidence stays ephemeral
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo 'No trace/XML artifact is uploaded or committed; probe files remain under RUNNER_TEMP.'
