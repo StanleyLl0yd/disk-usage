@@ -250,6 +250,78 @@ jobs:
           print(f"warm_quartile_median_delta_kib={statistics.median(warm_last)-statistics.median(warm_first):+.1f}")
           PY
 
+      - name: Run large research memory workload
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          before_list="$RUNNER_TEMP/r64-large-before.txt"
+          find "$RUNNER_TEMP/R64DerivedData/Logs/Test" -maxdepth 1 -name '*.xcresult' -type d -print | sort >"$before_list" || true
+
+          log="$RUNNER_TEMP/r64-large-memory.log"
+          xcodebuild \
+            -project DiskUsage.xcodeproj \
+            -scheme DiskUsage \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            -derivedDataPath "$RUNNER_TEMP/R64DerivedData" \
+            -only-testing:DiskUsageTests/DiskScannerTests/testDiskScannerLargeDisposableFilesystemMemoryResearch \
+            CODE_SIGNING_ALLOWED=NO \
+            test-without-building 2>&1 | tee "$log"
+
+          xcresult="$(find "$RUNNER_TEMP/R64DerivedData/Logs/Test" -maxdepth 1 -name '*.xcresult' -type d -print | sort | tail -n 1)"
+          if [[ -z "$xcresult" ]]; then
+            echo "::error::No xcresult bundle found for large memory workload."
+            exit 1
+          fi
+          echo "large_memory_xcresult=$xcresult"
+
+          metrics_json="$RUNNER_TEMP/r64-large-memory-metrics.json"
+          if xcrun xcresulttool get test-results metrics --path "$xcresult" --format json >"$metrics_json" 2>"$RUNNER_TEMP/r64-large-xcresulttool.err"; then
+            METRICS_JSON="$metrics_json" python3 - <<'PY'
+          import json
+          import os
+
+          target = "testDiskScannerLargeDisposableFilesystemMemoryResearch"
+          data = json.load(open(os.environ["METRICS_JSON"], encoding="utf-8"))
+
+          def contains_target(value):
+              if isinstance(value, dict):
+                  return any(contains_target(v) for v in value.values())
+              if isinstance(value, list):
+                  return any(contains_target(v) for v in value)
+              return target in str(value)
+
+          def walk(value, path=""):
+              if isinstance(value, dict):
+                  if contains_target(value):
+                      for key, child in value.items():
+                          yield from walk(child, f"{path}.{key}" if path else key)
+                  else:
+                      for key, child in value.items():
+                          if any(token in key.lower() for token in ("memory", "metric", "value", "unit")):
+                              yield from walk(child, f"{path}.{key}" if path else key)
+              elif isinstance(value, list):
+                  for index, child in enumerate(value):
+                      yield from walk(child, f"{path}[{index}]")
+              else:
+                  yield path, value
+
+          print("=== large-workload xcresult metric fields ===")
+          rows = list(walk(data))
+          for path, value in rows[:500]:
+              print(f"{path}={value}")
+          if not rows:
+              print("no relevant fields found")
+          PY
+          else
+            echo 'modern metrics command unavailable for large workload'
+            cat "$RUNNER_TEMP/r64-large-xcresulttool.err" || true
+          fi
+
+          echo '=== large workload testcase lines ==='
+          grep -E 'testDiskScannerLargeDisposableFilesystemMemoryResearch.*passed|TEST (SUCCEEDED|FAILED)' "$log" || true
+
       - name: Confirm research evidence stays ephemeral
         if: always()
         shell: bash
