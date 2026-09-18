@@ -281,38 +281,33 @@ jobs:
             METRICS_JSON="$metrics_json" python3 - <<'PY'
           import json
           import os
+          import statistics
 
           target = "testDiskScannerLargeDisposableFilesystemMemoryResearch"
           data = json.load(open(os.environ["METRICS_JSON"], encoding="utf-8"))
+          entries = data if isinstance(data, list) else [data]
+          matches = [entry for entry in entries if target in str(entry.get("testIdentifier", ""))]
 
-          def contains_target(value):
-              if isinstance(value, dict):
-                  return any(contains_target(v) for v in value.values())
-              if isinstance(value, list):
-                  return any(contains_target(v) for v in value)
-              return target in str(value)
+          print("=== large-workload xcresult metrics ===")
+          if not matches:
+              raise SystemExit("large-workload test metric entry not found")
 
-          def walk(value, path=""):
-              if isinstance(value, dict):
-                  if contains_target(value):
-                      for key, child in value.items():
-                          yield from walk(child, f"{path}.{key}" if path else key)
-                  else:
-                      for key, child in value.items():
-                          if any(token in key.lower() for token in ("memory", "metric", "value", "unit")):
-                              yield from walk(child, f"{path}.{key}" if path else key)
-              elif isinstance(value, list):
-                  for index, child in enumerate(value):
-                      yield from walk(child, f"{path}[{index}]")
-              else:
-                  yield path, value
-
-          print("=== large-workload xcresult metric fields ===")
-          rows = list(walk(data))
-          for path, value in rows[:500]:
-              print(f"{path}={value}")
-          if not rows:
-              print("no relevant fields found")
+          for entry in matches:
+              print(f"testIdentifier={entry.get('testIdentifier')}")
+              for run_index, run in enumerate(entry.get("testRuns", [])):
+                  for metric_index, metric in enumerate(run.get("metrics", [])):
+                      name = metric.get("displayName")
+                      unit = metric.get("unitOfMeasurement")
+                      measurements = metric.get("measurements", [])
+                      print(f"run={run_index} metric={metric_index} name={name} unit={unit}")
+                      print(f"measurements={measurements}")
+                      numeric = [float(v) for v in measurements if isinstance(v, (int, float))]
+                      if numeric:
+                          print(
+                              f"mean={statistics.fmean(numeric):.3f} "
+                              f"median={statistics.median(numeric):.3f} "
+                              f"min={min(numeric):.3f} max={max(numeric):.3f}"
+                          )
           PY
           else
             echo 'modern metrics command unavailable for large workload'
@@ -321,6 +316,100 @@ jobs:
 
           echo '=== large workload testcase lines ==='
           grep -E 'testDiskScannerLargeDisposableFilesystemMemoryResearch.*passed|TEST (SUCCEEDED|FAILED)' "$log" || true
+
+      - name: Sample cancel-rescan lifecycle RSS
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          test_log="$RUNNER_TEMP/r64-lifecycle-test.log"
+          samples="$RUNNER_TEMP/r64-lifecycle-rss.tsv"
+          : > "$samples"
+
+          xcodebuild \
+            -project DiskUsage.xcodeproj \
+            -scheme DiskUsage \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            -derivedDataPath "$RUNNER_TEMP/R64DerivedData" \
+            -only-testing:DiskUsageTests/DiskScannerTests/testLargeDisposableCancelRescanMemoryResearch \
+            CODE_SIGNING_ALLOWED=NO \
+            test-without-building >"$test_log" 2>&1 &
+          test_pid=$!
+
+          app_pid=""
+          for _ in {1..300}; do
+            app_pid="$(pgrep -x DiskUsage | tail -n 1 || true)"
+            if [[ -n "$app_pid" ]]; then
+              break
+            fi
+            if ! kill -0 "$test_pid" 2>/dev/null; then
+              break
+            fi
+            sleep 0.1
+          done
+
+          if [[ -z "$app_pid" ]]; then
+            echo "::error::DiskUsage lifecycle test host did not become available."
+            cat "$test_log"
+            wait "$test_pid"
+            exit 1
+          fi
+
+          echo "lifecycle_sampled_pid=$app_pid"
+          index=0
+          while kill -0 "$test_pid" 2>/dev/null; do
+            rss="$(ps -o rss= -p "$app_pid" 2>/dev/null | tr -d ' ' || true)"
+            if [[ "$rss" =~ ^[0-9]+$ ]]; then
+              printf '%d\t%s\n' "$index" "$rss" >> "$samples"
+              index=$((index + 1))
+            fi
+            sleep 0.25
+          done
+
+          test_status=0
+          wait "$test_pid" || test_status=$?
+          grep -E 'testLargeDisposableCancelRescanMemoryResearch.*passed|TEST (SUCCEEDED|FAILED)' "$test_log" || true
+          if [[ "$test_status" -ne 0 ]]; then
+            echo "::error::Lifecycle memory research test failed with status $test_status."
+            cat "$test_log"
+            exit "$test_status"
+          fi
+
+          SAMPLES="$samples" python3 - <<'PY'
+          import os
+          import statistics
+
+          values = []
+          with open(os.environ["SAMPLES"], encoding="utf-8") as handle:
+              for line in handle:
+                  _, rss = line.rstrip("\n").split("\t")
+                  values.append(int(rss))
+
+          if len(values) < 8:
+              raise SystemExit(f"Too few lifecycle RSS samples: {len(values)}")
+
+          discard = min(12, len(values) // 3)
+          warm = values[discard:]
+          ordered = sorted(warm)
+          p95 = ordered[min(len(ordered) - 1, int(round(0.95 * (len(ordered) - 1))))]
+          q = max(1, len(warm) // 4)
+          first = warm[:q]
+          last = warm[-q:]
+
+          print("=== cancel-rescan warm-state RSS ===")
+          print(f"all_samples={len(values)}")
+          print(f"discarded_startup_samples={discard}")
+          print(f"warm_samples={len(warm)}")
+          print(f"warm_rss_kib_min={min(warm)}")
+          print(f"warm_rss_kib_median={statistics.median(warm):.1f}")
+          print(f"warm_rss_kib_p95={p95}")
+          print(f"warm_rss_kib_max={max(warm)}")
+          print(f"warm_rss_kib_final={warm[-1]}")
+          print(f"warm_first_quartile_median_kib={statistics.median(first):.1f}")
+          print(f"warm_last_quartile_median_kib={statistics.median(last):.1f}")
+          print(f"warm_quartile_median_delta_kib={statistics.median(last)-statistics.median(first):+.1f}")
+          PY
 
       - name: Confirm research evidence stays ephemeral
         if: always()
