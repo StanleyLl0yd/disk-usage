@@ -597,6 +597,10 @@ final class FolderUsageTests: XCTestCase {
     }
 
     func testR67LargeSnapshotPresentationScalingResearch() throws {
+        guard FileManager.default.fileExists(atPath: "/tmp/diskusage-r67-results.log") else {
+            throw XCTSkip("R6.7 research-only scaling workload")
+        }
+
         let treeRootCounts = [28, 110, 220]
         for rootCount in treeRootCounts {
             let source = makeR67TreeFixture(rootCount: rootCount)
@@ -744,6 +748,10 @@ final class FolderUsageTests: XCTestCase {
     }
 
     func testR67BroadSearchProfilerResearch() throws {
+        guard FileManager.default.fileExists(atPath: "/tmp/diskusage-r67-profile-enabled") else {
+            throw XCTSkip("R6.7 research-only profiler workload")
+        }
+
         let source = makeR67TreeFixture(rootCount: 220)
         let expectedMatches = 128_480
         XCTAssertEqual(nodeCount(source), 128_700)
