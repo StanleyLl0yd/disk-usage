@@ -140,23 +140,44 @@ jobs:
           PY
           }
 
-          sample_case testLargeDisposableSingleViewModelScanMemoryResearch control
-          sample_case testLargeDisposableCancelRescanMemoryResearch lifecycle
+          sample_case testLargeDisposableSingleViewModelScanMemoryResearch control-r1
+          sample_case testLargeDisposableCancelRescanMemoryResearch lifecycle-r1
+
+          sample_case testLargeDisposableCancelRescanMemoryResearch lifecycle-r2
+          sample_case testLargeDisposableSingleViewModelScanMemoryResearch control-r2
+
+          sample_case testLargeDisposableSingleViewModelScanMemoryResearch control-r3
+          sample_case testLargeDisposableCancelRescanMemoryResearch lifecycle-r3
 
           python3 - <<'PY'
           import json
+          import statistics
           from pathlib import Path
 
           base = Path("/Users/runner/work/_temp")
-          control = json.loads((base / "r64-control-summary.json").read_text())
-          lifecycle = json.loads((base / "r64-lifecycle-summary.json").read_text())
+          keys = ("rss_kib_final", "hold_median_kib", "rss_kib_max")
+          deltas = {key: [] for key in keys}
 
-          print("=== retained-snapshot comparison ===")
-          for key in ("rss_kib_final", "hold_median_kib", "rss_kib_max"):
-              delta = lifecycle[key] - control[key]
-              print(f"{key}_control={control[key]}")
-              print(f"{key}_lifecycle={lifecycle[key]}")
-              print(f"{key}_delta_kib={delta:+.1f}")
+          print("=== retained-snapshot paired comparisons ===")
+          for round_number in (1, 2, 3):
+              control = json.loads((base / f"r64-control-r{round_number}-summary.json").read_text())
+              lifecycle = json.loads((base / f"r64-lifecycle-r{round_number}-summary.json").read_text())
+              print(f"round={round_number}")
+              for key in keys:
+                  delta = lifecycle[key] - control[key]
+                  deltas[key].append(delta)
+                  print(f"{key}_control={control[key]}")
+                  print(f"{key}_lifecycle={lifecycle[key]}")
+                  print(f"{key}_delta_kib={delta:+.1f}")
+
+          print("=== retained-snapshot delta summary ===")
+          for key in keys:
+              values = deltas[key]
+              print(f"{key}_deltas_kib={values}")
+              print(f"{key}_delta_mean_kib={statistics.fmean(values):+.1f}")
+              print(f"{key}_delta_median_kib={statistics.median(values):+.1f}")
+              print(f"{key}_delta_min_kib={min(values):+.1f}")
+              print(f"{key}_delta_max_kib={max(values):+.1f}")
           PY
 
       - name: Confirm research evidence stays ephemeral
