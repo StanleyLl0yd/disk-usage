@@ -457,7 +457,7 @@ The measured next candidate is a **narrow `Node.addFile` component-parsing/dicti
 
 Final documentation PR #99 passed CI Debug/Release, Actions Policy, Gitleaks, Dependency Review, CodeQL Actions, and CodeQL Swift on exact head `010b4d93219006fa1fa5c34731211eb55133ab3d`, with no review threads, then squash-merged as exact `main` `9023b25f4e7738523f12fc9854119296d8fa116c`. The merge commit was verified as the current repository head; GitHub reported no additional commit status or PR-triggered workflow run on that squash commit. R6.5 is complete.
 
-### R6.6 Test redundant terminal file-child lookup in `Node.addFile` — MEASUREMENT COMPLETE / PENDING EXIT VERIFICATION
+### R6.6 Test redundant terminal file-child lookup in `Node.addFile` — COMPLETE
 
 R6.6 keeps the next optimization deliberately narrow:
 
@@ -472,7 +472,7 @@ R6.6 keeps the next optimization deliberately narrow:
 
 The measurement decision is to retain the minimal runtime change. This result does **not** justify a folder cache/index, tree redesign, component-parser rewrite, incremental-result architecture, or memory-driven change.
 
-R6.6 remains pending until the clean final PR passes exact-head Debug/Release and standard security/static-analysis gates, merges, and the resulting exact `main` is verified.
+Final PR #104 passed CI Debug/Release, Actions Policy, Gitleaks, Dependency Review, CodeQL Actions, and CodeQL Swift on exact head `773e5393ae99904d09a56cc4782a8b78f87f52d6`, with no review threads, then squash-merged as exact `main` `3492da8062029d7c8cebd6fbc0edffe94afff7e0`. The merge commit was verified as the current repository head; GitHub reported no additional commit status or PR-triggered workflow run on that squash commit. R6.6 is complete.
 
 Then continue profiling representative large synthetic or disposable filesystem trees and identify actual bottlenecks in:
 
@@ -549,4 +549,4 @@ These are not assumed future stages.
 
 **R5 — Core productivity workflow is complete.** R5.1–R5.5 are implemented and verified, the full repository-wide exit review passed, final exact-main verification is green, and release-tag immutability is enforced for `v*` while the published `v0.1.0-alpha.1` remains bound to its verified source commit.
 
-**R6 — Large-scale resilience and measured optimization is in progress.** R6.1–R6.5 are complete. R6.6 measurement is complete and its minimal terminal-file lookup removal is retained by targeted same-runner evidence, but final exact-head and merged-main exit verification are still pending. Current exact production `main` remains `b6251549cf615bb65c61501cfc35bf23ac79c720`; no broader tree-architecture, cache/index, parser, incremental-result, or memory-driven redesign is justified.
+**R6 — Large-scale resilience and measured optimization is in progress.** R6.1–R6.6 are complete. R6.6 retained the minimal terminal-file lookup removal after targeted same-runner evidence and final exact-head verification; PR #104 squash-merged as current exact `main` `3492da8062029d7c8cebd6fbc0edffe94afff7e0`. The next R6 slice must be created only from measured findings; no broader tree-architecture, cache/index, parser, incremental-result, or memory-driven redesign is justified.
