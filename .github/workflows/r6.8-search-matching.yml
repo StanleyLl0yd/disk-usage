@@ -1,0 +1,585 @@
+name: R6.8 Search Matching A/B
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/r6.8-search-matching.yml'
+      - 'FolderUsage.swift'
+      - 'DiskUsageTests/FolderUsageTests.swift'
+
+permissions: {}
+
+concurrency:
+  group: r6-8-search-matching-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  experiment:
+    runs-on: macos-26
+    timeout-minutes: 40
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout exact research head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Select Xcode 26.6
+        run: sudo xcode-select -s /Applications/Xcode_26.6.app/Contents/Developer
+
+      - name: Prepare exact baseline and identical research harness
+        shell: bash
+        env:
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
+          BASELINE_SHA: 5ef70dfac1d59a951ca55d0b499baa2fcfa22c70
+        run: |
+          set -euo pipefail
+
+          candidate_head="$(git rev-parse HEAD)"
+          echo "candidate_head=${candidate_head}"
+          echo "baseline_head=${BASELINE_SHA}"
+          test "${candidate_head}" = "${EXPECTED_HEAD}"
+          git cat-file -e "${BASELINE_SHA}^{commit}"
+
+          baseline_dir="$RUNNER_TEMP/r68-baseline"
+          git worktree add --detach "$baseline_dir" "$BASELINE_SHA"
+
+          cp             "$GITHUB_WORKSPACE/DiskUsageTests/FolderUsageTests.swift"             "$baseline_dir/DiskUsageTests/FolderUsageTests.swift"
+
+          baseline_diff="$(git -C "$baseline_dir" diff --name-only)"
+          echo "baseline_harness_overlay=${baseline_diff}"
+          test "${baseline_diff}" = "DiskUsageTests/FolderUsageTests.swift"
+
+          echo "BASELINE_DIR=$baseline_dir" >> "$GITHUB_ENV"
+          echo "BASELINE_DERIVED=$RUNNER_TEMP/r68-baseline-derived" >> "$GITHUB_ENV"
+          echo "CANDIDATE_DERIVED=$RUNNER_TEMP/r68-candidate-derived" >> "$GITHUB_ENV"
+
+          marker="$RUNNER_TEMP/r68-research-enabled"
+          : > "$marker"
+          rm -f /tmp/diskusage-r68-research-enabled
+          ln -s "$marker" /tmp/diskusage-r68-research-enabled
+
+          sw_vers
+          xcodebuild -version
+          xcrun xctrace version
+
+      - name: Build baseline and candidate outside measured intervals
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          build_variant() {
+            local root="$1"
+            local derived="$2"
+            (
+              cd "$root"
+              xcodebuild \
+                -project DiskUsage.xcodeproj \
+                -scheme DiskUsage \
+                -configuration Debug \
+                -destination 'platform=macOS' \
+                -derivedDataPath "$derived" \
+                CODE_SIGNING_ALLOWED=NO \
+                build-for-testing
+            )
+          }
+
+          build_variant "$BASELINE_DIR" "$BASELINE_DERIVED"
+          build_variant "$GITHUB_WORKSPACE" "$CANDIDATE_DERIVED"
+
+      - name: Verify focused Search semantics on both variants
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          verify_variant() {
+            local variant="$1"
+            local root="$2"
+            local derived="$3"
+            echo "=== focused correctness: ${variant} ==="
+            (
+              cd "$root"
+              xcodebuild \
+                -project DiskUsage.xcodeproj \
+                -scheme DiskUsage \
+                -configuration Debug \
+                -destination 'platform=macOS' \
+                -derivedDataPath "$derived" \
+                -only-testing:DiskUsageTests/FolderUsageTests/testSearchPresentationPreprocessorMatchesNameAndPathCaseInsensitivelyAndSorts \
+                -only-testing:DiskUsageTests/FolderUsageTests/testSearchPresentationPreprocessorLeavesSourceUnchangedAndTreatsWhitespaceAsEmpty \
+                -only-testing:DiskUsageTests/FolderUsageTests/testR68FocusedSearchMatchingSemanticsResearch \
+                -only-testing:DiskUsageTests/FolderUsageTests/testR68LargeSearchCorrectnessResearch \
+                CODE_SIGNING_ALLOWED=NO \
+                test-without-building
+            )
+          }
+
+          verify_variant baseline "$BASELINE_DIR" "$BASELINE_DERIVED"
+          verify_variant candidate "$GITHUB_WORKSPACE" "$CANDIDATE_DERIVED"
+
+      - name: Run warmed alternating broad-Search timing
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          results="$RUNNER_TEMP/r68-results.log"
+          summary="$RUNNER_TEMP/r68-timing-summary.log"
+          : > "$results"
+          : > "$summary"
+          rm -f /tmp/diskusage-r68-results.log
+          ln -s "$results" /tmp/diskusage-r68-results.log
+
+          wait_for_host_exit() {
+            for _ in {1..200}; do
+              if ! pgrep -x DiskUsage >/dev/null 2>&1; then
+                return 0
+              fi
+              sleep 0.1
+            done
+            echo "::error::A prior DiskUsage test host did not exit."
+            return 1
+          }
+
+          timed_variant() {
+            local variant="$1"
+            local root="$2"
+            local derived="$3"
+            local round="$4"
+            local log="$RUNNER_TEMP/r68-timing-${variant}-${round}.log"
+            local before
+            local after
+            local line
+
+            wait_for_host_exit
+            before="$(wc -l < "$results" | tr -d ' ')"
+
+            (
+              cd "$root"
+              xcodebuild \
+                -project DiskUsage.xcodeproj \
+                -scheme DiskUsage \
+                -configuration Debug \
+                -destination 'platform=macOS' \
+                -derivedDataPath "$derived" \
+                -only-testing:DiskUsageTests/FolderUsageTests/testR68BroadSearchTimingResearch \
+                CODE_SIGNING_ALLOWED=NO \
+                test-without-building
+            ) >"$log" 2>&1
+
+            after="$(wc -l < "$results" | tr -d ' ')"
+            if [[ "$after" -ne $((before + 1)) ]]; then
+              echo "::error::Expected exactly one timing result for ${variant} round ${round}."
+              cat "$log"
+              return 1
+            fi
+
+            line="$(tail -n 1 "$results")"
+            echo "R68_PAIR round=${round} variant=${variant} ${line}" | tee -a "$summary"
+            grep -E 'testR68BroadSearchTimingResearch.*passed|TEST (SUCCEEDED|FAILED)' "$log" || true
+          }
+
+          for round in 1 2 3 4 5 6; do
+            if (( round % 2 == 1 )); then
+              timed_variant baseline "$BASELINE_DIR" "$BASELINE_DERIVED" "$round"
+              timed_variant candidate "$GITHUB_WORKSPACE" "$CANDIDATE_DERIVED" "$round"
+            else
+              timed_variant candidate "$GITHUB_WORKSPACE" "$CANDIDATE_DERIVED" "$round"
+              timed_variant baseline "$BASELINE_DIR" "$BASELINE_DERIVED" "$round"
+            fi
+          done
+
+          SUMMARY_FILE="$summary" python3 - <<'PY'
+          import os
+          import re
+          import statistics
+
+          pattern = re.compile(
+              r"R68_PAIR round=(\d+) variant=(baseline|candidate) "
+              r"R68_TIMING size=(\d+) matches=(\d+) samples=([^ ]+) "
+              r"mean=([0-9.]+) median=([0-9.]+)"
+          )
+
+          values = {"baseline": {}, "candidate": {}}
+          with open(os.environ["SUMMARY_FILE"], encoding="utf-8") as handle:
+              for raw in handle:
+                  match = pattern.fullmatch(raw.strip())
+                  if not match:
+                      raise SystemExit(f"Unparseable timing line: {raw.rstrip()}")
+                  round_number = int(match.group(1))
+                  variant = match.group(2)
+                  size = int(match.group(3))
+                  matches = int(match.group(4))
+                  samples = [float(value) for value in match.group(5).split(",")]
+                  mean = float(match.group(6))
+                  median = float(match.group(7))
+                  if size != 128_700 or matches != 128_480 or len(samples) != 5:
+                      raise SystemExit("Unexpected R6.8 timing workload shape")
+                  values[variant][round_number] = {
+                      "samples": samples,
+                      "mean": mean,
+                      "median": median,
+                  }
+
+          print("R68_TIMING_SUMMARY")
+          deltas = []
+          for round_number in range(1, 7):
+              baseline = values["baseline"][round_number]["median"]
+              candidate = values["candidate"][round_number]["median"]
+              delta = candidate - baseline
+              delta_pct = 100.0 * delta / baseline
+              deltas.append(delta_pct)
+              print(
+                  f"  round={round_number} baseline_median={baseline:.6f}s "
+                  f"candidate_median={candidate:.6f}s delta_pct={delta_pct:+.2f}%"
+              )
+
+          baseline_medians = [
+              values["baseline"][round_number]["median"]
+              for round_number in range(1, 7)
+          ]
+          candidate_medians = [
+              values["candidate"][round_number]["median"]
+              for round_number in range(1, 7)
+          ]
+          baseline_all = [
+              sample
+              for round_number in range(1, 7)
+              for sample in values["baseline"][round_number]["samples"]
+          ]
+          candidate_all = [
+              sample
+              for round_number in range(1, 7)
+              for sample in values["candidate"][round_number]["samples"]
+          ]
+
+          print(
+              f"baseline_pair_median_mean={statistics.mean(baseline_medians):.6f}s "
+              f"candidate_pair_median_mean={statistics.mean(candidate_medians):.6f}s"
+          )
+          print(
+              f"baseline_pooled_median={statistics.median(baseline_all):.6f}s "
+              f"candidate_pooled_median={statistics.median(candidate_all):.6f}s"
+          )
+          print(
+              f"candidate_faster_pairs={sum(delta < 0 for delta in deltas)}/6 "
+              f"mean_pair_delta_pct={statistics.mean(deltas):+.2f}%"
+          )
+          PY
+
+      - name: Capture alternating baseline and candidate Time Profiler traces
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          profile_marker="$RUNNER_TEMP/r68-profile-enabled"
+          : > "$profile_marker"
+          rm -f /tmp/diskusage-r68-profile-enabled
+          ln -s "$profile_marker" /tmp/diskusage-r68-profile-enabled
+
+          wait_for_host_exit() {
+            for _ in {1..200}; do
+              if ! pgrep -x DiskUsage >/dev/null 2>&1; then
+                return 0
+              fi
+              sleep 0.1
+            done
+            echo "::error::A prior DiskUsage test host did not exit."
+            return 1
+          }
+
+          profile_variant() {
+            local variant="$1"
+            local root="$2"
+            local derived="$3"
+            local round="$4"
+            local log="$RUNNER_TEMP/r68-profile-${variant}-${round}.log"
+            local trace="$RUNNER_TEMP/r68-profile-${variant}-${round}.trace"
+            local xml="$RUNNER_TEMP/r68-profile-${variant}-${round}.xml"
+
+            wait_for_host_exit
+
+            (
+              cd "$root"
+              xcodebuild \
+                -project DiskUsage.xcodeproj \
+                -scheme DiskUsage \
+                -configuration Debug \
+                -destination 'platform=macOS' \
+                -derivedDataPath "$derived" \
+                -only-testing:DiskUsageTests/FolderUsageTests/testR68BroadSearchProfilerResearch \
+                CODE_SIGNING_ALLOWED=NO \
+                test-without-building
+            ) >"$log" 2>&1 &
+            local test_pid=$!
+
+            local app_pid=""
+            for _ in {1..300}; do
+              app_pid="$(pgrep -x DiskUsage | tail -n 1 || true)"
+              if [[ -n "$app_pid" ]]; then
+                break
+              fi
+              if ! kill -0 "$test_pid" 2>/dev/null; then
+                break
+              fi
+              sleep 0.1
+            done
+
+            if [[ -z "$app_pid" ]]; then
+              echo "::error::DiskUsage test host did not become available for ${variant} round ${round}."
+              cat "$log"
+              wait "$test_pid"
+              return 1
+            fi
+
+            local profile_status=0
+            xcrun xctrace record \
+              --template 'Time Profiler' \
+              --attach "$app_pid" \
+              --time-limit 10s \
+              --output "$trace" \
+              --no-prompt || profile_status=$?
+
+            local test_status=0
+            wait "$test_pid" || test_status=$?
+            grep -E 'testR68BroadSearchProfilerResearch.*passed|TEST (SUCCEEDED|FAILED)' "$log" || true
+
+            if [[ "$test_status" -ne 0 ]]; then
+              echo "::error::Profiler test failed for ${variant} round ${round} with status ${test_status}."
+              cat "$log"
+              return "$test_status"
+            fi
+            if [[ "$profile_status" -ne 0 ]]; then
+              echo "::error::xctrace failed for ${variant} round ${round} with status ${profile_status}."
+              return "$profile_status"
+            fi
+
+            xcrun xctrace export \
+              --input "$trace" \
+              --xpath '/trace-toc/run[@number="1"]/data/table[@schema="time-profile"]' \
+              --output "$xml"
+          }
+
+          for round in 1 2 3; do
+            if (( round % 2 == 1 )); then
+              profile_variant baseline "$BASELINE_DIR" "$BASELINE_DERIVED" "$round"
+              profile_variant candidate "$GITHUB_WORKSPACE" "$CANDIDATE_DERIVED" "$round"
+            else
+              profile_variant candidate "$GITHUB_WORKSPACE" "$CANDIDATE_DERIVED" "$round"
+              profile_variant baseline "$BASELINE_DIR" "$BASELINE_DERIVED" "$round"
+            fi
+          done
+
+      - name: Summarize matching-path profile attribution
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          PROFILE_ROOT="$RUNNER_TEMP" python3 - <<'PY'
+          import collections
+          import os
+          import re
+          import xml.etree.ElementTree as ET
+
+          search_anchor = re.compile(
+              r"SearchPresentationPreprocessor\.(matches|collectMatches)"
+          )
+          phase_patterns = [
+              (
+                  "result_sorting",
+                  re.compile(
+                      r"SortOption\.sorted|sorted|sortImpl|pdq|partition|InsertionSort|introSort",
+                      re.I,
+                  ),
+              ),
+              (
+                  "name_path_matching",
+                  re.compile(
+                      r"localizedCaseInsensitiveContains|lastPathComponent|rangeOfString|"
+                      r"CFStringFind|FolderUsage.*name",
+                      re.I,
+                  ),
+              ),
+              (
+                  "search_recursion",
+                  re.compile(r"SearchPresentationPreprocessor\.collectMatches", re.I),
+              ),
+          ]
+          terminal_pattern = re.compile(
+              r"lastPathComponent|NSString.*lastPath|CFString.*Path",
+              re.I,
+          )
+          name_accessor_pattern = re.compile(r"FolderUsage.*name", re.I)
+          localized_pattern = re.compile(
+              r"localizedCaseInsensitiveContains|rangeOfString|CFStringFind",
+              re.I,
+          )
+
+          pooled = {
+              variant: {
+                  "rows": 0,
+                  "phases": collections.Counter(),
+                  "terminal_rows": 0,
+                  "terminal_frames": 0,
+                  "name_rows": 0,
+                  "name_frames": 0,
+                  "localized_rows": 0,
+                  "localized_frames": 0,
+              }
+              for variant in ("baseline", "candidate")
+          }
+
+          def analyze(path):
+              root = ET.parse(path).getroot()
+              by_id = {
+                  element.get("id"): element
+                  for element in root.iter()
+                  if element.get("id")
+              }
+
+              def resolved(element):
+                  ref = element.get("ref")
+                  return by_id.get(ref, element) if ref else element
+
+              def frame_name(frame):
+                  target = resolved(frame)
+                  return (
+                      target.get("name")
+                      or target.get("label")
+                      or (target.text or "").strip()
+                  )
+
+              rows = 0
+              phases = collections.Counter()
+              top_frames = collections.Counter()
+              terminal_rows = terminal_frames = 0
+              name_rows = name_frames = 0
+              localized_rows = localized_frames = 0
+
+              for row in root.iter("row"):
+                  names = [
+                      name
+                      for name in (frame_name(frame) for frame in row.iter("frame"))
+                      if name
+                  ]
+                  if not names or not any(search_anchor.search(name) for name in names):
+                      continue
+
+                  rows += 1
+                  top_frames.update(names)
+
+                  assigned = "unclassified_search_stack"
+                  for name in names:
+                      for phase, pattern in phase_patterns:
+                          if pattern.search(name):
+                              assigned = phase
+                              break
+                      if assigned != "unclassified_search_stack":
+                          break
+                  phases[assigned] += 1
+
+                  terminal_matches = sum(bool(terminal_pattern.search(name)) for name in names)
+                  name_matches = sum(bool(name_accessor_pattern.search(name)) for name in names)
+                  localized_matches = sum(bool(localized_pattern.search(name)) for name in names)
+
+                  terminal_rows += int(terminal_matches > 0)
+                  terminal_frames += terminal_matches
+                  name_rows += int(name_matches > 0)
+                  name_frames += name_matches
+                  localized_rows += int(localized_matches > 0)
+                  localized_frames += localized_matches
+
+              return {
+                  "rows": rows,
+                  "phases": phases,
+                  "top_frames": top_frames,
+                  "terminal_rows": terminal_rows,
+                  "terminal_frames": terminal_frames,
+                  "name_rows": name_rows,
+                  "name_frames": name_frames,
+                  "localized_rows": localized_rows,
+                  "localized_frames": localized_frames,
+              }
+
+          for variant in ("baseline", "candidate"):
+              for round_number in (1, 2, 3):
+                  path = os.path.join(
+                      os.environ["PROFILE_ROOT"],
+                      f"r68-profile-{variant}-{round_number}.xml",
+                  )
+                  result = analyze(path)
+                  rows = result["rows"]
+                  print(
+                      f"R68_PROFILE variant={variant} round={round_number} "
+                      f"search_rows={rows} terminal_rows={result['terminal_rows']} "
+                      f"terminal_frames={result['terminal_frames']} "
+                      f"name_rows={result['name_rows']} name_frames={result['name_frames']} "
+                      f"localized_rows={result['localized_rows']} "
+                      f"localized_frames={result['localized_frames']}"
+                  )
+                  for phase, count in result["phases"].most_common():
+                      share = 100.0 * count / rows if rows else 0.0
+                      print(
+                          f"R68_PROFILE_PHASE variant={variant} round={round_number} "
+                          f"phase={phase} rows={count} share={share:.2f}%"
+                      )
+                  print(f"R68_PROFILE_TOP variant={variant} round={round_number}")
+                  for name, count in result["top_frames"].most_common(20):
+                      print(f"  {count:6d}  {name}")
+
+                  aggregate = pooled[variant]
+                  aggregate["rows"] += rows
+                  aggregate["phases"].update(result["phases"])
+                  for key in (
+                      "terminal_rows",
+                      "terminal_frames",
+                      "name_rows",
+                      "name_frames",
+                      "localized_rows",
+                      "localized_frames",
+                  ):
+                      aggregate[key] += result[key]
+
+          print("R68_PROFILE_POOLED")
+          for variant in ("baseline", "candidate"):
+              aggregate = pooled[variant]
+              rows = aggregate["rows"]
+              print(
+                  f"  variant={variant} search_rows={rows} "
+                  f"terminal_rows={aggregate['terminal_rows']} "
+                  f"terminal_frames={aggregate['terminal_frames']} "
+                  f"name_rows={aggregate['name_rows']} "
+                  f"name_frames={aggregate['name_frames']} "
+                  f"localized_rows={aggregate['localized_rows']} "
+                  f"localized_frames={aggregate['localized_frames']}"
+              )
+              for phase, count in aggregate["phases"].most_common():
+                  share = 100.0 * count / rows if rows else 0.0
+                  print(
+                      f"    phase={phase} rows={count} share={share:.2f}%"
+                  )
+
+          if not pooled["baseline"]["rows"] or not pooled["candidate"]["rows"]:
+              raise SystemExit("Missing symbolized Search stacks for one or both variants")
+          PY
+
+      - name: Confirm research artifacts remain ephemeral
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          rm -f             /tmp/diskusage-r68-research-enabled             /tmp/diskusage-r68-results.log             /tmp/diskusage-r68-profile-enabled
+
+          echo "candidate_status:"
+          git status --short
+          test -z "$(git status --short)"
+
+          echo "baseline_harness_overlay:"
+          git -C "$BASELINE_DIR" status --short
+          test "$(git -C "$BASELINE_DIR" diff --name-only)" = "DiskUsageTests/FolderUsageTests.swift"
+
+          echo "Raw traces, XML, logs, timing data, DerivedData, and baseline worktree remained under RUNNER_TEMP only."

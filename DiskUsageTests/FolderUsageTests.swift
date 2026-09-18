@@ -595,4 +595,244 @@ final class FolderUsageTests: XCTestCase {
             partialResult + 1 + nodeCount(item.children)
         }
     }
+
+    func testR68FocusedSearchMatchingSemanticsResearch() throws {
+        guard FileManager.default.fileExists(atPath: "/tmp/diskusage-r68-research-enabled") else {
+            throw XCTSkip("R6.8 research-only focused coverage")
+        }
+
+        let first = FolderUsage(
+            path: "/r68/search/left/Alpha Report.txt",
+            size: 20,
+            isFile: true
+        )
+        let second = FolderUsage(
+            path: "/r68/search/right/alpha report 2.txt",
+            size: 40,
+            isFile: true
+        )
+        let left = FolderUsage(path: "/r68/search/left", size: 20, children: [first])
+        let right = FolderUsage(path: "/r68/search/right", size: 40, children: [second])
+        let source = [left, right]
+        let original = source
+
+        let nameMatches = try XCTUnwrap(
+            SearchPresentationPreprocessor.matches(
+                in: source,
+                query: "ALPHA REPORT",
+                sortedBy: .sizeDesc
+            )
+        )
+        XCTAssertEqual(nameMatches.map(\.path), [second.path, first.path])
+        XCTAssertEqual(source, original)
+
+        let pathOnlyFile = FolderUsage(
+            path: "/r68/search/SpecialParent/payload.bin",
+            size: 10,
+            isFile: true
+        )
+        let pathOnlyFolder = FolderUsage(
+            path: "/r68/search/SpecialParent",
+            size: 10,
+            children: [pathOnlyFile]
+        )
+        XCTAssertFalse(
+            pathOnlyFile.name.localizedCaseInsensitiveContains("specialparent")
+        )
+
+        let pathMatches = try XCTUnwrap(
+            SearchPresentationPreprocessor.matches(
+                in: [pathOnlyFolder],
+                query: "SPECIALPARENT",
+                sortedBy: .sizeDesc
+            )
+        )
+        XCTAssertEqual(pathMatches.map(\.path), [pathOnlyFolder.path, pathOnlyFile.path])
+
+        let tieA = FolderUsage(path: "/r68/tie/a/report.txt", size: 10, isFile: true)
+        let tieB = FolderUsage(path: "/r68/tie/b/report.txt", size: 10, isFile: true)
+        let tieMatches = try XCTUnwrap(
+            SearchPresentationPreprocessor.matches(
+                in: [tieB, tieA],
+                query: "REPORT",
+                sortedBy: .sizeDesc
+            )
+        )
+        XCTAssertEqual(tieMatches.map(\.path), [tieA.path, tieB.path])
+
+        for path in ["/", "", "/r68/search/"] {
+            let item = FolderUsage(path: path, size: 0)
+            let terminalName = (path as NSString).lastPathComponent
+            XCTAssertEqual(item.name, terminalName.isEmpty ? path : terminalName)
+        }
+    }
+
+    func testR68LargeSearchCorrectnessResearch() throws {
+        guard FileManager.default.fileExists(atPath: "/tmp/diskusage-r68-research-enabled") else {
+            throw XCTSkip("R6.8 research-only large Search coverage")
+        }
+
+        let source = makeR68TreeFixture(rootCount: 220)
+        let original = source
+        XCTAssertEqual(nodeCount(source), 128_700)
+
+        let selectiveQuery = source[219]
+            .children[7]
+            .children[7]
+            .children[7]
+            .path
+        let selective = try XCTUnwrap(
+            SearchPresentationPreprocessor.matches(
+                in: source,
+                query: selectiveQuery,
+                sortedBy: .sizeDesc
+            )
+        )
+        XCTAssertEqual(selective.map(\.path), [selectiveQuery])
+
+        let broad = try XCTUnwrap(
+            SearchPresentationPreprocessor.matches(
+                in: source,
+                query: "node-",
+                sortedBy: .sizeDesc
+            )
+        )
+        XCTAssertEqual(broad.count, 128_480)
+        XCTAssertEqual(Set(broad.map(\.path)).count, 128_480)
+        XCTAssertTrue(broad.allSatisfy { $0.path.contains("/node-") })
+        XCTAssertEqual(source, original)
+    }
+
+    func testR68BroadSearchTimingResearch() throws {
+        guard FileManager.default.fileExists(atPath: "/tmp/diskusage-r68-research-enabled"),
+              FileManager.default.fileExists(atPath: "/tmp/diskusage-r68-results.log") else {
+            throw XCTSkip("R6.8 research-only timing workload")
+        }
+
+        let source = makeR68TreeFixture(rootCount: 220)
+        XCTAssertEqual(nodeCount(source), 128_700)
+
+        let warm = try XCTUnwrap(
+            SearchPresentationPreprocessor.matches(
+                in: source,
+                query: "node-",
+                sortedBy: .sizeDesc
+            )
+        )
+        XCTAssertEqual(warm.count, 128_480)
+
+        let clock = ContinuousClock()
+        var samples: [Double] = []
+        samples.reserveCapacity(5)
+
+        for _ in 0..<5 {
+            let start = clock.now
+            let result = try XCTUnwrap(
+                SearchPresentationPreprocessor.matches(
+                    in: source,
+                    query: "node-",
+                    sortedBy: .sizeDesc
+                )
+            )
+            let elapsed = start.duration(to: clock.now)
+            XCTAssertEqual(result.count, 128_480)
+            samples.append(r68Seconds(elapsed))
+        }
+
+        let ordered = samples.sorted()
+        let mean = samples.reduce(0, +) / Double(samples.count)
+        let median = ordered[ordered.count / 2]
+        let sampleText = samples
+            .map { String(format: "%.6f", $0) }
+            .joined(separator: ",")
+
+        let line = "R68_TIMING size=128700 matches=128480 "
+            + "samples=\(sampleText) "
+            + "mean=\(String(format: "%.6f", mean)) "
+            + "median=\(String(format: "%.6f", median))"
+
+        let resultsPath = "/tmp/diskusage-r68-results.log"
+        let handle = try FileHandle(forWritingTo: URL(fileURLWithPath: resultsPath))
+        handle.seekToEndOfFile()
+        handle.write(Data((line + "\n").utf8))
+        handle.closeFile()
+    }
+
+    func testR68BroadSearchProfilerResearch() throws {
+        guard FileManager.default.fileExists(atPath: "/tmp/diskusage-r68-research-enabled"),
+              FileManager.default.fileExists(atPath: "/tmp/diskusage-r68-profile-enabled") else {
+            throw XCTSkip("R6.8 research-only profiler workload")
+        }
+
+        let source = makeR68TreeFixture(rootCount: 220)
+        XCTAssertEqual(nodeCount(source), 128_700)
+
+        let warm = try XCTUnwrap(
+            SearchPresentationPreprocessor.matches(
+                in: source,
+                query: "node-",
+                sortedBy: .sizeDesc
+            )
+        )
+        XCTAssertEqual(warm.count, 128_480)
+
+        var observedMatches = 0
+        for _ in 0..<12 {
+            let matches = try XCTUnwrap(
+                SearchPresentationPreprocessor.matches(
+                    in: source,
+                    query: "node-",
+                    sortedBy: .sizeDesc
+                )
+            )
+            observedMatches += matches.count
+        }
+
+        XCTAssertEqual(observedMatches, 128_480 * 12)
+    }
+
+    private func makeR68TreeFixture(rootCount: Int) -> [FolderUsage] {
+        (0..<rootCount).map { rootIndex in
+            makeR68TreeNode(
+                path: String(format: "/r68/tree/root-%03d", rootIndex),
+                remainingDepth: 3,
+                ordinal: rootIndex + 1
+            )
+        }
+    }
+
+    private func makeR68TreeNode(
+        path: String,
+        remainingDepth: Int,
+        ordinal: Int
+    ) -> FolderUsage {
+        guard remainingDepth > 0 else {
+            return FolderUsage(
+                path: path,
+                size: Int64((ordinal % 997) + 1),
+                isFile: true
+            )
+        }
+
+        let children = (0..<8).map { childIndex in
+            makeR68TreeNode(
+                path: "\(path)/node-\(childIndex)",
+                remainingDepth: remainingDepth - 1,
+                ordinal: ordinal * 8 + childIndex + 1
+            )
+        }
+
+        return FolderUsage(
+            path: path,
+            size: children.reduce(Int64(0)) { $0 + $1.size },
+            children: children
+        )
+    }
+
+    private func r68Seconds(_ duration: Duration) -> Double {
+        let components = duration.components
+        return Double(components.seconds)
+            + Double(components.attoseconds) / 1_000_000_000_000_000_000
+    }
+
 }
