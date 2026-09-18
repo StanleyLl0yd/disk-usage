@@ -70,6 +70,79 @@ jobs:
           echo '=== memory metric lines ==='
           grep -Ei 'memory|XCTMemoryMetric|Physical Memory|kB|MB' "$log" | tail -n 80 || true
 
+          xcresult="$(find "$RUNNER_TEMP/R64DerivedData/Logs/Test" -maxdepth 1 -name '*.xcresult' -type d -print | sort | tail -n 1)"
+          if [[ -z "$xcresult" ]]; then
+            echo "::error::No xcresult bundle found for memory measurement."
+            exit 1
+          fi
+          echo "memory_xcresult=$xcresult"
+
+          echo '=== xcresulttool metrics help ==='
+          xcrun xcresulttool help get test-results metrics || true
+
+          metrics_json="$RUNNER_TEMP/r64-memory-metrics.json"
+          if xcrun xcresulttool get test-results metrics --path "$xcresult" --format json >"$metrics_json" 2>"$RUNNER_TEMP/r64-xcresulttool.err"; then
+            METRICS_JSON="$metrics_json" python3 - <<'PY'
+          import json
+          import os
+
+          target = "testDiskScannerDisposableFilesystemSyntheticMemoryPerformance"
+          data = json.load(open(os.environ["METRICS_JSON"], encoding="utf-8"))
+
+          def walk(value, path=""):
+              if isinstance(value, dict):
+                  for key, child in value.items():
+                      yield from walk(child, f"{path}.{key}" if path else key)
+              elif isinstance(value, list):
+                  for index, child in enumerate(value):
+                      yield from walk(child, f"{path}[{index}]")
+              else:
+                  text = str(value)
+                  if target in text or any(token in path.lower() for token in ("memory", "metric", "value", "unit", "test")):
+                      yield path, value
+
+          print("=== xcresult memory metric relevant fields ===")
+          rows = list(walk(data))
+          for path, value in rows[:400]:
+              print(f"{path}={value}")
+          if not rows:
+              print("no metric-like fields found")
+          PY
+          else
+            echo 'modern metrics command unavailable; falling back to legacy xcresult JSON'
+            cat "$RUNNER_TEMP/r64-xcresulttool.err" || true
+            legacy_json="$RUNNER_TEMP/r64-memory-legacy.json"
+            xcrun xcresulttool get --legacy --path "$xcresult" --format json >"$legacy_json"
+            LEGACY_JSON="$legacy_json" python3 - <<'PY'
+          import json
+          import os
+
+          target = "testDiskScannerDisposableFilesystemSyntheticMemoryPerformance"
+          data = json.load(open(os.environ["LEGACY_JSON"], encoding="utf-8"))
+          hits = []
+
+          def walk(value, path=""):
+              if isinstance(value, dict):
+                  for key, child in value.items():
+                      walk(child, f"{path}.{key}" if path else key)
+              elif isinstance(value, list):
+                  for index, child in enumerate(value):
+                      walk(child, f"{path}[{index}]")
+              else:
+                  text = str(value)
+                  low = path.lower()
+                  if target in text or "memory" in low or "metric" in low:
+                      hits.append((path, value))
+
+          walk(data)
+          print("=== legacy xcresult memory metric relevant fields ===")
+          for path, value in hits[:400]:
+              print(f"{path}={value}")
+          if not hits:
+              print("no memory/metric fields found in legacy JSON")
+          PY
+          fi
+
       - name: Sample repeated-scan test-host RSS without profiler attachment
         shell: bash
         run: |
@@ -148,6 +221,13 @@ jobs:
           first = values[:q]
           last = values[-q:]
 
+          warm = values[min(12, len(values) // 3):]
+          warm_ordered = sorted(warm)
+          warm_p95 = warm_ordered[min(len(warm_ordered) - 1, int(round(0.95 * (len(warm_ordered) - 1))))]
+          warm_q = max(1, len(warm) // 4)
+          warm_first = warm[:warm_q]
+          warm_last = warm[-warm_q:]
+
           print("=== repeated-scan test-host RSS ===")
           print(f"samples={len(values)}")
           print(f"rss_kib_min={min(values)}")
@@ -158,6 +238,16 @@ jobs:
           print(f"first_quartile_median_kib={statistics.median(first):.1f}")
           print(f"last_quartile_median_kib={statistics.median(last):.1f}")
           print(f"quartile_median_delta_kib={statistics.median(last)-statistics.median(first):+.1f}")
+          print("=== warm-state RSS after discarding first ~3 seconds ===")
+          print(f"warm_samples={len(warm)}")
+          print(f"warm_rss_kib_min={min(warm)}")
+          print(f"warm_rss_kib_median={statistics.median(warm):.1f}")
+          print(f"warm_rss_kib_p95={warm_p95}")
+          print(f"warm_rss_kib_max={max(warm)}")
+          print(f"warm_rss_kib_final={warm[-1]}")
+          print(f"warm_first_quartile_median_kib={statistics.median(warm_first):.1f}")
+          print(f"warm_last_quartile_median_kib={statistics.median(warm_last):.1f}")
+          print(f"warm_quartile_median_delta_kib={statistics.median(warm_last)-statistics.median(warm_first):+.1f}")
           PY
 
       - name: Confirm research evidence stays ephemeral
