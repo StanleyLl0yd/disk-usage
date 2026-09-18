@@ -41,8 +41,10 @@ jobs:
         run: |
           set -euo pipefail
           MARKER=/tmp/diskusage-r64-memory-research-enabled
+          RESULTS=/tmp/diskusage-r64-memory-results.log
+          rm -f "$RESULTS"
           touch "$MARKER"
-          trap 'rm -f "$MARKER"' EXIT
+          trap 'rm -f "$MARKER" "$RESULTS"' EXIT
           xcodebuild \
             -project DiskUsage.xcodeproj \
             -scheme DiskUsage \
@@ -54,7 +56,9 @@ jobs:
             | tee "$RUNNER_TEMP/r64-memory.log"
 
           echo "=== R6.4 memory markers ==="
-          grep 'R64_MEMORY' "$RUNNER_TEMP/r64-memory.log"
+          test -s "$RESULTS"
+          cat "$RESULTS"
+          cp "$RESULTS" "$RUNNER_TEMP/r64-memory.log"
 
       - name: Probe Allocations xctrace support
         run: |
