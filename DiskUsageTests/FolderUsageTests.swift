@@ -1,5 +1,7 @@
 import Foundation
 import XCTest
+import AppKit
+import SwiftUI
 @testable import DiskUsage
 
 final class FolderUsageTests: XCTestCase {
@@ -595,4 +597,520 @@ final class FolderUsageTests: XCTestCase {
             partialResult + 1 + nodeCount(item.children)
         }
     }
+}
+
+
+private actor R611SelectionHeartbeatRecorder {
+    private var delays: [Double] = []
+
+    func append(_ delay: Double) {
+        delays.append(delay)
+    }
+
+    func snapshot() -> [Double] {
+        delays
+    }
+}
+
+private struct R611SelectionHeartbeatStats {
+    let samples: Int
+    let medianMilliseconds: Double
+    let p95Milliseconds: Double
+    let maxMilliseconds: Double
+}
+
+private struct R611SelectionIndependentCandidate: View {
+    let items: [FolderUsage]
+    let totalSize: Int64
+    @Binding var selectedPath: String?
+
+    @State private var searchQuery = ""
+    @FocusState private var isTreeFocused: Bool
+
+    var body: some View {
+        List(selection: $selectedPath) {
+            Section(String(localized: "section.items", defaultValue: "Items")) {
+                OutlineGroup(items, children: \.childrenOptional) { item in
+                    ItemRow(
+                        item: item,
+                        totalSize: totalSize,
+                        isSelected: false,
+                        isTreeFocused: isTreeFocused
+                    )
+                    .tag(item.path)
+                    .folderContextMenu(
+                        item,
+                        onShowInFinder: { _ in },
+                        onCopyPath: { _ in },
+                        onDelete: { _ in }
+                    )
+                }
+            }
+        }
+        .searchable(text: $searchQuery)
+        .focused($isTreeFocused)
+        .onAppear {
+            isTreeFocused = true
+        }
+    }
+}
+
+extension FolderUsageTests {
+    @MainActor
+    func testR611RowSelectionDependencyABResearch() async throws {
+        guard FileManager.default.fileExists(
+            atPath: "/tmp/diskusage-r611-selection-ab-enabled"
+        ) else {
+            throw XCTSkip("R6.11 research-only row-selection A/B harness")
+        }
+
+        let candidate = FileManager.default.fileExists(
+            atPath: "/tmp/diskusage-r611-selection-candidate-enabled"
+        )
+        let variant = candidate ? "candidate" : "baseline"
+        let invocation = ProcessInfo.processInfo.environment["R611S_INVOCATION"]
+            ?? (try? String(contentsOfFile: "/tmp/diskusage-r611-selection-invocation", encoding: .utf8)
+                .trimmingCharacters(in: .whitespacesAndNewlines))
+            ?? "unknown"
+
+        try await r611sRecordIdleHeartbeat(
+            variant: variant,
+            invocation: invocation,
+            label: "before"
+        )
+
+        let rawSource = r611sTreeFixture(rootCount: 220)
+        let source = try XCTUnwrap(
+            TreePresentationPreprocessor.sorted(rawSource, by: .sizeDesc)
+        )
+        try r611sRequire(nodeCount(source) == 128_700, "Tree node count mismatch")
+        let totalSize = source.reduce(Int64(0)) { $0 + $1.size }
+
+        for round in 1...5 {
+            var searchQuery = ""
+            var selectedPath: String? = source[0].path
+            var window: NSWindow?
+
+            try await r611sMeasure(
+                variant: variant,
+                invocation: invocation,
+                label: "tree-initial",
+                round: round
+            ) {
+                if candidate {
+                    let view = R611SelectionIndependentCandidate(
+                        items: source,
+                        totalSize: totalSize,
+                        selectedPath: Binding(
+                            get: { selectedPath },
+                            set: { selectedPath = $0 }
+                        )
+                    )
+                    window = r611sHost(view, width: 1_000, height: 720)
+                } else {
+                    let view = TreeView(
+                        items: source,
+                        totalSize: totalSize,
+                        restricted: [],
+                        canRescan: false,
+                        isSearchMode: false,
+                        isSearchPreparing: false,
+                        searchQuery: Binding(
+                            get: { searchQuery },
+                            set: { searchQuery = $0 }
+                        ),
+                        selectedPath: Binding(
+                            get: { selectedPath },
+                            set: { selectedPath = $0 }
+                        ),
+                        onShowInFinder: { _ in },
+                        onCopyPath: { _ in },
+                        onDelete: { _ in },
+                        onOpenFullDiskAccess: {},
+                        onRescan: {}
+                    )
+                    window = r611sHost(view, width: 1_000, height: 720)
+                }
+
+                window?.contentView?.layoutSubtreeIfNeeded()
+                window?.displayIfNeeded()
+            }
+
+            guard let window else {
+                XCTFail("R6.11 selection research window was not created")
+                return
+            }
+
+            try await Task.sleep(for: .milliseconds(120))
+
+            let root = source[0]
+            let child = try XCTUnwrap(root.children.first)
+            try await r611sMeasure(
+                variant: variant,
+                invocation: invocation,
+                label: "tree-expand-1",
+                round: round
+            ) {
+                try await self.r611sExpandAndSelectFirstChild(
+                    window: window,
+                    expectedPath: child.path,
+                    selectedPath: { selectedPath }
+                )
+            }
+            try r611sRequire(selectedPath == child.path, "Tree level-1 selection mismatch")
+
+            let grandchild = try XCTUnwrap(child.children.first)
+            try await r611sMeasure(
+                variant: variant,
+                invocation: invocation,
+                label: "tree-expand-2",
+                round: round
+            ) {
+                try await self.r611sExpandAndSelectFirstChild(
+                    window: window,
+                    expectedPath: grandchild.path,
+                    selectedPath: { selectedPath }
+                )
+            }
+            try r611sRequire(selectedPath == grandchild.path, "Tree level-2 selection mismatch")
+
+            let leaf = try XCTUnwrap(grandchild.children.first)
+            try await r611sMeasure(
+                variant: variant,
+                invocation: invocation,
+                label: "tree-expand-3",
+                round: round
+            ) {
+                try await self.r611sExpandAndSelectFirstChild(
+                    window: window,
+                    expectedPath: leaf.path,
+                    selectedPath: { selectedPath }
+                )
+            }
+            try r611sRequire(selectedPath == leaf.path, "Tree level-3 selection mismatch")
+
+            try await r611sMeasure(
+                variant: variant,
+                invocation: invocation,
+                label: "tree-left",
+                round: round
+            ) {
+                self.r611sSendKey(
+                    keyCode: 123,
+                    characters: "\u{F702}",
+                    to: window
+                )
+                try await self.r611sWaitUntil(timeoutSeconds: 3) {
+                    selectedPath == grandchild.path
+                }
+            }
+            try r611sRequire(selectedPath == grandchild.path, "Tree parent selection mismatch")
+
+            r611sDispose(window)
+            try await Task.sleep(for: .milliseconds(30))
+        }
+
+        r611sWrite(
+            "R611S_ASSERT variant=\(variant) invocation=\(invocation) "
+                + "tree_nodes=128700 result=pass"
+        )
+
+        try await r611sRecordIdleHeartbeat(
+            variant: variant,
+            invocation: invocation,
+            label: "after"
+        )
+    }
+
+    @MainActor
+    private func r611sExpandAndSelectFirstChild(
+        window: NSWindow,
+        expectedPath: String,
+        selectedPath: () -> String?
+    ) async throws {
+        r611sSendKey(
+            keyCode: 124,
+            characters: "\u{F703}",
+            to: window
+        )
+        try await Task.sleep(for: .milliseconds(24))
+        r611sSendKey(
+            keyCode: 125,
+            characters: "\u{F701}",
+            to: window
+        )
+        try await r611sWaitUntil(timeoutSeconds: 3) {
+            selectedPath() == expectedPath
+        }
+    }
+
+    @MainActor
+    private func r611sHost<Content: View>(
+        _ view: Content,
+        width: CGFloat,
+        height: CGFloat
+    ) -> NSWindow {
+        let application = NSApplication.shared
+        application.activate(ignoringOtherApps: true)
+        let rect = NSRect(x: 0, y: 0, width: width, height: height)
+        let window = NSWindow(
+            contentRect: rect,
+            styleMask: [.titled, .closable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        window.isReleasedWhenClosed = false
+        let host = NSHostingView(rootView: view)
+        host.frame = rect
+        host.autoresizingMask = [.width, .height]
+        window.contentView = host
+        window.setFrame(rect, display: false)
+        window.makeKeyAndOrderFront(nil)
+        return window
+    }
+
+    @MainActor
+    private func r611sDispose(_ window: NSWindow) {
+        window.orderOut(nil)
+        window.contentView = nil
+        window.close()
+    }
+
+    @MainActor
+    private func r611sSendKey(
+        keyCode: UInt16,
+        characters: String,
+        to window: NSWindow
+    ) {
+        let timestamp = ProcessInfo.processInfo.systemUptime
+        guard let down = NSEvent.keyEvent(
+            with: .keyDown,
+            location: .zero,
+            modifierFlags: [],
+            timestamp: timestamp,
+            windowNumber: window.windowNumber,
+            context: nil,
+            characters: characters,
+            charactersIgnoringModifiers: characters,
+            isARepeat: false,
+            keyCode: keyCode
+        ),
+        let up = NSEvent.keyEvent(
+            with: .keyUp,
+            location: .zero,
+            modifierFlags: [],
+            timestamp: timestamp,
+            windowNumber: window.windowNumber,
+            context: nil,
+            characters: characters,
+            charactersIgnoringModifiers: characters,
+            isARepeat: false,
+            keyCode: keyCode
+        ) else {
+            XCTFail("Failed to create R6.11 selection keyboard event")
+            return
+        }
+
+        window.sendEvent(down)
+        window.sendEvent(up)
+    }
+
+    @MainActor
+    private func r611sMeasure(
+        variant: String,
+        invocation: String,
+        label: String,
+        round: Int,
+        operation: () async throws -> Void
+    ) async throws {
+        let recorder = R611SelectionHeartbeatRecorder()
+        let heartbeat = r611sHeartbeatTask(recorder: recorder)
+        await Task.yield()
+
+        let clock = ContinuousClock()
+        let started = clock.now
+        try await operation()
+        let duration = r611sSeconds(clock.now - started)
+
+        try await Task.sleep(for: .milliseconds(8))
+        heartbeat.cancel()
+        await heartbeat.value
+
+        let stats = R611SelectionHeartbeatStats(await recorder.snapshot())
+        try r611sRequire(stats.samples > 0, "Missing interaction heartbeat samples")
+
+        r611sWrite(
+            "R611S_METRIC variant=\(variant) invocation=\(invocation) "
+                + "label=\(label) round=\(round) "
+                + "duration_s=\(String(format: "%.6f", duration)) "
+                + "heartbeat_samples=\(stats.samples) "
+                + "heartbeat_median_ms=\(String(format: "%.3f", stats.medianMilliseconds)) "
+                + "heartbeat_p95_ms=\(String(format: "%.3f", stats.p95Milliseconds)) "
+                + "heartbeat_max_ms=\(String(format: "%.3f", stats.maxMilliseconds))"
+        )
+    }
+
+    @MainActor
+    private func r611sRecordIdleHeartbeat(
+        variant: String,
+        invocation: String,
+        label: String
+    ) async throws {
+        let recorder = R611SelectionHeartbeatRecorder()
+        let heartbeat = r611sHeartbeatTask(recorder: recorder)
+
+        try await Task.sleep(for: .seconds(1))
+
+        heartbeat.cancel()
+        await heartbeat.value
+        let stats = R611SelectionHeartbeatStats(await recorder.snapshot())
+        try r611sRequire(stats.samples > 0, "Missing idle heartbeat samples")
+
+        r611sWrite(
+            "R611S_IDLE variant=\(variant) invocation=\(invocation) label=\(label) "
+                + "heartbeat_samples=\(stats.samples) "
+                + "heartbeat_median_ms=\(String(format: "%.3f", stats.medianMilliseconds)) "
+                + "heartbeat_p95_ms=\(String(format: "%.3f", stats.p95Milliseconds)) "
+                + "heartbeat_max_ms=\(String(format: "%.3f", stats.maxMilliseconds))"
+        )
+    }
+
+    private func r611sHeartbeatTask(
+        recorder: R611SelectionHeartbeatRecorder
+    ) -> Task<Void, Never> {
+        Task.detached(priority: .userInitiated) {
+            let clock = ContinuousClock()
+
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(2))
+                guard !Task.isCancelled else { break }
+
+                let requested = clock.now
+                await MainActor.run {}
+                await recorder.append(r611sSeconds(clock.now - requested))
+            }
+        }
+    }
+
+    @MainActor
+    private func r611sWaitUntil(
+        timeoutSeconds: Double,
+        condition: () -> Bool
+    ) async throws {
+        let clock = ContinuousClock()
+        let started = clock.now
+
+        while !condition() {
+            if r611sSeconds(clock.now - started) >= timeoutSeconds {
+                XCTFail("R6.11 selection research operation timed out")
+                throw NSError(
+                    domain: "R611SelectionResearch",
+                    code: 1,
+                    userInfo: [NSLocalizedDescriptionKey: "R6.11 selection research operation timed out"]
+                )
+            }
+            try await Task.sleep(for: .milliseconds(2))
+        }
+    }
+
+    private func r611sRequire(
+        _ condition: @autoclosure () -> Bool,
+        _ message: String
+    ) throws {
+        guard condition() else {
+            r611sWrite("R611S_FAILURE message=\(message.replacingOccurrences(of: " ", with: "_"))")
+            throw NSError(
+                domain: "R611SelectionResearch",
+                code: 3,
+                userInfo: [NSLocalizedDescriptionKey: message]
+            )
+        }
+    }
+
+    private func r611sWrite(_ line: String) {
+        let path = "/tmp/diskusage-r611-selection-results.log"
+        guard let handle = try? FileHandle(
+            forWritingTo: URL(fileURLWithPath: path)
+        ) else {
+            XCTFail("R6.11 selection research results file is unavailable")
+            return
+        }
+
+        handle.seekToEndOfFile()
+        handle.write(Data((line + "\n").utf8))
+        handle.closeFile()
+    }
+
+    private func r611sTreeFixture(rootCount: Int) -> [FolderUsage] {
+        (0..<rootCount).map { rootIndex in
+            r611sTreeNode(
+                path: String(format: "/r611s/tree/root-%03d", rootIndex),
+                remainingDepth: 3,
+                ordinal: rootIndex + 1
+            )
+        }
+    }
+
+    private func r611sTreeNode(
+        path: String,
+        remainingDepth: Int,
+        ordinal: Int
+    ) -> FolderUsage {
+        guard remainingDepth > 0 else {
+            return FolderUsage(
+                path: path,
+                size: Int64((ordinal % 997) + 1),
+                isFile: true
+            )
+        }
+
+        let children = (0..<8).map { childIndex in
+            r611sTreeNode(
+                path: "\(path)/node-\(childIndex)",
+                remainingDepth: remainingDepth - 1,
+                ordinal: ordinal * 8 + childIndex + 1
+            )
+        }
+
+        return FolderUsage(
+            path: path,
+            size: children.reduce(Int64(0)) { $0 + $1.size },
+            children: children
+        )
+    }
+}
+
+private extension R611SelectionHeartbeatStats {
+    init(_ values: [Double]) {
+        let milliseconds = values.map { $0 * 1_000 }.sorted()
+
+        guard !milliseconds.isEmpty else {
+            self.init(
+                samples: 0,
+                medianMilliseconds: 0,
+                p95Milliseconds: 0,
+                maxMilliseconds: 0
+            )
+            return
+        }
+
+        let medianIndex = milliseconds.count / 2
+        let p95Index = min(
+            milliseconds.count - 1,
+            Int(ceil(Double(milliseconds.count - 1) * 0.95))
+        )
+
+        self.init(
+            samples: milliseconds.count,
+            medianMilliseconds: milliseconds[medianIndex],
+            p95Milliseconds: milliseconds[p95Index],
+            maxMilliseconds: milliseconds[milliseconds.count - 1]
+        )
+    }
+}
+
+private func r611sSeconds(_ duration: Duration) -> Double {
+    let components = duration.components
+    return Double(components.seconds)
+        + Double(components.attoseconds) / 1_000_000_000_000_000_000
 }
