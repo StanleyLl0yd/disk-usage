@@ -308,6 +308,44 @@ The measured next hotspot is therefore **Search name/path matching**, with resul
 
 Raw trace archives, exported XML, logs, temporary result files, and DerivedData remained under runner temporary storage and were not uploaded or committed. The temporary research workflow and research-only tests are absent from the clean final branch.
 
+### R6.8 Search terminal-name matching A/B
+
+R6.8 tested the smallest behavior-preserving Search matching candidate selected by R6.7: compute `(path as NSString).lastPathComponent` once per `FolderUsage.name` access and reuse that value instead of evaluating the same terminal component twice for ordinary nonempty names. Search traversal, case-insensitive terminal-name and full-path matching, result sorting/tie behavior, cancellation, snapshot authority, scanner behavior, concurrency, and UI behavior were unchanged.
+
+Research draft PR #111 was intentionally closed unmerged after evidence collection. The exact production baseline was `5ef70dfac1d59a951ca55d0b499baa2fcfa22c70`. The successful research measurement head was `4cdca2a09d6d10195d5fc2f87500cb24b809d683`, workflow run `35575888250`, job `106257561456`. Workflow-only commits after the original candidate added a bounded watchdog around `xctrace record` after an earlier capture hung; they did not broaden or alter the production candidate.
+
+Focused correctness passed on both variants. Coverage preserved case-insensitive terminal-name matching, case-insensitive full-path-only matching, deterministic equal-size/path sorting, unchanged source snapshots, the existing empty-terminal `FolderUsage.name` fallback, one-match selective identity, and broad 128,480-match identity/count on the deterministic 128,700-node fixture.
+
+The successful same-runner timing run used six alternating baseline/candidate pairs with five warmed operation-only samples per variant and pair:
+
+| Pair | Baseline median | Candidate median | Candidate delta |
+| --- | ---: | ---: | ---: |
+| 1 | 0.941515 s | 0.947161 s | +0.60% |
+| 2 | 0.938001 s | 0.918385 s | -2.09% |
+| 3 | 0.901158 s | 0.926964 s | +2.86% |
+| 4 | 0.869180 s | 0.934851 s | +7.56% |
+| 5 | 0.872380 s | 0.933977 s | +7.06% |
+| 6 | 0.914575 s | 0.990389 s | +8.29% |
+
+The candidate was faster in only **1 of 6** pairs. The baseline pooled median was **0.913574 s** and the candidate pooled median was **0.932928 s**, a runner-local difference of **+2.12%**. The workflow's mean paired delta was **+4.05%**. These values are diagnostic shared-runner evidence, not a machine-independent product-latency claim.
+
+Three independent 10-second Time Profiler captures per variant did show the intended targeted reduction:
+
+| Sampled Search signal | Baseline | Candidate |
+| --- | ---: | ---: |
+| Pooled symbolized Search stacks | 6,137 | 5,907 |
+| Terminal-path rows/frames | 362 (5.90%) | 212 (3.59%) |
+| `FolderUsage.name` rows/frames | 903 (14.71%) | 542 (9.18%) |
+| Nearest name/path matching phase | 51.98% | 49.33% |
+| Nearest result-sorting phase | 34.37% | 36.19% |
+| Nearest Search-recursion phase | 13.65% | 14.47% |
+
+The terminal-path sampled share fell by 2.31 percentage points, about 39% relative, and the `FolderUsage.name` sampled share fell by 5.54 percentage points, about 38% relative. These are sampled stack shares rather than wall-clock CPU percentages; increases in other relative phase shares do not by themselves prove those phases became slower.
+
+The candidate is **rejected**. Although the targeted terminal-name extraction signal fell credibly, R6.8 required both that reduction and no repeated broad-Search end-to-end regression signal. The successful timing run instead had the candidate slower in 5 of 6 pairs, with +2.12% pooled-median and +4.05% mean paired deltas. The experiment is therefore not broadened to result sorting, indexing, caching, Search redesign, concurrency, UI, or scanner work, and no production source change is retained.
+
+Raw `.trace`, exported XML, timing logs/results, DerivedData, temporary markers, and the baseline worktree remained under runner temporary storage only. No research workflow, heavy research-only test, raw profiling artifact, or candidate source change belongs in the clean final production branch.
+
 ### Allocations
 
 Use Allocations with disposable data to inspect peak/retained memory across:

@@ -491,6 +491,22 @@ The measurement decision is to select **Search name/path matching** as the next 
 
 Final PR #108 passed CI Debug/Release, Actions Policy, Gitleaks, Dependency Review, CodeQL Actions, and CodeQL Swift on exact head `676ef34547078c5a60fe540a0e1fd6c1d5c1aa5e`, with no review threads, then squash-merged as exact `main` `e8bafb02bf237e5509b604dff9ce797cbd391639`. The merge commit was verified as the current repository head; GitHub reported no additional commit status or PR-triggered workflow run on that squash commit. R6.7 is complete.
 
+### R6.8 Test Search terminal-name matching path cost — FINAL VERIFICATION
+
+R6.8 tested only the smallest matching-path candidate selected by R6.7: compute the terminal path component once inside `FolderUsage.name` and reuse it. Research draft PR #111 remained research-only and was closed unmerged.
+
+Successful A/B evidence at exact research head `4cdca2a09d6d10195d5fc2f87500cb24b809d683` (workflow `35575888250`, job `106257561456`) showed:
+
+- focused current Search semantics passed on both the exact baseline `5ef70dfac1d59a951ca55d0b499baa2fcfa22c70` and candidate;
+- selective and 128,700-node / 128,480-match broad result identity/counts remained unchanged;
+- three Time Profiler captures per variant reduced terminal-path sampled rows/frames from 362 to 212 and `FolderUsage.name` sampled rows/frames from 903 to 542;
+- normalized targeted shares fell from 5.90% to 3.59% for terminal-path frames and from 14.71% to 9.18% for the name accessor;
+- the nearest name/path matching phase moved from 51.98% to 49.33% of pooled symbolized Search stacks;
+- six alternating warmed timing pairs did **not** satisfy the no-regression condition: the candidate was faster in only 1/6 pairs, pooled median moved 0.913574 s → 0.932928 s (+2.12%), and mean paired delta was +4.05%;
+- raw traces, XML, timing logs/results, DerivedData, the temporary baseline worktree, and the research workflow/tests remain outside the clean final branch.
+
+The measurement decision is to **reject** the candidate. The targeted cost fell, but repeated end-to-end evidence showed a regression signal, so the retain rule was not met. No production Search, scanner, concurrency, UI, cache/index, sorting, or snapshot-model change is retained or added in this slice.
+
 Then continue profiling representative large synthetic or disposable filesystem trees and identify actual bottlenecks in:
 
 - enumeration;
@@ -566,4 +582,4 @@ These are not assumed future stages.
 
 **R5 — Core productivity workflow is complete.** R5.1–R5.5 are implemented and verified, the full repository-wide exit review passed, final exact-main verification is green, and release-tag immutability is enforced for `v*` while the published `v0.1.0-alpha.1` remains bound to its verified source commit.
 
-**R6 — Large-scale resilience and measured optimization is in progress.** R6.1–R6.7 are complete. R6.7 selected Search name/path matching as the next measured narrow candidate after large-snapshot scaling and profiling; PR #108 squash-merged as current exact `main` `e8bafb02bf237e5509b604dff9ce797cbd391639`. Result sorting remains a secondary measured cost. The next R6 slice must test the smallest behavior-preserving matching-path change first; no Search index/cache, duplicate snapshot, presentation redesign, scanner expansion, incremental-result architecture, or memory-driven redesign is justified.
+**R6 — Large-scale resilience and measured optimization is in progress.** R6.1–R6.7 are complete. R6.8 measurement evidence is complete and the terminal-name candidate is rejected: targeted sampled matching cost fell, but the successful six-pair timing run showed an end-to-end regression signal, so no production code is retained. Clean final documentation/closure verification remains before R6.8 can be marked complete. Result sorting remains a measured secondary cost; no Search index/cache, duplicate snapshot, presentation redesign, scanner expansion, incremental-result architecture, or memory-driven redesign is justified by R6.8.
