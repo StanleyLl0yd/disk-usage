@@ -1,5 +1,7 @@
 import Foundation
 import XCTest
+import AppKit
+import SwiftUI
 @testable import DiskUsage
 
 final class FolderUsageTests: XCTestCase {
@@ -595,4 +597,616 @@ final class FolderUsageTests: XCTestCase {
             partialResult + 1 + nodeCount(item.children)
         }
     }
+}
+
+private actor R610HeartbeatRecorder {
+    private var delays: [Double] = []
+
+    func append(_ delay: Double) {
+        delays.append(delay)
+    }
+
+    func snapshot() -> [Double] {
+        delays
+    }
+}
+
+private struct R610HeartbeatStats {
+    let samples: Int
+    let medianMilliseconds: Double
+    let p95Milliseconds: Double
+    let maxMilliseconds: Double
+}
+
+extension FolderUsageTests {
+    @MainActor
+    func testR610SwiftUIInteractionResponsivenessResearch() async throws {
+        guard FileManager.default.fileExists(
+            atPath: "/tmp/diskusage-r610-research-enabled"
+        ) else {
+            throw XCTSkip("R6.10 research-only SwiftUI interaction harness")
+        }
+
+        try await r610RecordIdleHeartbeat(label: "before")
+
+        do {
+            let rawSource = r610TreeFixture(rootCount: 220)
+            let source = try XCTUnwrap(
+                TreePresentationPreprocessor.sorted(rawSource, by: .sizeDesc)
+            )
+            XCTAssertEqual(nodeCount(source), 128_700)
+            let totalSize = source.reduce(Int64(0)) { $0 + $1.size }
+
+            for round in 1...5 {
+                var searchQuery = ""
+                var selectedPath: String? = source[0].path
+                var window: NSWindow?
+
+                try await r610Measure(
+                    label: "tree-initial",
+                    round: round
+                ) {
+                    let view = TreeView(
+                        items: source,
+                        totalSize: totalSize,
+                        restricted: [],
+                        canRescan: false,
+                        isSearchMode: false,
+                        isSearchPreparing: false,
+                        searchQuery: Binding(
+                            get: { searchQuery },
+                            set: { searchQuery = $0 }
+                        ),
+                        selectedPath: Binding(
+                            get: { selectedPath },
+                            set: { selectedPath = $0 }
+                        ),
+                        onShowInFinder: { _ in },
+                        onCopyPath: { _ in },
+                        onDelete: { _ in },
+                        onOpenFullDiskAccess: {},
+                        onRescan: {}
+                    )
+                    window = r610Host(view, width: 1_000, height: 720)
+                    window?.contentView?.layoutSubtreeIfNeeded()
+                    window?.displayIfNeeded()
+                }
+
+                guard let window else {
+                    XCTFail("Tree research window was not created")
+                    return
+                }
+
+                try await Task.sleep(for: .milliseconds(120))
+
+                let root = source[0]
+                let child = try XCTUnwrap(root.children.first)
+                try await r610Measure(
+                    label: "tree-expand-1",
+                    round: round
+                ) {
+                    try await self.r610ExpandAndSelectFirstChild(
+                        window: window,
+                        expectedPath: child.path,
+                        selectedPath: { selectedPath }
+                    )
+                }
+                XCTAssertEqual(selectedPath, child.path)
+
+                let grandchild = try XCTUnwrap(child.children.first)
+                try await r610Measure(
+                    label: "tree-expand-2",
+                    round: round
+                ) {
+                    try await self.r610ExpandAndSelectFirstChild(
+                        window: window,
+                        expectedPath: grandchild.path,
+                        selectedPath: { selectedPath }
+                    )
+                }
+                XCTAssertEqual(selectedPath, grandchild.path)
+
+                let leaf = try XCTUnwrap(grandchild.children.first)
+                try await r610Measure(
+                    label: "tree-expand-3",
+                    round: round
+                ) {
+                    try await self.r610ExpandAndSelectFirstChild(
+                        window: window,
+                        expectedPath: leaf.path,
+                        selectedPath: { selectedPath }
+                    )
+                }
+                XCTAssertEqual(selectedPath, leaf.path)
+
+                try await r610Measure(
+                    label: "tree-left",
+                    round: round
+                ) {
+                    self.r610SendKey(
+                        keyCode: 123,
+                        characters: "\u{F702}",
+                        to: window
+                    )
+                    try await self.r610WaitUntil(timeoutSeconds: 3) {
+                        selectedPath == grandchild.path
+                    }
+                }
+                XCTAssertEqual(selectedPath, grandchild.path)
+
+                window.close()
+                try await Task.sleep(for: .milliseconds(30))
+            }
+        }
+
+        do {
+            let source = r610SunburstFixture(leafCountPerGroup: 2_048)
+            XCTAssertEqual(nodeCount(source), 131_156)
+            let totalSize = source.reduce(Int64(0)) { $0 + $1.size }
+            XCTAssertEqual(totalSize, 131_072)
+
+            let expectedPresentation = try XCTUnwrap(
+                SunburstPresentationPreprocessor.presentation(
+                    for: source,
+                    totalSize: totalSize,
+                    levels: 4
+                )
+            )
+            XCTAssertEqual(expectedPresentation.segments.count, 84)
+            XCTAssertEqual(expectedPresentation.aggregates.count, 64)
+            XCTAssertEqual(expectedPresentation.visualSegmentCount, 148)
+
+            for round in 1...5 {
+                var selectedPath: String?
+                var window: NSWindow?
+
+                try await r610Measure(
+                    label: "sunburst-initial",
+                    round: round
+                ) {
+                    let view = SunburstView(
+                        items: source,
+                        totalSize: totalSize,
+                        snapshotRevision: UInt64(round),
+                        selectedPath: Binding(
+                            get: { selectedPath },
+                            set: { selectedPath = $0 }
+                        ),
+                        onShowInFinder: { _ in },
+                        onCopyPath: { _ in },
+                        onDelete: { _ in }
+                    )
+                    window = r610Host(view, width: 820, height: 720)
+                    window?.contentView?.layoutSubtreeIfNeeded()
+                    window?.displayIfNeeded()
+                }
+
+                guard let window else {
+                    XCTFail("Sunburst research window was not created")
+                    return
+                }
+
+                try await r610Measure(
+                    label: "sunburst-ready-select",
+                    round: round
+                ) {
+                    try await self.r610ClickUntilSelectionChanges(
+                        window: window,
+                        previousPath: nil,
+                        selectedPath: { selectedPath }
+                    )
+                }
+
+                let rootPath = try XCTUnwrap(selectedPath)
+                let root = try XCTUnwrap(
+                    source.first(where: { $0.path == rootPath })
+                )
+
+                try await r610Measure(
+                    label: "sunburst-nav-1",
+                    round: round
+                ) {
+                    try await self.r610ClickUntilSelectionChanges(
+                        window: window,
+                        previousPath: rootPath,
+                        selectedPath: { selectedPath }
+                    )
+                }
+
+                let childPath = try XCTUnwrap(selectedPath)
+                let child = try XCTUnwrap(
+                    root.children.first(where: { $0.path == childPath })
+                )
+
+                try await r610Measure(
+                    label: "sunburst-nav-2",
+                    round: round
+                ) {
+                    try await self.r610ClickUntilSelectionChanges(
+                        window: window,
+                        previousPath: childPath,
+                        selectedPath: { selectedPath }
+                    )
+                }
+
+                let groupPath = try XCTUnwrap(selectedPath)
+                XCTAssertNotNil(
+                    child.children.first(where: { $0.path == groupPath })
+                )
+
+                window.close()
+                try await Task.sleep(for: .milliseconds(30))
+            }
+
+            r610Write(
+                "R610_ASSERT tree_nodes=128700 sunburst_nodes=131156 "
+                    + "sunburst_total=131072 result=pass"
+            )
+        }
+
+        try await r610RecordIdleHeartbeat(label: "after")
+    }
+
+    @MainActor
+    private func r610ExpandAndSelectFirstChild(
+        window: NSWindow,
+        expectedPath: String,
+        selectedPath: () -> String?
+    ) async throws {
+        r610SendKey(
+            keyCode: 124,
+            characters: "\u{F703}",
+            to: window
+        )
+        try await Task.sleep(for: .milliseconds(24))
+        r610SendKey(
+            keyCode: 125,
+            characters: "\u{F701}",
+            to: window
+        )
+        try await r610WaitUntil(timeoutSeconds: 3) {
+            selectedPath() == expectedPath
+        }
+    }
+
+    @MainActor
+    private func r610ClickUntilSelectionChanges(
+        window: NSWindow,
+        previousPath: String?,
+        selectedPath: () -> String?
+    ) async throws {
+        let clock = ContinuousClock()
+        let started = clock.now
+
+        while selectedPath() == previousPath {
+            guard let contentView = window.contentView else {
+                XCTFail("Research window has no content view")
+                return
+            }
+
+            let point = CGPoint(
+                x: contentView.bounds.midX + 90,
+                y: contentView.bounds.midY
+            )
+            r610SendClick(at: point, to: window)
+
+            if r610Seconds(clock.now - started) >= 8 {
+                XCTFail(
+                    "R6.10 Sunburst interaction did not become actionable "
+                        + "within the research timeout"
+                )
+                return
+            }
+            try await Task.sleep(for: .milliseconds(12))
+        }
+    }
+
+    @MainActor
+    private func r610Host<Content: View>(
+        _ view: Content,
+        width: CGFloat,
+        height: CGFloat
+    ) -> NSWindow {
+        _ = NSApplication.shared
+        let rect = NSRect(x: 0, y: 0, width: width, height: height)
+        let window = NSWindow(
+            contentRect: rect,
+            styleMask: [.titled, .closable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        let host = NSHostingView(rootView: view)
+        host.frame = rect
+        host.autoresizingMask = [.width, .height]
+        window.contentView = host
+        window.setFrame(rect, display: false)
+        window.makeKeyAndOrderFront(nil)
+        window.makeFirstResponder(host)
+        return window
+    }
+
+    @MainActor
+    private func r610SendKey(
+        keyCode: UInt16,
+        characters: String,
+        to window: NSWindow
+    ) {
+        let timestamp = ProcessInfo.processInfo.systemUptime
+        guard let down = NSEvent.keyEvent(
+            with: .keyDown,
+            location: .zero,
+            modifierFlags: [],
+            timestamp: timestamp,
+            windowNumber: window.windowNumber,
+            context: nil,
+            characters: characters,
+            charactersIgnoringModifiers: characters,
+            isARepeat: false,
+            keyCode: keyCode
+        ),
+        let up = NSEvent.keyEvent(
+            with: .keyUp,
+            location: .zero,
+            modifierFlags: [],
+            timestamp: timestamp,
+            windowNumber: window.windowNumber,
+            context: nil,
+            characters: characters,
+            charactersIgnoringModifiers: characters,
+            isARepeat: false,
+            keyCode: keyCode
+        ) else {
+            XCTFail("Failed to create R6.10 keyboard event")
+            return
+        }
+
+        window.sendEvent(down)
+        window.sendEvent(up)
+    }
+
+    @MainActor
+    private func r610SendClick(
+        at point: CGPoint,
+        to window: NSWindow
+    ) {
+        let timestamp = ProcessInfo.processInfo.systemUptime
+        guard let down = NSEvent.mouseEvent(
+            with: .leftMouseDown,
+            location: point,
+            modifierFlags: [],
+            timestamp: timestamp,
+            windowNumber: window.windowNumber,
+            context: nil,
+            eventNumber: 0,
+            clickCount: 1,
+            pressure: 1
+        ),
+        let up = NSEvent.mouseEvent(
+            with: .leftMouseUp,
+            location: point,
+            modifierFlags: [],
+            timestamp: timestamp,
+            windowNumber: window.windowNumber,
+            context: nil,
+            eventNumber: 0,
+            clickCount: 1,
+            pressure: 0
+        ) else {
+            XCTFail("Failed to create R6.10 mouse event")
+            return
+        }
+
+        window.sendEvent(down)
+        window.sendEvent(up)
+    }
+
+    @MainActor
+    private func r610Measure(
+        label: String,
+        round: Int,
+        operation: () async throws -> Void
+    ) async throws {
+        let recorder = R610HeartbeatRecorder()
+        let heartbeat = r610HeartbeatTask(recorder: recorder)
+        await Task.yield()
+
+        let clock = ContinuousClock()
+        let started = clock.now
+        try await operation()
+        let duration = r610Seconds(clock.now - started)
+
+        try await Task.sleep(for: .milliseconds(8))
+        heartbeat.cancel()
+        await heartbeat.value
+
+        let stats = R610HeartbeatStats(await recorder.snapshot())
+        XCTAssertGreaterThan(stats.samples, 0)
+
+        r610Write(
+            "R610_METRIC label=\(label) round=\(round) "
+                + "duration_s=\(String(format: "%.6f", duration)) "
+                + "heartbeat_samples=\(stats.samples) "
+                + "heartbeat_median_ms=\(String(format: "%.3f", stats.medianMilliseconds)) "
+                + "heartbeat_p95_ms=\(String(format: "%.3f", stats.p95Milliseconds)) "
+                + "heartbeat_max_ms=\(String(format: "%.3f", stats.maxMilliseconds))"
+        )
+    }
+
+    @MainActor
+    private func r610RecordIdleHeartbeat(label: String) async throws {
+        let recorder = R610HeartbeatRecorder()
+        let heartbeat = r610HeartbeatTask(recorder: recorder)
+
+        try await Task.sleep(for: .seconds(1))
+
+        heartbeat.cancel()
+        await heartbeat.value
+        let stats = R610HeartbeatStats(await recorder.snapshot())
+        XCTAssertGreaterThan(stats.samples, 0)
+
+        r610Write(
+            "R610_IDLE label=\(label) "
+                + "heartbeat_samples=\(stats.samples) "
+                + "heartbeat_median_ms=\(String(format: "%.3f", stats.medianMilliseconds)) "
+                + "heartbeat_p95_ms=\(String(format: "%.3f", stats.p95Milliseconds)) "
+                + "heartbeat_max_ms=\(String(format: "%.3f", stats.maxMilliseconds))"
+        )
+    }
+
+    private func r610HeartbeatTask(
+        recorder: R610HeartbeatRecorder
+    ) -> Task<Void, Never> {
+        Task.detached(priority: .userInitiated) {
+            let clock = ContinuousClock()
+
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(2))
+                guard !Task.isCancelled else { break }
+
+                let requested = clock.now
+                await MainActor.run {}
+                await recorder.append(r610Seconds(clock.now - requested))
+            }
+        }
+    }
+
+    @MainActor
+    private func r610WaitUntil(
+        timeoutSeconds: Double,
+        condition: () -> Bool
+    ) async throws {
+        let clock = ContinuousClock()
+        let started = clock.now
+
+        while !condition() {
+            if r610Seconds(clock.now - started) >= timeoutSeconds {
+                XCTFail("R6.10 research operation timed out")
+                return
+            }
+            try await Task.sleep(for: .milliseconds(2))
+        }
+    }
+
+    private func r610Write(_ line: String) {
+        let path = "/tmp/diskusage-r610-results.log"
+        guard let handle = try? FileHandle(
+            forWritingTo: URL(fileURLWithPath: path)
+        ) else {
+            XCTFail("R6.10 research results file is unavailable")
+            return
+        }
+
+        handle.seekToEndOfFile()
+        handle.write(Data((line + "\n").utf8))
+        handle.closeFile()
+    }
+
+    private func r610TreeFixture(rootCount: Int) -> [FolderUsage] {
+        (0..<rootCount).map { rootIndex in
+            r610TreeNode(
+                path: String(format: "/r610/tree/root-%03d", rootIndex),
+                remainingDepth: 3,
+                ordinal: rootIndex + 1
+            )
+        }
+    }
+
+    private func r610TreeNode(
+        path: String,
+        remainingDepth: Int,
+        ordinal: Int
+    ) -> FolderUsage {
+        guard remainingDepth > 0 else {
+            return FolderUsage(
+                path: path,
+                size: Int64((ordinal % 997) + 1),
+                isFile: true
+            )
+        }
+
+        let children = (0..<8).map { childIndex in
+            r610TreeNode(
+                path: "\(path)/node-\(childIndex)",
+                remainingDepth: remainingDepth - 1,
+                ordinal: ordinal * 8 + childIndex + 1
+            )
+        }
+
+        return FolderUsage(
+            path: path,
+            size: children.reduce(Int64(0)) { $0 + $1.size },
+            children: children
+        )
+    }
+
+    private func r610SunburstFixture(
+        leafCountPerGroup: Int
+    ) -> [FolderUsage] {
+        (0..<4).map { rootIndex in
+            let rootPath = "/r610/sunburst/root-\(rootIndex)"
+            let children = (0..<4).map { childIndex in
+                let childPath = "\(rootPath)/child-\(childIndex)"
+                let groups = (0..<4).map { groupIndex in
+                    let groupPath = "\(childPath)/group-\(groupIndex)"
+                    let leaves = (0..<leafCountPerGroup).map { leafIndex in
+                        FolderUsage(
+                            path: "\(groupPath)/leaf-\(leafIndex)",
+                            size: 1,
+                            isFile: true
+                        )
+                    }
+                    return FolderUsage(
+                        path: groupPath,
+                        size: Int64(leafCountPerGroup),
+                        children: leaves
+                    )
+                }
+                return FolderUsage(
+                    path: childPath,
+                    size: Int64(4 * leafCountPerGroup),
+                    children: groups
+                )
+            }
+            return FolderUsage(
+                path: rootPath,
+                size: Int64(16 * leafCountPerGroup),
+                children: children
+            )
+        }
+    }
+}
+
+private extension R610HeartbeatStats {
+    init(_ values: [Double]) {
+        let milliseconds = values.map { $0 * 1_000 }.sorted()
+
+        guard !milliseconds.isEmpty else {
+            self.init(
+                samples: 0,
+                medianMilliseconds: 0,
+                p95Milliseconds: 0,
+                maxMilliseconds: 0
+            )
+            return
+        }
+
+        let medianIndex = milliseconds.count / 2
+        let p95Index = min(
+            milliseconds.count - 1,
+            Int(ceil(Double(milliseconds.count - 1) * 0.95))
+        )
+
+        self.init(
+            samples: milliseconds.count,
+            medianMilliseconds: milliseconds[medianIndex],
+            p95Milliseconds: milliseconds[p95Index],
+            maxMilliseconds: milliseconds[milliseconds.count - 1]
+        )
+    }
+}
+
+private func r610Seconds(_ duration: Duration) -> Double {
+    let components = duration.components
+    return Double(components.seconds)
+        + Double(components.attoseconds) / 1_000_000_000_000_000_000
 }
