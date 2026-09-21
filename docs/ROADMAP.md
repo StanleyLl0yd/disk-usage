@@ -510,7 +510,7 @@ The measurement decision is to **reject** the candidate. The targeted cost fell,
 Final evidence PR #113 passed CI Debug/Release, Actions Policy, Gitleaks, Dependency Review, CodeQL Actions, and CodeQL Swift on exact head `6ad4b56ec57174d88a0fe64402f0940197927eb4`, with no review threads, then squash-merged as exact `main` `1ca3516e0a546488610b882aa4d9436c01db2fda`. The merge commit was verified as the current repository head; GitHub reported no additional PR-triggered workflow run on that squash commit. R6.8 is complete.
 
 
-### R6.9 Measure large-snapshot presentation-state responsiveness — EVIDENCE COMPLETE
+### R6.9 Measure large-snapshot presentation-state responsiveness — COMPLETE
 
 R6.9 measured the unchanged production Tree/Search/Largest Files/Sunburst presentation-state objects, including detached preprocessing, main-actor publication, real Combine observer delivery, and stale-generation suppression. Research PR #116 was closed unmerged.
 
@@ -526,7 +526,7 @@ Successful evidence at exact research head `96adcdde3ead1996cdf5cc49bb3da9bdb3d6
 
 The measurement decision is to **accept current presentation-state publication/main-actor responsiveness** at the tested scale. There is no credible repeated workload-correlated main-actor stall, so no targeted profiling or production state/concurrency optimization is justified by R6.9. SwiftUI rendering/interaction remains outside this slice and should become a further R6 slice only if the master exit review still requires it.
 
-Clean final documentation and merged-main closure verification remain before R6.9 can be marked COMPLETE.
+Final documentation PR #117 passed CI Debug/Release, Actions Policy, Gitleaks, Dependency Review, CodeQL Actions, and CodeQL Swift on exact head `6bd3dd5fb37967ea7bd2d59355144ea3a75a4864`, with no review threads, then squash-merged as exact `main` `7ed1b48ce98a17582b2428138922d22008a75dd9`. The merge commit was verified as the current repository head; GitHub reported no additional PR-triggered workflow run on that squash commit. R6.9 is complete.
 
 Then continue profiling representative large synthetic or disposable filesystem trees and identify actual bottlenecks in:
 
@@ -603,4 +603,4 @@ These are not assumed future stages.
 
 **R5 — Core productivity workflow is complete.** R5.1–R5.5 are implemented and verified, the full repository-wide exit review passed, final exact-main verification is green, and release-tag immutability is enforced for `v*` while the published `v0.1.0-alpha.1` remains bound to its verified source commit.
 
-**R6 — Large-scale resilience and measured optimization is in progress.** R6.1–R6.8 are complete. R6.9 measurement evidence is complete and accepts current presentation-state publication/main-actor responsiveness at the tested 128K–131K snapshot scale; no production runtime change is justified. Clean final exact-head and merged-main closure verification remain before R6.9 is marked complete. After that, resume the R6 master exit review against #86 and create another slice only if a remaining SwiftUI rendering/interaction boundary is still required.
+**R6 — Large-scale resilience and measured optimization is in progress.** R6.1–R6.9 are complete. The R6 master exit review against #86 is CURRENT. The remaining explicit unmeasured boundary is actual large-snapshot SwiftUI Tree expansion/navigation and Sunburst rendering/interaction: R6.7 measured presentation derivations and R6.9 measured state publication/main-actor responsiveness, but neither measured the unchanged production views under real interaction. Do not start another production optimization until that boundary is measured.
