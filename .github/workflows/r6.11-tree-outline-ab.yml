@@ -1,0 +1,278 @@
+name: R6.11 Tree Outline A/B Research
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/r6.11-tree-outline-ab.yml'
+      - 'DiskUsageTests/FolderUsageTests.swift'
+
+permissions: {}
+
+concurrency:
+  group: r6-11-tree-outline-ab-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  experiment:
+    runs-on: macos-26
+    timeout-minutes: 35
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout exact research head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Select Xcode 26.6
+        run: sudo xcode-select -s /Applications/Xcode_26.6.app/Contents/Developer
+
+      - name: Prepare A/B environment
+        shell: bash
+        env:
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
+          BASELINE_SHA: 29ede5fb1a15116940424302d3f6b68cda854d96
+        run: |
+          set -euo pipefail
+
+          head="$(git rev-parse HEAD)"
+          echo "research_head=${head}"
+          echo "production_baseline=${BASELINE_SHA}"
+          test "${head}" = "${EXPECTED_HEAD}"
+          git cat-file -e "${BASELINE_SHA}^{commit}"
+
+          results="$RUNNER_TEMP/r611-results.log"
+          : > "$results"
+
+          rm -f /tmp/diskusage-r611-tree-ab-enabled \
+                /tmp/diskusage-r611-candidate-enabled \
+                /tmp/diskusage-r611-results.log \
+                /tmp/diskusage-r611-invocation
+          touch /tmp/diskusage-r611-tree-ab-enabled
+          ln -s "$results" /tmp/diskusage-r611-results.log
+
+          echo "R611_RESULTS=$results" >> "$GITHUB_ENV"
+          echo "R611_DERIVED=$RUNNER_TEMP/r611-derived" >> "$GITHUB_ENV"
+
+          sw_vers
+          xcodebuild -version
+
+      - name: Build outside measured intervals
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project DiskUsage.xcodeproj \
+            -scheme DiskUsage \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            -derivedDataPath "$R611_DERIVED" \
+            CODE_SIGNING_ALLOWED=NO \
+            build-for-testing
+
+      - name: Run alternating baseline and candidate pairs
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          run_variant() {
+            local variant="$1"
+            local invocation="$2"
+            local log="$RUNNER_TEMP/r611-${variant}-${invocation}.log"
+
+            echo "${invocation}" > /tmp/diskusage-r611-invocation
+            if [[ "${variant}" == "candidate" ]]; then
+              touch /tmp/diskusage-r611-candidate-enabled
+            else
+              rm -f /tmp/diskusage-r611-candidate-enabled
+            fi
+
+            echo "=== R6.11 variant=${variant} invocation=${invocation} ==="
+            R611_INVOCATION="${invocation}" xcodebuild \
+              -project DiskUsage.xcodeproj \
+              -scheme DiskUsage \
+              -configuration Debug \
+              -destination 'platform=macOS' \
+              -derivedDataPath "$R611_DERIVED" \
+              -only-testing:DiskUsageTests/FolderUsageTests/testR611TreeOutlineABResearch \
+              CODE_SIGNING_ALLOWED=NO \
+              test-without-building >"${log}" 2>&1
+
+            grep -E 'testR611TreeOutlineABResearch.*passed|TEST (SUCCEEDED|FAILED)' "${log}" || true
+          }
+
+          for pair in 1 2 3 4 5 6; do
+            if (( pair % 2 == 1 )); then
+              run_variant baseline "pair-${pair}-baseline"
+              run_variant candidate "pair-${pair}-candidate"
+            else
+              run_variant candidate "pair-${pair}-candidate"
+              run_variant baseline "pair-${pair}-baseline"
+            fi
+          done
+
+      - name: Summarize A/B evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat "$R611_RESULTS"
+
+          R611_RESULTS="$R611_RESULTS" python3 - <<'PY'
+          import collections
+          import os
+          import re
+          import statistics
+
+          metric_re = re.compile(
+              r"R611_METRIC variant=(\S+) invocation=(\S+) label=(\S+) round=(\d+) "
+              r"duration_s=([0-9.]+) heartbeat_samples=(\d+) "
+              r"heartbeat_median_ms=([0-9.]+) heartbeat_p95_ms=([0-9.]+) "
+              r"heartbeat_max_ms=([0-9.]+)"
+          )
+          idle_re = re.compile(
+              r"R611_IDLE variant=(\S+) invocation=(\S+) label=(\S+) "
+              r"heartbeat_samples=(\d+) heartbeat_median_ms=([0-9.]+) "
+              r"heartbeat_p95_ms=([0-9.]+) heartbeat_max_ms=([0-9.]+)"
+          )
+          assert_re = re.compile(
+              r"R611_ASSERT variant=(\S+) invocation=(\S+) "
+              r"tree_nodes=128700 result=pass"
+          )
+
+          metrics = collections.defaultdict(list)
+          invocation_metrics = collections.defaultdict(list)
+          idle = collections.defaultdict(list)
+          assertions = set()
+
+          with open(os.environ["R611_RESULTS"], encoding="utf-8") as handle:
+              for raw in handle:
+                  line = raw.strip()
+                  if not line:
+                      continue
+                  if m := metric_re.fullmatch(line):
+                      variant, invocation, label = m.group(1), m.group(2), m.group(3)
+                      duration = float(m.group(5))
+                      p95 = float(m.group(8))
+                      maximum = float(m.group(9))
+                      metrics[(variant, label)].append((duration, p95, maximum))
+                      invocation_metrics[(variant, invocation, label)].append(duration)
+                      continue
+                  if m := idle_re.fullmatch(line):
+                      idle[(m.group(1), m.group(3))].append(
+                          (float(m.group(6)), float(m.group(7)))
+                      )
+                      continue
+                  if m := assert_re.fullmatch(line):
+                      assertions.add((m.group(1), m.group(2)))
+                      continue
+                  raise SystemExit(f"Unrecognized R6.11 result line: {line}")
+
+          labels = [
+              "tree-initial",
+              "tree-expand-1",
+              "tree-expand-2",
+              "tree-expand-3",
+              "tree-left",
+          ]
+          for variant in ("baseline", "candidate"):
+              expected_invocations = {
+                  f"pair-{pair}-{variant}" for pair in range(1, 7)
+              }
+              observed = {inv for v, inv in assertions if v == variant}
+              if observed != expected_invocations:
+                  raise SystemExit(
+                      f"Unexpected {variant} assertions: {sorted(observed)}"
+                  )
+
+              for label in labels:
+                  rows = metrics[(variant, label)]
+                  if len(rows) != 30:
+                      raise SystemExit(
+                          f"Expected 30 rows for {variant}/{label}, got {len(rows)}"
+                      )
+                  durations = [row[0] for row in rows]
+                  p95s = [row[1] for row in rows]
+                  maxima = [row[2] for row in rows]
+                  print(
+                      "R611_AB_SUMMARY "
+                      f"variant={variant} label={label} "
+                      f"duration_median_s={statistics.median(durations):.6f} "
+                      f"duration_mean_s={statistics.mean(durations):.6f} "
+                      f"heartbeat_median_of_p95_ms={statistics.median(p95s):.3f} "
+                      f"heartbeat_max_ms={max(maxima):.3f}"
+                  )
+
+              for idle_label in ("before", "after"):
+                  rows = idle[(variant, idle_label)]
+                  if len(rows) != 6:
+                      raise SystemExit(
+                          f"Expected 6 idle rows for {variant}/{idle_label}, got {len(rows)}"
+                      )
+                  print(
+                      "R611_IDLE_SUMMARY "
+                      f"variant={variant} label={idle_label} "
+                      f"p95_median_ms={statistics.median(row[0] for row in rows):.3f} "
+                      f"max_ms={max(row[1] for row in rows):.3f}"
+                  )
+
+          for label in labels[:-1]:
+              base = statistics.median(
+                  row[0] for row in metrics[("baseline", label)]
+              )
+              cand = statistics.median(
+                  row[0] for row in metrics[("candidate", label)]
+              )
+              delta = 100.0 * (cand / base - 1.0)
+              print(
+                  "R611_AB_DELTA "
+                  f"label={label} baseline_median_s={base:.6f} "
+                  f"candidate_median_s={cand:.6f} delta_pct={delta:.2f}"
+              )
+
+          base_expand = []
+          cand_expand = []
+          for pair in range(1, 7):
+              b_inv = f"pair-{pair}-baseline"
+              c_inv = f"pair-{pair}-candidate"
+              b = []
+              c = []
+              for label in ("tree-expand-1", "tree-expand-2", "tree-expand-3"):
+                  b.extend(invocation_metrics[("baseline", b_inv, label)])
+                  c.extend(invocation_metrics[("candidate", c_inv, label)])
+              base_expand.append(statistics.median(b))
+              cand_expand.append(statistics.median(c))
+
+          paired = [
+              100.0 * (c / b - 1.0)
+              for b, c in zip(base_expand, cand_expand)
+          ]
+          print(
+              "R611_AB_PAIRED "
+              f"expansion_pairs={len(paired)} "
+              f"candidate_faster_pairs={sum(delta < 0 for delta in paired)} "
+              f"paired_delta_median_pct={statistics.median(paired):.2f} "
+              f"paired_delta_mean_pct={statistics.mean(paired):.2f}"
+          )
+          print("R611_ASSERT_SUMMARY result=pass")
+          PY
+
+      - name: Confirm research artifacts remain ephemeral
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          rm -f /tmp/diskusage-r611-tree-ab-enabled \
+                /tmp/diskusage-r611-candidate-enabled \
+                /tmp/diskusage-r611-results.log \
+                /tmp/diskusage-r611-invocation
+
+          echo "research_status:"
+          git status --short
+          test -z "$(git status --short)"
+
+          echo "R6.11 A/B logs/results/DerivedData remained under RUNNER_TEMP only."
