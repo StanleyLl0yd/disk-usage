@@ -424,6 +424,51 @@ The measured hotspot is therefore specifically the SwiftUI `List` + `OutlineGrou
 
 Decision: open narrow follow-up #121 to test the smallest production change that can reduce the measured Tree outline diff/update/layout cost while preserving selection/navigation correctness. R6.10 itself retains no production runtime change. Raw traces/XML/logs/DerivedData and the research-only workflow/tests remain ephemeral or on the unmerged research branch and are absent from the clean final production diff.
 
+### R6.11 narrow Tree outline update experiments
+
+R6.11 kept production source unchanged while testing two native, research-only hypotheses against exact production baseline `29ede5fb1a15116940424302d3f6b68cda854d96`.
+
+Candidate #1 used native hierarchical `List(data, children:, selection:)` in the test host while preserving the same 128,700-node fixture, AppKit keyboard interaction, selection binding, rows, focus/search behavior, and correctness assertions. The initial A/B run `35601949795` / job `106339898207` appeared favorable with paired expansion median -12.14% and candidate faster 4/6. The independent exact-head repetition `35602624796` / job `106342397306` at `c189d4b8b452aa635ba53e5fdb2a478fb56a30af` did not reproduce that signal:
+
+| Candidate #1 metric | Delta / result |
+| --- | ---: |
+| Initial host/layout | -0.61% |
+| Expand level 1 | +4.05% |
+| Expand level 2 | +5.14% |
+| Expand level 3 | +16.05% |
+| Candidate faster pairs | 3 / 6 |
+| Paired expansion median | +6.65% |
+| Paired expansion mean | +5.50% |
+| Correctness | PASS |
+
+Targeted profiler workflow `35602625025` / job `106342093554` completed two baseline and two candidate captures before baseline round 3 stalled and the job was cancelled. Median per-stack presence across those complete captures was:
+
+| Stack category | Baseline | Candidate |
+| --- | ---: | ---: |
+| Outline diff | 46.62% | 46.17% |
+| Outline update / selection guard | 48.77% | 48.21% |
+| Modified/DynamicViewList nodes | 29.66% | 30.00% |
+| AttributeGraph update/input | 28.99% | 31.25% |
+| AppKit `NSView` layout | 59.58% | 63.72% |
+| SwiftUI outline-list machinery | 32.68% | 33.83% |
+| SwiftUI / AttributeGraph aggregate | 59.29% | 61.98% |
+| DiskUsage Tree/row views | 2.57% | 2.61% |
+
+These percentages overlap and are per-stack presence rather than additive CPU shares. The partial profiler does not show a narrow hotspot reduction that would override the failed timing reproduction.
+
+Candidate #2 preserved production `List(selection:)` + `Section` + `OutlineGroup` composition and removed only `selectedPath == item.path` from test-only row construction by passing `isSelected: false`. Exact-head workflow `35607984738` / job `106359704235` at `669ce58a83977a57381e2a1c32aee91ffd2088b8` passed all 6 baseline + 6 candidate invocations and all selection/navigation assertions:
+
+| Candidate #2 metric | Baseline | Candidate | Delta |
+| --- | ---: | ---: | ---: |
+| Initial host/layout median | 0.630261 s | 0.654996 s | +3.92% |
+| Expand level 1 median | 0.154034 s | 0.139781 s | -9.25% |
+| Expand level 2 median | 0.167014 s | 0.163311 s | -2.22% |
+| Expand level 3 median | 0.160083 s | 0.166147 s | +3.79% |
+
+The paired expansion result was candidate faster 3/6, median -0.38%, mean -2.65%. Idle heartbeat was effectively unchanged. This does not establish a repeatable positive signal, so no targeted profiler follow-up was run for candidate #2.
+
+Decision: reject both candidates and retain the unchanged production Tree. The remaining measured stall is dominated by SwiftUI/AppKit outline diff/update/layout machinery at the extreme synthetic scale, while app row/projection/formatting work remains small. R6 explicitly accepts this cost instead of introducing a custom Tree, speculative virtualization, cache/index, scanner change, or broader UI architecture. Revisit larger Tree architecture only if new product-level evidence justifies its interaction/accessibility/selection and maintenance trade-offs.
+
 ### Allocations
 
 Use Allocations with disposable data to inspect peak/retained memory across:
