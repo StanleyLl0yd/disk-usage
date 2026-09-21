@@ -491,7 +491,7 @@ The measurement decision is to select **Search name/path matching** as the next 
 
 Final PR #108 passed CI Debug/Release, Actions Policy, Gitleaks, Dependency Review, CodeQL Actions, and CodeQL Swift on exact head `676ef34547078c5a60fe540a0e1fd6c1d5c1aa5e`, with no review threads, then squash-merged as exact `main` `e8bafb02bf237e5509b604dff9ce797cbd391639`. The merge commit was verified as the current repository head; GitHub reported no additional commit status or PR-triggered workflow run on that squash commit. R6.7 is complete.
 
-### R6.8 Test Search terminal-name matching path cost — FINAL VERIFICATION
+### R6.8 Test Search terminal-name matching path cost — COMPLETE
 
 R6.8 tested only the smallest matching-path candidate selected by R6.7: compute the terminal path component once inside `FolderUsage.name` and reuse it. Research draft PR #111 remained research-only and was closed unmerged.
 
@@ -506,6 +506,8 @@ Successful A/B evidence at exact research head `4cdca2a09d6d10195d5fc2f87500cb24
 - raw traces, XML, timing logs/results, DerivedData, the temporary baseline worktree, and the research workflow/tests remain outside the clean final branch.
 
 The measurement decision is to **reject** the candidate. The targeted cost fell, but repeated end-to-end evidence showed a regression signal, so the retain rule was not met. No production Search, scanner, concurrency, UI, cache/index, sorting, or snapshot-model change is retained or added in this slice.
+
+Final evidence PR #113 passed CI Debug/Release, Actions Policy, Gitleaks, Dependency Review, CodeQL Actions, and CodeQL Swift on exact head `6ad4b56ec57174d88a0fe64402f0940197927eb4`, with no review threads, then squash-merged as exact `main` `1ca3516e0a546488610b882aa4d9436c01db2fda`. The merge commit was verified as the current repository head; GitHub reported no additional PR-triggered workflow run on that squash commit. R6.8 is complete.
 
 Then continue profiling representative large synthetic or disposable filesystem trees and identify actual bottlenecks in:
 
@@ -582,4 +584,4 @@ These are not assumed future stages.
 
 **R5 — Core productivity workflow is complete.** R5.1–R5.5 are implemented and verified, the full repository-wide exit review passed, final exact-main verification is green, and release-tag immutability is enforced for `v*` while the published `v0.1.0-alpha.1` remains bound to its verified source commit.
 
-**R6 — Large-scale resilience and measured optimization is in progress.** R6.1–R6.7 are complete. R6.8 measurement evidence is complete and the terminal-name candidate is rejected: targeted sampled matching cost fell, but the successful six-pair timing run showed an end-to-end regression signal, so no production code is retained. Clean final documentation/closure verification remains before R6.8 can be marked complete. Result sorting remains a measured secondary cost; no Search index/cache, duplicate snapshot, presentation redesign, scanner expansion, incremental-result architecture, or memory-driven redesign is justified by R6.8.
+**R6 — Large-scale resilience and measured optimization is in progress.** R6.1–R6.8 are complete. R6.8 rejected the terminal-name candidate because repeated end-to-end timing showed a regression signal despite lower targeted sampled matching cost, so no production code was retained. The next step is an R6 master exit review against #86 before any further optimization slice is created. Result sorting remains a measured secondary cost, but no R6.9 optimization is justified without a fresh explicit measurement/exit-review decision.
