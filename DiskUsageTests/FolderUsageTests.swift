@@ -634,7 +634,7 @@ extension FolderUsageTests {
             let source = try XCTUnwrap(
                 TreePresentationPreprocessor.sorted(rawSource, by: .sizeDesc)
             )
-            XCTAssertEqual(nodeCount(source), 128_700)
+            try r610Require(nodeCount(source) == 128_700, "Tree node count mismatch")
             let totalSize = source.reduce(Int64(0)) { $0 + $1.size }
 
             for round in 1...5 {
@@ -691,7 +691,7 @@ extension FolderUsageTests {
                         selectedPath: { selectedPath }
                     )
                 }
-                XCTAssertEqual(selectedPath, child.path)
+                try r610Require(selectedPath == child.path, "Tree level-1 selection mismatch")
 
                 let grandchild = try XCTUnwrap(child.children.first)
                 try await r610Measure(
@@ -704,7 +704,7 @@ extension FolderUsageTests {
                         selectedPath: { selectedPath }
                     )
                 }
-                XCTAssertEqual(selectedPath, grandchild.path)
+                try r610Require(selectedPath == grandchild.path, "Tree level-2 selection mismatch")
 
                 let leaf = try XCTUnwrap(grandchild.children.first)
                 try await r610Measure(
@@ -717,7 +717,7 @@ extension FolderUsageTests {
                         selectedPath: { selectedPath }
                     )
                 }
-                XCTAssertEqual(selectedPath, leaf.path)
+                try r610Require(selectedPath == leaf.path, "Tree level-3 selection mismatch")
 
                 try await r610Measure(
                     label: "tree-left",
@@ -732,7 +732,7 @@ extension FolderUsageTests {
                         selectedPath == grandchild.path
                     }
                 }
-                XCTAssertEqual(selectedPath, grandchild.path)
+                try r610Require(selectedPath == grandchild.path, "Tree parent selection mismatch")
 
                 window.close()
                 try await Task.sleep(for: .milliseconds(30))
@@ -741,9 +741,9 @@ extension FolderUsageTests {
 
         do {
             let source = r610SunburstFixture(leafCountPerGroup: 2_048)
-            XCTAssertEqual(nodeCount(source), 131_156)
+            try r610Require(nodeCount(source) == 131_156, "Sunburst node count mismatch")
             let totalSize = source.reduce(Int64(0)) { $0 + $1.size }
-            XCTAssertEqual(totalSize, 131_072)
+            try r610Require(totalSize == 131_072, "Sunburst total mismatch")
 
             let expectedPresentation = try XCTUnwrap(
                 SunburstPresentationPreprocessor.presentation(
@@ -752,9 +752,9 @@ extension FolderUsageTests {
                     levels: 4
                 )
             )
-            XCTAssertEqual(expectedPresentation.segments.count, 84)
-            XCTAssertEqual(expectedPresentation.aggregates.count, 64)
-            XCTAssertEqual(expectedPresentation.visualSegmentCount, 148)
+            try r610Require(expectedPresentation.segments.count == 84, "Sunburst segment count mismatch")
+            try r610Require(expectedPresentation.aggregates.count == 64, "Sunburst aggregate count mismatch")
+            try r610Require(expectedPresentation.visualSegmentCount == 148, "Sunburst visual count mismatch")
 
             for round in 1...5 {
                 var selectedPath: String?
@@ -830,8 +830,9 @@ extension FolderUsageTests {
                 }
 
                 let groupPath = try XCTUnwrap(selectedPath)
-                XCTAssertNotNil(
-                    child.children.first(where: { $0.path == groupPath })
+                try r610Require(
+                    child.children.contains(where: { $0.path == groupPath }),
+                    "Sunburst group selection mismatch"
                 )
 
                 window.close()
@@ -1024,7 +1025,7 @@ extension FolderUsageTests {
         await heartbeat.value
 
         let stats = R610HeartbeatStats(await recorder.snapshot())
-        XCTAssertGreaterThan(stats.samples, 0)
+        try r610Require(stats.samples > 0, "Missing interaction heartbeat samples")
 
         r610Write(
             "R610_METRIC label=\(label) round=\(round) "
@@ -1046,7 +1047,7 @@ extension FolderUsageTests {
         heartbeat.cancel()
         await heartbeat.value
         let stats = R610HeartbeatStats(await recorder.snapshot())
-        XCTAssertGreaterThan(stats.samples, 0)
+        try r610Require(stats.samples > 0, "Missing idle heartbeat samples")
 
         r610Write(
             "R610_IDLE label=\(label) "
@@ -1092,6 +1093,20 @@ extension FolderUsageTests {
                 )
             }
             try await Task.sleep(for: .milliseconds(2))
+        }
+    }
+
+    private func r610Require(
+        _ condition: @autoclosure () -> Bool,
+        _ message: String
+    ) throws {
+        guard condition() else {
+            r610Write("R610_FAILURE message=\(message.replacingOccurrences(of: " ", with: "_"))")
+            throw NSError(
+                domain: "R610Research",
+                code: 3,
+                userInfo: [NSLocalizedDescriptionKey: message]
+            )
         }
     }
 
