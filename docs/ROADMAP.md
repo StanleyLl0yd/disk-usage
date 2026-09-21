@@ -547,6 +547,16 @@ These are overlapping stack-presence percentages, not additive CPU percentages.
 
 The measured hotspot is the SwiftUI `List` + `OutlineGroup` diff/update/layout path rather than an obvious DiskUsage leaf-work hotspot. R6.10 therefore opens narrow follow-up #121 to test the smallest evidence-driven Tree update/diff reduction. It does **not** authorize a speculative custom Tree, virtualization architecture, cache/index, scanner change, or broad UI rewrite, and R6.10 itself retains no production runtime change.
 
+### R6.11 Test narrow SwiftUI Tree outline update reductions — COMPLETE
+
+R6.11 tested two research-only native Tree hypotheses against the unchanged production baseline `29ede5fb1a15116940424302d3f6b68cda854d96` and retained no runtime change.
+
+- Candidate #1 in research PR #123 replaced only the test-host composition with native hierarchical `List(data, children:, selection:)`. Its first six-pair run appeared positive (paired expansion median -12.14%, candidate faster 4/6), but an independent exact-head run at `c189d4b8b452aa635ba53e5fdb2a478fb56a30af` failed reproduction: expansion deltas were +4.05% / +5.14% / +16.05%, candidate was faster only 3/6, and paired expansion median/mean were +6.65% / +5.50%. Correctness remained PASS.
+- The targeted profiler run for candidate #1 produced two complete baseline and two complete candidate captures before the third baseline capture stalled and the workflow was cancelled. In those complete captures, outline diff/update stack presence stayed essentially unchanged, while candidate AppKit layout and SwiftUI/AttributeGraph presence were higher rather than lower. The partial diagnostic therefore did not rescue the failed timing reproduction.
+- Candidate #2 in research PR #124 preserved production `List(selection:)` + `Section` + `OutlineGroup` composition and removed only the row-construction dependency `selectedPath == item.path` by passing a constant non-selected row state in the test-only candidate. Exact-head workflow `35607984738`, job `106359704235`, passed all structure/selection/navigation assertions, but candidate timing was mixed: initial +3.92%, expansions -9.25% / -2.22% / +3.79%, candidate faster 3/6, paired expansion median -0.38% and mean -2.65%. Per the predeclared rule, no profiler follow-up was justified.
+
+The evidence therefore does not identify a small production change that materially reduces the measured framework-heavy outline cost. At the tested 128,700-node synthetic Tree scale, the remaining stall is explicitly **accepted** for R6 rather than traded for a speculative custom Tree, virtualization layer, cache/index, scanner change, or broader UI rewrite. A larger Tree architecture should be reconsidered only if new product-level evidence shows that the current native behavior is unacceptable enough to justify the added interaction, accessibility, selection, and maintenance risk.
+
 Then continue profiling representative large synthetic or disposable filesystem trees and identify actual bottlenecks in:
 
 - enumeration;
@@ -622,4 +632,4 @@ These are not assumed future stages.
 
 **R5 — Core productivity workflow is complete.** R5.1–R5.5 are implemented and verified, the full repository-wide exit review passed, final exact-main verification is green, and release-tag immutability is enforced for `v*` while the published `v0.1.0-alpha.1` remains bound to its verified source commit.
 
-**R6 — Large-scale resilience and measured optimization is in progress.** R6.1–R6.10 are complete. R6.10 measured the unchanged large-snapshot SwiftUI Tree/Sunburst interaction boundary and localized a repeated Tree stall to framework-heavy `List` + `OutlineGroup` diff/update/layout work. Narrow follow-up #121 (R6.11) is CURRENT; no larger Tree architecture change is justified unless the focused evidence-driven experiment fails to find a materially useful narrow reduction.
+**R6 — Large-scale resilience and measured optimization is in progress.** R6.1–R6.11 are complete. R6.11 rejected two narrow native Tree/update candidates after repeated A/B evidence failed to show a reproducible material improvement, and explicitly accepted the remaining framework-heavy `List` + `OutlineGroup` cost at the tested 128,700-node synthetic scale. The next step is the R6 master exit review; no larger Tree architecture change is justified without new product-level evidence.
