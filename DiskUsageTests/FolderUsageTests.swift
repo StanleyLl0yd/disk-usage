@@ -865,6 +865,105 @@ extension FolderUsageTests {
     }
 
     @MainActor
+    func testR610TreeInteractionTimeProfilerResearch() async throws {
+        guard FileManager.default.fileExists(
+            atPath: "/tmp/diskusage-r610-tree-profile-enabled"
+        ) else {
+            throw XCTSkip("R6.10 research-only Tree Time Profiler harness")
+        }
+
+        let rawSource = r610TreeFixture(rootCount: 220)
+        let source = try XCTUnwrap(
+            TreePresentationPreprocessor.sorted(rawSource, by: .sizeDesc)
+        )
+        XCTAssertEqual(nodeCount(source), 128_700)
+        let totalSize = source.reduce(Int64(0)) { $0 + $1.size }
+
+        let readyURL = URL(fileURLWithPath: "/tmp/diskusage-r610-tree-profile-ready")
+        let startPath = "/tmp/diskusage-r610-tree-profile-start"
+        try Data("ready\n".utf8).write(to: readyURL, options: .atomic)
+
+        try await r610WaitUntil(timeoutSeconds: 30) {
+            FileManager.default.fileExists(atPath: startPath)
+        }
+
+        for _ in 1...10 {
+            var searchQuery = ""
+            var selectedPath: String? = source[0].path
+
+            let view = TreeView(
+                items: source,
+                totalSize: totalSize,
+                restricted: [],
+                canRescan: false,
+                isSearchMode: false,
+                isSearchPreparing: false,
+                searchQuery: Binding(
+                    get: { searchQuery },
+                    set: { searchQuery = $0 }
+                ),
+                selectedPath: Binding(
+                    get: { selectedPath },
+                    set: { selectedPath = $0 }
+                ),
+                onShowInFinder: { _ in },
+                onCopyPath: { _ in },
+                onDelete: { _ in },
+                onOpenFullDiskAccess: {},
+                onRescan: {}
+            )
+            let window = r610Host(view, width: 1_000, height: 720)
+            window.contentView?.layoutSubtreeIfNeeded()
+            window.displayIfNeeded()
+
+            do {
+                try await Task.sleep(for: .milliseconds(120))
+
+                let root = source[0]
+                let child = try XCTUnwrap(root.children.first)
+                try await r610ExpandAndSelectFirstChild(
+                    window: window,
+                    expectedPath: child.path,
+                    selectedPath: { selectedPath }
+                )
+                XCTAssertEqual(selectedPath, child.path)
+
+                let grandchild = try XCTUnwrap(child.children.first)
+                try await r610ExpandAndSelectFirstChild(
+                    window: window,
+                    expectedPath: grandchild.path,
+                    selectedPath: { selectedPath }
+                )
+                XCTAssertEqual(selectedPath, grandchild.path)
+
+                let leaf = try XCTUnwrap(grandchild.children.first)
+                try await r610ExpandAndSelectFirstChild(
+                    window: window,
+                    expectedPath: leaf.path,
+                    selectedPath: { selectedPath }
+                )
+                XCTAssertEqual(selectedPath, leaf.path)
+
+                r610SendKey(
+                    keyCode: 123,
+                    characters: "\u{F702}",
+                    to: window
+                )
+                try await r610WaitUntil(timeoutSeconds: 3) {
+                    selectedPath == grandchild.path
+                }
+                XCTAssertEqual(selectedPath, grandchild.path)
+            } catch {
+                r610Dispose(window)
+                throw error
+            }
+
+            r610Dispose(window)
+            try await Task.sleep(for: .milliseconds(20))
+        }
+    }
+
+    @MainActor
     private func r610ExpandAndSelectFirstChild(
         window: NSWindow,
         expectedPath: String,
