@@ -895,7 +895,11 @@ extension FolderUsageTests {
                     "R6.10 Sunburst interaction did not become actionable "
                         + "within the research timeout"
                 )
-                return
+                throw NSError(
+                    domain: "R610Research",
+                    code: 2,
+                    userInfo: [NSLocalizedDescriptionKey: "Sunburst interaction timeout"]
+                )
             }
             try await Task.sleep(for: .milliseconds(12))
         }
@@ -907,7 +911,8 @@ extension FolderUsageTests {
         width: CGFloat,
         height: CGFloat
     ) -> NSWindow {
-        _ = NSApplication.shared
+        let application = NSApplication.shared
+        application.activate(ignoringOtherApps: true)
         let rect = NSRect(x: 0, y: 0, width: width, height: height)
         let window = NSWindow(
             contentRect: rect,
@@ -921,7 +926,6 @@ extension FolderUsageTests {
         window.contentView = host
         window.setFrame(rect, display: false)
         window.makeKeyAndOrderFront(nil)
-        window.makeFirstResponder(host)
         return window
     }
 
@@ -1081,7 +1085,11 @@ extension FolderUsageTests {
         while !condition() {
             if r610Seconds(clock.now - started) >= timeoutSeconds {
                 XCTFail("R6.10 research operation timed out")
-                return
+                throw NSError(
+                    domain: "R610Research",
+                    code: 1,
+                    userInfo: [NSLocalizedDescriptionKey: "R6.10 research operation timed out"]
+                )
             }
             try await Task.sleep(for: .milliseconds(2))
         }
