@@ -158,6 +158,19 @@ jobs:
               "diskusage_tree_views": re.compile(r"TreeView|ItemRow|SizeBar"),
               "folder_usage_projection": re.compile(r"FolderUsage.*(?:name|childrenOptional)"),
               "diskusage_formatting": re.compile(r"formatBytes|formatPercent"),
+              "outline_diff_rows": re.compile(r"OutlineListCoordinator\\.diffRows"),
+              "outline_update": re.compile(
+                  r"OutlineListCoordinator\\.(?:update|withSelectionUpdateGuard)"
+              ),
+              "modified_view_list": re.compile(
+                  r"ModifiedViewList\\.applyNodes|DynamicViewList\\.WrappedList\\.applyNodes"
+              ),
+              "attribute_graph_update": re.compile(
+                  r"AG::Graph::(?:UpdateStack::update|update_attribute|input_value_ref_slow)"
+              ),
+              "nsview_layout": re.compile(
+                  r"NSView.*(?:layoutSubtree|_layoutSubtree)|NSPerformVisuallyAtomicChange"
+              ),
               "swiftui_outline_list": re.compile(
                   r"OutlineGroup|SwiftUI.*(?:List|Outline)|NSOutlineView|NSTableView", re.I
               ),
