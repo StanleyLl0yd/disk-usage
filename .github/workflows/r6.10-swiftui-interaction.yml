@@ -10,7 +10,7 @@ on:
 permissions: {}
 
 concurrency:
-  group: r6-10-swiftui-interaction-\${{ github.ref }}
+  group: r6-10-swiftui-interaction-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -26,7 +26,7 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
-          ref: \${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Select Xcode 26.6
         run: sudo xcode-select -s /Applications/Xcode_26.6.app/Contents/Developer
@@ -34,16 +34,16 @@ jobs:
       - name: Prepare research-only result paths
         shell: bash
         env:
-          EXPECTED_HEAD: \${{ github.event.pull_request.head.sha }}
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
           BASELINE_SHA: 0cda06c0ba11f6808abcbe675f14fc8f9eb76d7d
         run: |
           set -euo pipefail
 
           head="$(git rev-parse HEAD)"
-          echo "research_head=\${head}"
-          echo "production_baseline=\${BASELINE_SHA}"
-          test "\${head}" = "\${EXPECTED_HEAD}"
-          git cat-file -e "\${BASELINE_SHA}^{commit}"
+          echo "research_head=${head}"
+          echo "production_baseline=${BASELINE_SHA}"
+          test "${head}" = "${EXPECTED_HEAD}"
+          git cat-file -e "${BASELINE_SHA}^{commit}"
 
           marker="$RUNNER_TEMP/r610-research-enabled"
           results="$RUNNER_TEMP/r610-results.log"
