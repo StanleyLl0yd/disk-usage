@@ -867,7 +867,7 @@ extension FolderUsageTests {
             heartbeat.cancel()
             await heartbeat.value
             let heartbeatValues = await recorder.snapshot()
-            let stats = r69HeartbeatStats(heartbeatValues)
+            let stats = R69HeartbeatStats(heartbeatValues)
 
             let outputEvents = observerCounts().0 - outputEventsBefore
             let preparingEvents = observerCounts().1 - preparingEventsBefore
@@ -877,13 +877,17 @@ extension FolderUsageTests {
 
             validate()
 
+            let completionText = String(format: "%.6f", completionSeconds)
+            let medianText = String(format: "%.3f", stats.medianMilliseconds)
+            let p95Text = String(format: "%.3f", stats.p95Milliseconds)
+            let maxText = String(format: "%.3f", stats.maxMilliseconds)
             r69Write(
                 "R69_STATE label=\(label) round=\(round) "
-                    + "completion_s=\(String(format: "%.6f", completionSeconds)) "
+                    + "completion_s=\(completionText) "
                     + "heartbeat_samples=\(stats.samples) "
-                    + "heartbeat_median_ms=\(String(format: "%.3f", stats.medianMilliseconds)) "
-                    + "heartbeat_p95_ms=\(String(format: "%.3f", stats.p95Milliseconds)) "
-                    + "heartbeat_max_ms=\(String(format: "%.3f", stats.maxMilliseconds)) "
+                    + "heartbeat_median_ms=\(medianText) "
+                    + "heartbeat_p95_ms=\(p95Text) "
+                    + "heartbeat_max_ms=\(maxText) "
                     + "output_events=\(outputEvents) preparing_events=\(preparingEvents)"
             )
         }
@@ -898,14 +902,17 @@ extension FolderUsageTests {
 
         heartbeat.cancel()
         await heartbeat.value
-        let stats = r69HeartbeatStats(await recorder.snapshot())
+        let stats = R69HeartbeatStats(await recorder.snapshot())
         XCTAssertGreaterThan(stats.samples, 0)
 
+        let medianText = String(format: "%.3f", stats.medianMilliseconds)
+        let p95Text = String(format: "%.3f", stats.p95Milliseconds)
+        let maxText = String(format: "%.3f", stats.maxMilliseconds)
         r69Write(
             "R69_IDLE label=\(label) heartbeat_samples=\(stats.samples) "
-                + "heartbeat_median_ms=\(String(format: "%.3f", stats.medianMilliseconds)) "
-                + "heartbeat_p95_ms=\(String(format: "%.3f", stats.p95Milliseconds)) "
-                + "heartbeat_max_ms=\(String(format: "%.3f", stats.maxMilliseconds))"
+                + "heartbeat_median_ms=\(medianText) "
+                + "heartbeat_p95_ms=\(p95Text) "
+                + "heartbeat_max_ms=\(maxText)"
         )
     }
 
