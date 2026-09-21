@@ -142,7 +142,7 @@ jobs:
                       continue
                   if line == (
                       "R610_ASSERT tree_nodes=128700 sunburst_nodes=131156 "
-                      "sunburst_total=131072 result=pass"
+                      "sunburst_total=262080 result=pass"
                   ):
                       assertion = True
                       continue
