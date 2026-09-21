@@ -823,6 +823,123 @@ extension FolderUsageTests {
     }
 
     @MainActor
+    func testR611TreeOutlineABTimeProfilerResearch() async throws {
+        guard FileManager.default.fileExists(
+            atPath: "/tmp/diskusage-r611-tree-profile-enabled"
+        ) else {
+            throw XCTSkip("R6.11 research-only Tree Time Profiler A/B harness")
+        }
+
+        let candidate = FileManager.default.fileExists(
+            atPath: "/tmp/diskusage-r611-candidate-enabled"
+        )
+        let rawSource = r611TreeFixture(rootCount: 220)
+        let source = try XCTUnwrap(
+            TreePresentationPreprocessor.sorted(rawSource, by: .sizeDesc)
+        )
+        XCTAssertEqual(nodeCount(source), 128_700)
+        let totalSize = source.reduce(Int64(0)) { $0 + $1.size }
+
+        let readyURL = URL(fileURLWithPath: "/tmp/diskusage-r611-tree-profile-ready")
+        let startPath = "/tmp/diskusage-r611-tree-profile-start"
+        try Data("\(ProcessInfo.processInfo.processIdentifier)\n".utf8)
+            .write(to: readyURL, options: .atomic)
+
+        try await r611WaitUntil(timeoutSeconds: 30) {
+            FileManager.default.fileExists(atPath: startPath)
+        }
+
+        for _ in 1...10 {
+            var searchQuery = ""
+            var selectedPath: String? = source[0].path
+            let window: NSWindow
+
+            if candidate {
+                let view = R611HierarchicalListCandidate(
+                    items: source,
+                    totalSize: totalSize,
+                    selectedPath: Binding(
+                        get: { selectedPath },
+                        set: { selectedPath = $0 }
+                    )
+                )
+                window = r611Host(view, width: 1_000, height: 720)
+            } else {
+                let view = TreeView(
+                    items: source,
+                    totalSize: totalSize,
+                    restricted: [],
+                    canRescan: false,
+                    isSearchMode: false,
+                    isSearchPreparing: false,
+                    searchQuery: Binding(
+                        get: { searchQuery },
+                        set: { searchQuery = $0 }
+                    ),
+                    selectedPath: Binding(
+                        get: { selectedPath },
+                        set: { selectedPath = $0 }
+                    ),
+                    onShowInFinder: { _ in },
+                    onCopyPath: { _ in },
+                    onDelete: { _ in },
+                    onOpenFullDiskAccess: {},
+                    onRescan: {}
+                )
+                window = r611Host(view, width: 1_000, height: 720)
+            }
+
+            window.contentView?.layoutSubtreeIfNeeded()
+            window.displayIfNeeded()
+
+            do {
+                try await Task.sleep(for: .milliseconds(120))
+
+                let root = source[0]
+                let child = try XCTUnwrap(root.children.first)
+                try await r611ExpandAndSelectFirstChild(
+                    window: window,
+                    expectedPath: child.path,
+                    selectedPath: { selectedPath }
+                )
+                XCTAssertEqual(selectedPath, child.path)
+
+                let grandchild = try XCTUnwrap(child.children.first)
+                try await r611ExpandAndSelectFirstChild(
+                    window: window,
+                    expectedPath: grandchild.path,
+                    selectedPath: { selectedPath }
+                )
+                XCTAssertEqual(selectedPath, grandchild.path)
+
+                let leaf = try XCTUnwrap(grandchild.children.first)
+                try await r611ExpandAndSelectFirstChild(
+                    window: window,
+                    expectedPath: leaf.path,
+                    selectedPath: { selectedPath }
+                )
+                XCTAssertEqual(selectedPath, leaf.path)
+
+                r611SendKey(
+                    keyCode: 123,
+                    characters: "\u{F702}",
+                    to: window
+                )
+                try await r611WaitUntil(timeoutSeconds: 3) {
+                    selectedPath == grandchild.path
+                }
+                XCTAssertEqual(selectedPath, grandchild.path)
+            } catch {
+                r611Dispose(window)
+                throw error
+            }
+
+            r611Dispose(window)
+            try await Task.sleep(for: .milliseconds(20))
+        }
+    }
+
+    @MainActor
     private func r611ExpandAndSelectFirstChild(
         window: NSWindow,
         expectedPath: String,
