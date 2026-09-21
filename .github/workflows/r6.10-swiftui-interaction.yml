@@ -77,13 +77,16 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          trap 'echo "partial R6.10 results:"; cat "$R610_RESULTS" || true' EXIT
+          result_bundle="$RUNNER_TEMP/r610.xcresult"
+          rm -rf "$result_bundle"
+          trap 'echo "partial R6.10 results:"; cat "$R610_RESULTS" || true; echo "xcresult summary:"; if [ -d "$RUNNER_TEMP/r610.xcresult" ]; then xcrun xcresulttool get test-results summary --path "$RUNNER_TEMP/r610.xcresult" || true; fi' EXIT
           xcodebuild \
             -project DiskUsage.xcodeproj \
             -scheme DiskUsage \
             -configuration Debug \
             -destination 'platform=macOS' \
             -derivedDataPath "$R610_DERIVED" \
+            -resultBundlePath "$result_bundle" \
             -only-testing:DiskUsageTests/FolderUsageTests/testR610SwiftUIInteractionResponsivenessResearch \
             CODE_SIGNING_ALLOWED=NO \
             test-without-building
