@@ -1,0 +1,204 @@
+name: R6.10 SwiftUI Interaction Research
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/r6.10-swiftui-interaction.yml'
+      - 'DiskUsageTests/FolderUsageTests.swift'
+
+permissions: {}
+
+concurrency:
+  group: r6-10-swiftui-interaction-\${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  experiment:
+    runs-on: macos-26
+    timeout-minutes: 35
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout exact research head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+          ref: \${{ github.event.pull_request.head.sha }}
+
+      - name: Select Xcode 26.6
+        run: sudo xcode-select -s /Applications/Xcode_26.6.app/Contents/Developer
+
+      - name: Prepare research-only result paths
+        shell: bash
+        env:
+          EXPECTED_HEAD: \${{ github.event.pull_request.head.sha }}
+          BASELINE_SHA: 0cda06c0ba11f6808abcbe675f14fc8f9eb76d7d
+        run: |
+          set -euo pipefail
+
+          head="$(git rev-parse HEAD)"
+          echo "research_head=\${head}"
+          echo "production_baseline=\${BASELINE_SHA}"
+          test "\${head}" = "\${EXPECTED_HEAD}"
+          git cat-file -e "\${BASELINE_SHA}^{commit}"
+
+          marker="$RUNNER_TEMP/r610-research-enabled"
+          results="$RUNNER_TEMP/r610-results.log"
+          : > "$marker"
+          : > "$results"
+
+          rm -f /tmp/diskusage-r610-research-enabled /tmp/diskusage-r610-results.log
+          ln -s "$marker" /tmp/diskusage-r610-research-enabled
+          ln -s "$results" /tmp/diskusage-r610-results.log
+
+          echo "R610_RESULTS=$results" >> "$GITHUB_ENV"
+          echo "R610_DERIVED=$RUNNER_TEMP/r610-derived" >> "$GITHUB_ENV"
+
+          sw_vers
+          xcodebuild -version
+
+      - name: Build outside measured intervals
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project DiskUsage.xcodeproj \
+            -scheme DiskUsage \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            -derivedDataPath "$R610_DERIVED" \
+            CODE_SIGNING_ALLOWED=NO \
+            build-for-testing
+
+      - name: Measure SwiftUI interaction responsiveness
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project DiskUsage.xcodeproj \
+            -scheme DiskUsage \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            -derivedDataPath "$R610_DERIVED" \
+            -only-testing:DiskUsageTests/FolderUsageTests/testR610SwiftUIInteractionResponsivenessResearch \
+            CODE_SIGNING_ALLOWED=NO \
+            test-without-building
+
+      - name: Summarize research evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat "$R610_RESULTS"
+
+          R610_RESULTS="$R610_RESULTS" python3 - <<'PY'
+          import os
+          import re
+          import statistics
+
+          path = os.environ["R610_RESULTS"]
+          idle_pattern = re.compile(
+              r"R610_IDLE label=(\S+) heartbeat_samples=(\d+) "
+              r"heartbeat_median_ms=([0-9.]+) heartbeat_p95_ms=([0-9.]+) "
+              r"heartbeat_max_ms=([0-9.]+)"
+          )
+          metric_pattern = re.compile(
+              r"R610_METRIC label=(\S+) round=(\d+) duration_s=([0-9.]+) "
+              r"heartbeat_samples=(\d+) heartbeat_median_ms=([0-9.]+) "
+              r"heartbeat_p95_ms=([0-9.]+) heartbeat_max_ms=([0-9.]+)"
+          )
+
+          idle = {}
+          metrics = {}
+          assertion = False
+
+          with open(path, encoding="utf-8") as handle:
+              for raw in handle:
+                  line = raw.strip()
+                  if match := idle_pattern.fullmatch(line):
+                      idle[match.group(1)] = {
+                          "samples": int(match.group(2)),
+                          "median_ms": float(match.group(3)),
+                          "p95_ms": float(match.group(4)),
+                          "max_ms": float(match.group(5)),
+                      }
+                      continue
+                  if match := metric_pattern.fullmatch(line):
+                      label = match.group(1)
+                      metrics.setdefault(label, []).append({
+                          "round": int(match.group(2)),
+                          "duration_s": float(match.group(3)),
+                          "samples": int(match.group(4)),
+                          "median_ms": float(match.group(5)),
+                          "p95_ms": float(match.group(6)),
+                          "max_ms": float(match.group(7)),
+                      })
+                      continue
+                  if line == (
+                      "R610_ASSERT tree_nodes=128700 sunburst_nodes=131156 "
+                      "sunburst_total=131072 result=pass"
+                  ):
+                      assertion = True
+                      continue
+                  raise SystemExit(f"Unrecognized R6.10 result line: {line}")
+
+          if set(idle) != {"before", "after"}:
+              raise SystemExit(f"Unexpected idle labels: {sorted(idle)}")
+
+          expected = {
+              "tree-initial",
+              "tree-expand-1",
+              "tree-expand-2",
+              "tree-expand-3",
+              "tree-left",
+              "sunburst-initial",
+              "sunburst-ready-select",
+              "sunburst-nav-1",
+              "sunburst-nav-2",
+          }
+          if set(metrics) != expected:
+              raise SystemExit(f"Unexpected metric labels: {sorted(metrics)}")
+
+          for label in sorted(expected):
+              rows = sorted(metrics[label], key=lambda row: row["round"])
+              if [row["round"] for row in rows] != [1, 2, 3, 4, 5]:
+                  raise SystemExit(f"Unexpected rounds for {label}")
+              if any(row["samples"] <= 0 for row in rows):
+                  raise SystemExit(f"Missing heartbeat samples for {label}")
+
+              print(
+                  "R610_SUMMARY "
+                  f"label={label} "
+                  f"duration_median_s={statistics.median(row['duration_s'] for row in rows):.6f} "
+                  f"duration_max_s={max(row['duration_s'] for row in rows):.6f} "
+                  f"heartbeat_median_of_p95_ms={statistics.median(row['p95_ms'] for row in rows):.3f} "
+                  f"heartbeat_max_ms={max(row['max_ms'] for row in rows):.3f}"
+              )
+
+          print(
+              "R610_IDLE_SUMMARY "
+              f"p95_before_ms={idle['before']['p95_ms']:.3f} "
+              f"max_before_ms={idle['before']['max_ms']:.3f} "
+              f"p95_after_ms={idle['after']['p95_ms']:.3f} "
+              f"max_after_ms={idle['after']['max_ms']:.3f}"
+          )
+
+          if not assertion:
+              raise SystemExit("Missing R6.10 structural assertion")
+          print("R610_ASSERT_SUMMARY result=pass")
+          PY
+
+      - name: Confirm research artifacts remain ephemeral
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          rm -f /tmp/diskusage-r610-research-enabled /tmp/diskusage-r610-results.log
+
+          echo "research_status:"
+          git status --short
+          test -z "$(git status --short)"
+
+          echo "R6.10 result logs and DerivedData remained under RUNNER_TEMP only."
