@@ -528,6 +528,25 @@ The measurement decision is to **accept current presentation-state publication/m
 
 Final documentation PR #117 passed CI Debug/Release, Actions Policy, Gitleaks, Dependency Review, CodeQL Actions, and CodeQL Swift on exact head `6bd3dd5fb37967ea7bd2d59355144ea3a75a4864`, with no review threads, then squash-merged as exact `main` `7ed1b48ce98a17582b2428138922d22008a75dd9`. The merge commit was verified as the current repository head; GitHub reported no additional PR-triggered workflow run on that squash commit. R6.9 is complete.
 
+### R6.10 Measure large-snapshot SwiftUI interaction responsiveness — COMPLETE
+
+R6.10 measured the unchanged production Tree and Sunburst SwiftUI views through real user-equivalent interaction. Research PR #120 is measurement-only and remains unmerged.
+
+Final interaction evidence at exact research head `4b1ac25fe3eec2fe90e9bcb7663a026187e5744b` (workflow `35597760914`, job `106326520765`) verified:
+
+- deterministic Tree 128,700-node and Sunburst 131,156-node fixtures;
+- Sunburst total 262,080 with 148 ordinary segments + 64 aggregates = 212 visual segments;
+- repeated structural, selection, navigation, and hit-testing correctness;
+- same-run idle heartbeat p95 0.212 ms before / 0.115 ms after;
+- Tree initial median 0.522787 s and repeated expansion medians 0.122993 / 0.130959 / 0.124108 s;
+- Sunburst final leaf-selection median 0.015429 s.
+
+The Tree stall is repeated and workload-correlated, so targeted Time Profiler evidence was required. Exact-head profiling workflow `35597760873`, job `106326517723`, passed three independent 10-second captures. Per-stack presence was stable around 47–49% for `OutlineListCoordinator.diffRows`, 49–51% for outline update/selection-guard work, 28–31% for `ModifiedViewList` / `DynamicViewList` node application, 31% for targeted AttributeGraph update work, and 62–64% for AppKit `NSView` layout. In contrast, app `TreeView` / `ItemRow` / `SizeBar` symbols were only 2.69–2.87%, `FolderUsage` projection at most 0.06%, and DiskUsage formatting 0.30–0.34%.
+
+These are overlapping stack-presence percentages, not additive CPU percentages.
+
+The measured hotspot is the SwiftUI `List` + `OutlineGroup` diff/update/layout path rather than an obvious DiskUsage leaf-work hotspot. R6.10 therefore opens narrow follow-up #121 to test the smallest evidence-driven Tree update/diff reduction. It does **not** authorize a speculative custom Tree, virtualization architecture, cache/index, scanner change, or broad UI rewrite, and R6.10 itself retains no production runtime change.
+
 Then continue profiling representative large synthetic or disposable filesystem trees and identify actual bottlenecks in:
 
 - enumeration;
@@ -603,4 +622,4 @@ These are not assumed future stages.
 
 **R5 — Core productivity workflow is complete.** R5.1–R5.5 are implemented and verified, the full repository-wide exit review passed, final exact-main verification is green, and release-tag immutability is enforced for `v*` while the published `v0.1.0-alpha.1` remains bound to its verified source commit.
 
-**R6 — Large-scale resilience and measured optimization is in progress.** R6.1–R6.9 are complete. The R6 master exit review against #86 is CURRENT. The remaining explicit unmeasured boundary is actual large-snapshot SwiftUI Tree expansion/navigation and Sunburst rendering/interaction: R6.7 measured presentation derivations and R6.9 measured state publication/main-actor responsiveness, but neither measured the unchanged production views under real interaction. Do not start another production optimization until that boundary is measured.
+**R6 — Large-scale resilience and measured optimization is in progress.** R6.1–R6.10 are complete. R6.10 measured the unchanged large-snapshot SwiftUI Tree/Sunburst interaction boundary and localized a repeated Tree stall to framework-heavy `List` + `OutlineGroup` diff/update/layout work. Narrow follow-up #121 (R6.11) is CURRENT; no larger Tree architecture change is justified unless the focused evidence-driven experiment fails to find a materially useful narrow reduction.
