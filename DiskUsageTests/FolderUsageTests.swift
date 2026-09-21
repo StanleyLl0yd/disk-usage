@@ -580,7 +580,7 @@ final class FolderUsageTests: XCTestCase {
                     let leaves = (0..<128).map { leafIndex in
                         FolderUsage(
                             path: "\(grandchildPath)/leaf-\(leafIndex)",
-                            size: leafIndex == 0 ? Int64(leafCountPerGroup) : 1,
+                            size: 1,
                             isFile: true
                         )
                     }
@@ -1190,7 +1190,7 @@ extension FolderUsageTests {
                     let leaves = (0..<leafCountPerGroup).map { leafIndex in
                         FolderUsage(
                             path: "\(groupPath)/leaf-\(leafIndex)",
-                            size: 1,
+                            size: leafIndex == 0 ? Int64(leafCountPerGroup) : 1,
                             isFile: true
                         )
                     }
