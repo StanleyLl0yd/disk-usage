@@ -337,12 +337,48 @@ jobs:
             fi
 
             local profile_status=0
-            xcrun xctrace record \
-              --template 'Time Profiler' \
-              --attach "$app_pid" \
-              --time-limit 10s \
-              --output "$trace" \
-              --no-prompt || profile_status=$?
+            local xctrace_log="$RUNNER_TEMP/r68-profile-${variant}-${round}-xctrace.log"
+            PROFILE_APP_PID="$app_pid" PROFILE_TRACE="$trace" XCTRACE_LOG="$xctrace_log" python3 - <<'PY' || profile_status=$?
+            import os
+            import signal
+            import subprocess
+            import sys
+
+            command = [
+                "xcrun",
+                "xctrace",
+                "record",
+                "--template",
+                "Time Profiler",
+                "--attach",
+                os.environ["PROFILE_APP_PID"],
+                "--time-limit",
+                "10s",
+                "--output",
+                os.environ["PROFILE_TRACE"],
+                "--no-prompt",
+            ]
+            with open(os.environ["XCTRACE_LOG"], "w", encoding="utf-8") as log:
+                process = subprocess.Popen(
+                    command,
+                    stdout=log,
+                    stderr=subprocess.STDOUT,
+                    start_new_session=True,
+                    text=True,
+                )
+                try:
+                    return_code = process.wait(timeout=35)
+                except subprocess.TimeoutExpired:
+                    os.killpg(process.pid, signal.SIGTERM)
+                    try:
+                        process.wait(timeout=3)
+                    except subprocess.TimeoutExpired:
+                        os.killpg(process.pid, signal.SIGKILL)
+                        process.wait()
+                    return_code = 124
+            sys.exit(return_code)
+            PY
+            cat "$xctrace_log"
 
             local test_status=0
             wait "$test_pid" || test_status=$?
