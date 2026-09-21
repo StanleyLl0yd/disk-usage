@@ -77,6 +77,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          trap 'echo "partial R6.10 results:"; cat "$R610_RESULTS" || true' EXIT
           xcodebuild \
             -project DiskUsage.xcodeproj \
             -scheme DiskUsage \
