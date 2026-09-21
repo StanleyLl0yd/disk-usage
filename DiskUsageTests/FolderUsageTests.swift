@@ -734,7 +734,7 @@ extension FolderUsageTests {
                 }
                 try r610Require(selectedPath == grandchild.path, "Tree parent selection mismatch")
 
-                window.close()
+                r610Dispose(window)
                 try await Task.sleep(for: .milliseconds(30))
             }
         }
@@ -851,7 +851,7 @@ extension FolderUsageTests {
                     "Sunburst leaf selection mismatch"
                 )
 
-                window.close()
+                r610Dispose(window)
                 try await Task.sleep(for: .milliseconds(80))
             }
 
@@ -937,6 +937,7 @@ extension FolderUsageTests {
             backing: .buffered,
             defer: false
         )
+        window.isReleasedWhenClosed = false
         let host = NSHostingView(rootView: view)
         host.frame = rect
         host.autoresizingMask = [.width, .height]
@@ -944,6 +945,13 @@ extension FolderUsageTests {
         window.setFrame(rect, display: false)
         window.makeKeyAndOrderFront(nil)
         return window
+    }
+
+    @MainActor
+    private func r610Dispose(_ window: NSWindow) {
+        window.orderOut(nil)
+        window.contentView = nil
+        window.close()
     }
 
     @MainActor
