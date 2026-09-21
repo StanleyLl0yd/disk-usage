@@ -580,7 +580,7 @@ final class FolderUsageTests: XCTestCase {
                     let leaves = (0..<128).map { leafIndex in
                         FolderUsage(
                             path: "\(grandchildPath)/leaf-\(leafIndex)",
-                            size: 1,
+                            size: leafIndex == 0 ? Int64(leafCountPerGroup) : 1,
                             isFile: true
                         )
                     }
@@ -743,7 +743,7 @@ extension FolderUsageTests {
             let source = r610SunburstFixture(leafCountPerGroup: 2_048)
             try r610Require(nodeCount(source) == 131_156, "Sunburst node count mismatch")
             let totalSize = source.reduce(Int64(0)) { $0 + $1.size }
-            try r610Require(totalSize == 131_072, "Sunburst total mismatch")
+            try r610Require(totalSize == 262_080, "Sunburst total mismatch")
 
             let expectedPresentation = try XCTUnwrap(
                 SunburstPresentationPreprocessor.presentation(
@@ -752,9 +752,9 @@ extension FolderUsageTests {
                     levels: 4
                 )
             )
-            try r610Require(expectedPresentation.segments.count == 84, "Sunburst segment count mismatch")
+            try r610Require(expectedPresentation.segments.count == 148, "Sunburst segment count mismatch")
             try r610Require(expectedPresentation.aggregates.count == 64, "Sunburst aggregate count mismatch")
-            try r610Require(expectedPresentation.visualSegmentCount == 148, "Sunburst visual count mismatch")
+            try r610Require(expectedPresentation.visualSegmentCount == 212, "Sunburst visual count mismatch")
 
             for round in 1...5 {
                 var selectedPath: String?
@@ -857,7 +857,7 @@ extension FolderUsageTests {
 
             r610Write(
                 "R610_ASSERT tree_nodes=128700 sunburst_nodes=131156 "
-                    + "sunburst_total=131072 result=pass"
+                    + "sunburst_total=262080 result=pass"
             )
         }
 
@@ -903,7 +903,7 @@ extension FolderUsageTests {
 
             let point = CGPoint(
                 x: contentView.bounds.midX + 90,
-                y: contentView.bounds.midY
+                y: contentView.bounds.midY + 10
             )
             r610SendClick(at: point, to: window)
 
@@ -1196,19 +1196,19 @@ extension FolderUsageTests {
                     }
                     return FolderUsage(
                         path: groupPath,
-                        size: Int64(leafCountPerGroup),
+                        size: leaves.reduce(Int64(0)) { $0 + $1.size },
                         children: leaves
                     )
                 }
                 return FolderUsage(
                     path: childPath,
-                    size: Int64(4 * leafCountPerGroup),
+                    size: groups.reduce(Int64(0)) { $0 + $1.size },
                     children: groups
                 )
             }
             return FolderUsage(
                 path: rootPath,
-                size: Int64(16 * leafCountPerGroup),
+                size: children.reduce(Int64(0)) { $0 + $1.size },
                 children: children
             )
         }
