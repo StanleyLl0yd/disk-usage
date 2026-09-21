@@ -879,11 +879,11 @@ extension FolderUsageTests {
 
             r69Write(
                 "R69_STATE label=\(label) round=\(round) "
-                    + "completion_s=\(String(format: \"%.6f\", completionSeconds)) "
+                    + "completion_s=\(String(format: "%.6f", completionSeconds)) "
                     + "heartbeat_samples=\(stats.samples) "
-                    + "heartbeat_median_ms=\(String(format: \"%.3f\", stats.medianMilliseconds)) "
-                    + "heartbeat_p95_ms=\(String(format: \"%.3f\", stats.p95Milliseconds)) "
-                    + "heartbeat_max_ms=\(String(format: \"%.3f\", stats.maxMilliseconds)) "
+                    + "heartbeat_median_ms=\(String(format: "%.3f", stats.medianMilliseconds)) "
+                    + "heartbeat_p95_ms=\(String(format: "%.3f", stats.p95Milliseconds)) "
+                    + "heartbeat_max_ms=\(String(format: "%.3f", stats.maxMilliseconds)) "
                     + "output_events=\(outputEvents) preparing_events=\(preparingEvents)"
             )
         }
@@ -903,9 +903,9 @@ extension FolderUsageTests {
 
         r69Write(
             "R69_IDLE label=\(label) heartbeat_samples=\(stats.samples) "
-                + "heartbeat_median_ms=\(String(format: \"%.3f\", stats.medianMilliseconds)) "
-                + "heartbeat_p95_ms=\(String(format: \"%.3f\", stats.p95Milliseconds)) "
-                + "heartbeat_max_ms=\(String(format: \"%.3f\", stats.maxMilliseconds))"
+                + "heartbeat_median_ms=\(String(format: "%.3f", stats.medianMilliseconds)) "
+                + "heartbeat_p95_ms=\(String(format: "%.3f", stats.p95Milliseconds)) "
+                + "heartbeat_max_ms=\(String(format: "%.3f", stats.maxMilliseconds))"
         )
     }
 
