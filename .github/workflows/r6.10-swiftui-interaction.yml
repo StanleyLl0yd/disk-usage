@@ -161,6 +161,7 @@ jobs:
               "sunburst-ready-select",
               "sunburst-nav-1",
               "sunburst-nav-2",
+              "sunburst-leaf-select",
           }
           if set(metrics) != expected:
               raise SystemExit(f"Unexpected metric labels: {sorted(metrics)}")
