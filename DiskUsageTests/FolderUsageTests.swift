@@ -881,7 +881,8 @@ extension FolderUsageTests {
 
         let readyURL = URL(fileURLWithPath: "/tmp/diskusage-r610-tree-profile-ready")
         let startPath = "/tmp/diskusage-r610-tree-profile-start"
-        try Data("ready\n".utf8).write(to: readyURL, options: .atomic)
+        try Data("\(ProcessInfo.processInfo.processIdentifier)\n".utf8)
+            .write(to: readyURL, options: .atomic)
 
         try await r610WaitUntil(timeoutSeconds: 30) {
             FileManager.default.fileExists(atPath: startPath)
