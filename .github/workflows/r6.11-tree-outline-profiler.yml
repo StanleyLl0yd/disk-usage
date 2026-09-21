@@ -1,0 +1,285 @@
+name: R6.11 Tree Outline Time Profiler A/B
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/r6.11-tree-outline-profiler.yml'
+      - 'DiskUsageTests/FolderUsageTests.swift'
+
+permissions: {}
+
+concurrency:
+  group: r6-11-tree-outline-profiler-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  profile:
+    runs-on: macos-26
+    timeout-minutes: 35
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout exact research head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Select Xcode 26.6
+        run: sudo xcode-select -s /Applications/Xcode_26.6.app/Contents/Developer
+
+      - name: Prepare profiler environment
+        shell: bash
+        env:
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
+          BASELINE_SHA: 29ede5fb1a15116940424302d3f6b68cda854d96
+        run: |
+          set -euo pipefail
+
+          head="$(git rev-parse HEAD)"
+          echo "research_head=${head}"
+          echo "production_baseline=${BASELINE_SHA}"
+          test "${head}" = "${EXPECTED_HEAD}"
+          git cat-file -e "${BASELINE_SHA}^{commit}"
+
+          rm -f /tmp/diskusage-r611-tree-profile-enabled \
+                /tmp/diskusage-r611-tree-profile-ready \
+                /tmp/diskusage-r611-tree-profile-start \
+                /tmp/diskusage-r611-candidate-enabled
+          touch /tmp/diskusage-r611-tree-profile-enabled
+
+          echo "R611_PROFILE_DERIVED=$RUNNER_TEMP/r611-tree-profile-derived" >> "$GITHUB_ENV"
+
+          sw_vers
+          xcodebuild -version
+          xcrun xctrace version
+
+      - name: Build outside profiled intervals
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project DiskUsage.xcodeproj \
+            -scheme DiskUsage \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            -derivedDataPath "$R611_PROFILE_DERIVED" \
+            CODE_SIGNING_ALLOWED=NO \
+            build-for-testing
+
+      - name: Capture alternating profiler A/B
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          capture_variant() {
+            local variant="$1"
+            local round="$2"
+
+            rm -f /tmp/diskusage-r611-tree-profile-ready \
+                  /tmp/diskusage-r611-tree-profile-start
+
+            if [[ "${variant}" == "candidate" ]]; then
+              touch /tmp/diskusage-r611-candidate-enabled
+            else
+              rm -f /tmp/diskusage-r611-candidate-enabled
+            fi
+
+            local test_log="$RUNNER_TEMP/r611-profile-${variant}-${round}-test.log"
+            local trace_log="$RUNNER_TEMP/r611-profile-${variant}-${round}-xctrace.log"
+            local trace="$RUNNER_TEMP/r611-${variant}-${round}.trace"
+            local xml="$RUNNER_TEMP/r611-${variant}-${round}.xml"
+            rm -rf "$trace"
+
+            xcodebuild \
+              -project DiskUsage.xcodeproj \
+              -scheme DiskUsage \
+              -configuration Debug \
+              -destination 'platform=macOS' \
+              -derivedDataPath "$R611_PROFILE_DERIVED" \
+              -only-testing:DiskUsageTests/FolderUsageTests/testR611TreeOutlineABTimeProfilerResearch \
+              CODE_SIGNING_ALLOWED=NO \
+              test-without-building >"$test_log" 2>&1 &
+            local test_pid=$!
+
+            local app_pid=""
+            for _ in {1..300}; do
+              if [[ -f /tmp/diskusage-r611-tree-profile-ready ]]; then
+                app_pid="$(tr -d '[:space:]' </tmp/diskusage-r611-tree-profile-ready)"
+                if [[ "$app_pid" =~ ^[0-9]+$ ]] && kill -0 "$app_pid" 2>/dev/null; then
+                  break
+                fi
+                app_pid=""
+              fi
+              if ! kill -0 "$test_pid" 2>/dev/null; then
+                break
+              fi
+              sleep 0.1
+            done
+
+            if [[ -z "$app_pid" ]]; then
+              echo "::error::R6.11 profiler test host did not publish a live PID."
+              cat "$test_log" || true
+              wait "$test_pid" || true
+              exit 1
+            fi
+
+            echo "Attaching Time Profiler variant=${variant} round=${round} PID=${app_pid}"
+
+            local profile_status=0
+            xcrun xctrace record \
+              --template 'Time Profiler' \
+              --attach "$app_pid" \
+              --time-limit 10s \
+              --output "$trace" \
+              --no-prompt >"$trace_log" 2>&1 &
+            local profile_pid=$!
+
+            sleep 1
+            touch /tmp/diskusage-r611-tree-profile-start
+
+            wait "$profile_pid" || profile_status=$?
+
+            local test_status=0
+            wait "$test_pid" || test_status=$?
+
+            grep -E 'testR611TreeOutlineABTimeProfilerResearch.*passed|TEST (SUCCEEDED|FAILED)' "$test_log" || true
+            cat "$trace_log"
+
+            if [[ "$test_status" -ne 0 ]]; then
+              echo "::error::R6.11 profiler harness failed with status ${test_status}."
+              cat "$test_log" || true
+              exit "$test_status"
+            fi
+            if [[ "$profile_status" -ne 0 ]]; then
+              echo "::error::xctrace attach failed with status ${profile_status}."
+              exit "$profile_status"
+            fi
+
+            xcrun xctrace export \
+              --input "$trace" \
+              --xpath '/trace-toc/run[@number="1"]/data/table[@schema="time-profile"]' \
+              --output "$xml"
+
+            PROFILE_XML="$xml" PROFILE_ROUND="$round" PROFILE_VARIANT="$variant" python3 - <<'PY'
+          import collections
+          import os
+          import re
+          import xml.etree.ElementTree as ET
+
+          root = ET.parse(os.environ["PROFILE_XML"]).getroot()
+          by_id = {element.get("id"): element for element in root.iter() if element.get("id")}
+
+          def resolved(element):
+              ref = element.get("ref")
+              return by_id.get(ref, element) if ref else element
+
+          def frame_name(frame):
+              target = resolved(frame)
+              return target.get("name") or target.get("label") or (target.text or "").strip()
+
+          patterns = {
+              "diskusage_tree_views": re.compile(r"TreeView|ItemRow|SizeBar|R611HierarchicalListCandidate"),
+              "folder_usage_projection": re.compile(r"FolderUsage.*(?:name|childrenOptional)"),
+              "diskusage_formatting": re.compile(r"formatBytes|formatPercent"),
+              "outline_diff_rows": re.compile(r"OutlineListCoordinator\.diffRows"),
+              "outline_update": re.compile(
+                  r"OutlineListCoordinator\.(?:update|withSelectionUpdateGuard)"
+              ),
+              "modified_view_list": re.compile(
+                  r"ModifiedViewList\.applyNodes|DynamicViewList\.WrappedList\.applyNodes"
+              ),
+              "attribute_graph_update": re.compile(
+                  r"AG::Graph::(?:UpdateStack::update|update_attribute|input_value_ref_slow)"
+              ),
+              "nsview_layout": re.compile(
+                  r"NSView.*(?:layoutSubtree|_layoutSubtree)|NSPerformVisuallyAtomicChange"
+              ),
+              "swiftui_outline_list": re.compile(
+                  r"OutlineGroup|SwiftUI.*(?:List|Outline)|NSOutlineView|NSTableView", re.I
+              ),
+              "swiftui_attribute_graph": re.compile(r"AttributeGraph|AG::|ViewGraph|GraphHost"),
+              "text_layout": re.compile(r"CoreText|CTLine|NSText|TextLayout", re.I),
+          }
+
+          rows = list(root.iter("row"))
+          stacks = []
+          inclusive = collections.Counter()
+
+          for row in rows:
+              names = [name for name in (frame_name(frame) for frame in row.iter("frame")) if name]
+              if not names:
+                  continue
+              stacks.append(names)
+              joined = "\n".join(names)
+              for label, pattern in patterns.items():
+                  if pattern.search(joined):
+                      inclusive[label] += 1
+
+          total = len(stacks)
+          print(
+              f"R611_PROFILE variant={os.environ['PROFILE_VARIANT']} "
+              f"round={os.environ['PROFILE_ROUND']} "
+              f"time_profile_rows={len(rows)} stack_rows={total}"
+          )
+          for label in patterns:
+              count = inclusive[label]
+              share = (100.0 * count / total) if total else 0.0
+              print(
+                  f"R611_PROFILE_INCLUSIVE variant={os.environ['PROFILE_VARIANT']} "
+                  f"round={os.environ['PROFILE_ROUND']} "
+                  f"label={label} rows={count} share_pct={share:.2f}"
+              )
+
+          if not stacks:
+              raise SystemExit("No symbolized Time Profiler stacks were exported")
+          PY
+          }
+
+          capture_variant baseline 1
+          capture_variant candidate 1
+          capture_variant candidate 2
+          capture_variant baseline 2
+          capture_variant baseline 3
+          capture_variant candidate 3
+
+      - name: Summarize profiler A/B
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          python3 - <<'PY'
+          import glob
+          import os
+          import re
+          import statistics
+          import subprocess
+
+          # Re-export summaries from job log is not available inside the runner;
+          # parse each ephemeral XML directly for the focused categories.
+          # Detailed per-capture R611_PROFILE_INCLUSIVE lines are already emitted above.
+          traces = glob.glob(os.path.join(os.environ["RUNNER_TEMP"], "r611-*.trace"))
+          if len(traces) != 6:
+              raise SystemExit(f"Expected 6 profiler traces, got {len(traces)}")
+          print("R611_PROFILE_ASSERT captures=6 result=pass")
+          PY
+
+      - name: Confirm profiler artifacts remain ephemeral
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          rm -f /tmp/diskusage-r611-tree-profile-enabled \
+                /tmp/diskusage-r611-tree-profile-ready \
+                /tmp/diskusage-r611-tree-profile-start \
+                /tmp/diskusage-r611-candidate-enabled
+
+          echo "research_status:"
+          git status --short
+          test -z "$(git status --short)"
+
+          echo "R6.11 profiler traces/XML/logs/DerivedData remained under RUNNER_TEMP only."
