@@ -346,6 +346,39 @@ The candidate is **rejected**. Although the targeted terminal-name extraction si
 
 Raw `.trace`, exported XML, timing logs/results, DerivedData, temporary markers, and the baseline worktree remained under runner temporary storage only. No research workflow, heavy research-only test, raw profiling artifact, or candidate source change belongs in the clean final production branch.
 
+
+### R6.9 large-snapshot presentation-state responsiveness
+
+R6.9 measured the unchanged production `TreePresentationState`, `SearchPresentationState`, `LargestFilesPresentationState`, and `SunburstPresentationState` publication paths on the exact production baseline `695384f3a5c0a475f3b8292e8f3530ba841e448e`. Research draft PR #116 was intentionally closed unmerged after evidence collection; it changed only temporary research tests/workflow code and no production source.
+
+The successful exact research head was `96adcdde3ead1996cdf5cc49bb3da9bdb3d61efc`, workflow run `35580023290`, job `106270493991`, on GitHub-hosted macOS 26.6.2 / Xcode 26.6. Fixture construction and the build occurred outside measured intervals. Real Combine subscribers observed the production `@Published` output and `isPreparing` properties, while a detached periodic probe measured delay until a minimal `MainActor.run` callback executed.
+
+The deterministic in-memory fixtures and result checks were:
+
+- Tree: 128,700 nodes in and 128,700 nodes published;
+- broad Search: 128,700 nodes in and 128,480 matches published;
+- Largest Files: 128,128 nodes in and the production top 100 files published in deterministic order;
+- Sunburst: 131,156 nodes in, preserving total size with 84 ordinary segments + 64 aggregates = 148 visual segments.
+
+Five rounds per workload produced:
+
+| State workload | Completion median | Completion mean | Median of heartbeat p95 | Worst heartbeat max |
+| --- | ---: | ---: | ---: | ---: |
+| Tree | 0.202804 s | 0.201536 s | 0.147 ms | 1.050 ms |
+| Search broad | 1.119759 s | 1.179166 s | 0.130 ms | 5.913 ms |
+| Largest Files | 0.394748 s | 0.407823 s | 0.171 ms | 1.298 ms |
+| Sunburst | 0.116911 s | 0.116494 s | 0.183 ms | 1.347 ms |
+
+The same-run idle heartbeat was 328 samples / 0.052 ms median / 0.132 ms p95 / 0.551 ms max before workloads and 305 samples / 0.090 ms median / 0.147 ms p95 / 1.145 ms max afterward. Workload median p95 values therefore remained close to the same-run idle p95 values. The isolated 5.913 ms Search maximum was not repeated in the other Search rounds, whose maxima were 1.231, 0.208, 0.405, and 0.704 ms; that outlier's own p95 was 0.164 ms.
+
+Observer delivery occurred in every round: Tree/Search/Largest Files each observed two output events and two preparing events per measured request; Sunburst observed one model event and two preparing events. Rapid Tree supersession also passed: a newer one-item replacement remained authoritative after the cancelled 128,700-node generation had time to finish, proving the stale generation did not publish over it.
+
+The measurement decision is to **accept the current presentation-state publication/main-actor responsiveness at the largest tested snapshots**. There is no credible repeated workload-correlated main-actor stall, so R6.9 does not justify targeted Time Profiler follow-up or a production state/concurrency change. The separately recorded request-to-publication durations remain useful workload diagnostics but are not evidence of main-actor blocking.
+
+Actual SwiftUI rendering and interaction were intentionally outside this slice. Tree expansion/navigation, Sunburst rendering/hit testing, or other view-level work should become another R6 slice only if the post-R6.9 master exit review finds a remaining measured requirement.
+
+Raw result logs, DerivedData, temporary markers, and the research workflow/tests remained under runner temporary storage or on the closed research branch and are absent from the clean production branch.
+
 ### Allocations
 
 Use Allocations with disposable data to inspect peak/retained memory across:

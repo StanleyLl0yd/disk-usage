@@ -509,6 +509,25 @@ The measurement decision is to **reject** the candidate. The targeted cost fell,
 
 Final evidence PR #113 passed CI Debug/Release, Actions Policy, Gitleaks, Dependency Review, CodeQL Actions, and CodeQL Swift on exact head `6ad4b56ec57174d88a0fe64402f0940197927eb4`, with no review threads, then squash-merged as exact `main` `1ca3516e0a546488610b882aa4d9436c01db2fda`. The merge commit was verified as the current repository head; GitHub reported no additional PR-triggered workflow run on that squash commit. R6.8 is complete.
 
+
+### R6.9 Measure large-snapshot presentation-state responsiveness — EVIDENCE COMPLETE
+
+R6.9 measured the unchanged production Tree/Search/Largest Files/Sunburst presentation-state objects, including detached preprocessing, main-actor publication, real Combine observer delivery, and stale-generation suppression. Research PR #116 was closed unmerged.
+
+Successful evidence at exact research head `96adcdde3ead1996cdf5cc49bb3da9bdb3d61efc` (workflow `35580023290`, job `106270493991`) showed:
+
+- same-run idle heartbeat p95 was 0.132 ms before and 0.147 ms after the workload sequence;
+- five-round workload median-of-p95 heartbeat delay was 0.147 ms for Tree, 0.130 ms for broad Search, 0.171 ms for Largest Files, and 0.183 ms for Sunburst;
+- worst observed maxima were 1.050 ms, 5.913 ms, 1.298 ms, and 1.347 ms respectively; the 5.913 ms Search maximum was isolated and its round p95 remained 0.164 ms;
+- request-to-publication median completion was 0.202804 s for 128,700-node Tree, 1.119759 s for 128,700-node / 128,480-match broad Search, 0.394748 s for 128,128-node Largest Files top-100, and 0.116911 s for 131,156-node Sunburst;
+- every measured request delivered real output/model and `isPreparing` observer events;
+- Tree rapid supersession passed and the newer one-item generation remained authoritative after the cancelled large generation could have completed;
+- raw result logs, DerivedData, temporary markers, and research workflow/tests remain outside the clean final branch.
+
+The measurement decision is to **accept current presentation-state publication/main-actor responsiveness** at the tested scale. There is no credible repeated workload-correlated main-actor stall, so no targeted profiling or production state/concurrency optimization is justified by R6.9. SwiftUI rendering/interaction remains outside this slice and should become a further R6 slice only if the master exit review still requires it.
+
+Clean final documentation and merged-main closure verification remain before R6.9 can be marked COMPLETE.
+
 Then continue profiling representative large synthetic or disposable filesystem trees and identify actual bottlenecks in:
 
 - enumeration;
@@ -584,4 +603,4 @@ These are not assumed future stages.
 
 **R5 — Core productivity workflow is complete.** R5.1–R5.5 are implemented and verified, the full repository-wide exit review passed, final exact-main verification is green, and release-tag immutability is enforced for `v*` while the published `v0.1.0-alpha.1` remains bound to its verified source commit.
 
-**R6 — Large-scale resilience and measured optimization is in progress.** R6.1–R6.8 are complete. R6.8 rejected the terminal-name candidate because repeated end-to-end timing showed a regression signal despite lower targeted sampled matching cost, so no production code was retained. The next step is an R6 master exit review against #86 before any further optimization slice is created. Result sorting remains a measured secondary cost, but no R6.9 optimization is justified without a fresh explicit measurement/exit-review decision.
+**R6 — Large-scale resilience and measured optimization is in progress.** R6.1–R6.8 are complete. R6.9 measurement evidence is complete and accepts current presentation-state publication/main-actor responsiveness at the tested 128K–131K snapshot scale; no production runtime change is justified. Clean final exact-head and merged-main closure verification remain before R6.9 is marked complete. After that, resume the R6 master exit review against #86 and create another slice only if a remaining SwiftUI rendering/interaction boundary is still required.
