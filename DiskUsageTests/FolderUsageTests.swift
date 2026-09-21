@@ -830,13 +830,29 @@ extension FolderUsageTests {
                 }
 
                 let groupPath = try XCTUnwrap(selectedPath)
+                let group = try XCTUnwrap(
+                    child.children.first(where: { $0.path == groupPath })
+                )
+
+                try await r610Measure(
+                    label: "sunburst-leaf-select",
+                    round: round
+                ) {
+                    try await self.r610ClickUntilSelectionChanges(
+                        window: window,
+                        previousPath: groupPath,
+                        selectedPath: { selectedPath }
+                    )
+                }
+
+                let leafPath = try XCTUnwrap(selectedPath)
                 try r610Require(
-                    child.children.contains(where: { $0.path == groupPath }),
-                    "Sunburst group selection mismatch"
+                    group.children.contains(where: { $0.path == leafPath }),
+                    "Sunburst leaf selection mismatch"
                 )
 
                 window.close()
-                try await Task.sleep(for: .milliseconds(30))
+                try await Task.sleep(for: .milliseconds(80))
             }
 
             r610Write(
