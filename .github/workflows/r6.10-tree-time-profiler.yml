@@ -1,0 +1,217 @@
+name: R6.10 Tree Time Profiler Research
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/r6.10-tree-time-profiler.yml'
+      - 'DiskUsageTests/FolderUsageTests.swift'
+
+permissions: {}
+
+concurrency:
+  group: r6-10-tree-profile-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  profile:
+    runs-on: macos-26
+    timeout-minutes: 35
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout exact research head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Select Xcode 26.6
+        run: sudo xcode-select -s /Applications/Xcode_26.6.app/Contents/Developer
+
+      - name: Prepare profiling environment
+        shell: bash
+        env:
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
+          BASELINE_SHA: 0cda06c0ba11f6808abcbe675f14fc8f9eb76d7d
+        run: |
+          set -euo pipefail
+
+          head="$(git rev-parse HEAD)"
+          echo "research_head=${head}"
+          echo "production_baseline=${BASELINE_SHA}"
+          test "${head}" = "${EXPECTED_HEAD}"
+          git cat-file -e "${BASELINE_SHA}^{commit}"
+
+          rm -f             /tmp/diskusage-r610-tree-profile-enabled             /tmp/diskusage-r610-tree-profile-ready             /tmp/diskusage-r610-tree-profile-start
+          touch /tmp/diskusage-r610-tree-profile-enabled
+
+          echo "R610_PROFILE_DERIVED=$RUNNER_TEMP/r610-tree-profile-derived" >> "$GITHUB_ENV"
+
+          sw_vers
+          xcodebuild -version
+          xcrun xctrace version
+
+      - name: Build outside profiled intervals
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild             -project DiskUsage.xcodeproj             -scheme DiskUsage             -configuration Debug             -destination 'platform=macOS'             -derivedDataPath "$R610_PROFILE_DERIVED"             CODE_SIGNING_ALLOWED=NO             build-for-testing
+
+      - name: Capture repeated Tree Time Profiler evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          for round in 1 2 3; do
+            echo "=== R6.10 tree_profile_round=${round} ==="
+
+            rm -f /tmp/diskusage-r610-tree-profile-ready /tmp/diskusage-r610-tree-profile-start
+            test_log="$RUNNER_TEMP/r610-tree-test-${round}.log"
+            trace_log="$RUNNER_TEMP/r610-tree-xctrace-${round}.log"
+            trace="$RUNNER_TEMP/r610-tree-${round}.trace"
+            xml="$RUNNER_TEMP/r610-tree-${round}.xml"
+            rm -rf "$trace"
+
+            for _ in {1..100}; do
+              if ! pgrep -x DiskUsage >/dev/null 2>&1; then
+                break
+              fi
+              sleep 0.1
+            done
+
+            xcodebuild               -project DiskUsage.xcodeproj               -scheme DiskUsage               -configuration Debug               -destination 'platform=macOS'               -derivedDataPath "$R610_PROFILE_DERIVED"               -only-testing:DiskUsageTests/FolderUsageTests/testR610TreeInteractionTimeProfilerResearch               CODE_SIGNING_ALLOWED=NO               test-without-building >"$test_log" 2>&1 &
+            test_pid=$!
+
+            app_pid=""
+            for _ in {1..300}; do
+              app_pid="$(pgrep -x DiskUsage | tail -n 1 || true)"
+              if [[ -n "$app_pid" && -f /tmp/diskusage-r610-tree-profile-ready ]]; then
+                break
+              fi
+              if ! kill -0 "$test_pid" 2>/dev/null; then
+                break
+              fi
+              sleep 0.1
+            done
+
+            if [[ -z "$app_pid" || ! -f /tmp/diskusage-r610-tree-profile-ready ]]; then
+              echo "::error::Tree profiling test host did not reach the ready handshake in round ${round}."
+              cat "$test_log" || true
+              wait "$test_pid" || true
+              exit 1
+            fi
+
+            echo "Attaching Time Profiler to DiskUsage PID ${app_pid}; raw trace remains ephemeral."
+
+            profile_status=0
+            xcrun xctrace record               --template 'Time Profiler'               --attach "$app_pid"               --time-limit 10s               --output "$trace"               --no-prompt >"$trace_log" 2>&1 &
+            profile_pid=$!
+
+            sleep 1
+            touch /tmp/diskusage-r610-tree-profile-start
+
+            wait "$profile_pid" || profile_status=$?
+
+            test_status=0
+            wait "$test_pid" || test_status=$?
+
+            grep -E 'testR610TreeInteractionTimeProfilerResearch.*passed|TEST (SUCCEEDED|FAILED)' "$test_log" || true
+            cat "$trace_log"
+
+            if [[ "$test_status" -ne 0 ]]; then
+              echo "::error::Tree profiling harness failed with status ${test_status} in round ${round}."
+              cat "$test_log" || true
+              exit "$test_status"
+            fi
+
+            if [[ "$profile_status" -ne 0 ]]; then
+              echo "::error::xctrace attach failed with status ${profile_status} in round ${round}."
+              exit "$profile_status"
+            fi
+
+            xcrun xctrace export               --input "$trace"               --xpath '/trace-toc/run[@number="1"]/data/table[@schema="time-profile"]'               --output "$xml"
+
+            PROFILE_XML="$xml" PROFILE_ROUND="$round" python3 - <<'PY'
+          import collections
+          import os
+          import re
+          import xml.etree.ElementTree as ET
+
+          root = ET.parse(os.environ["PROFILE_XML"]).getroot()
+          by_id = {element.get("id"): element for element in root.iter() if element.get("id")}
+
+          def resolved(element):
+              ref = element.get("ref")
+              return by_id.get(ref, element) if ref else element
+
+          def frame_name(frame):
+              target = resolved(frame)
+              return target.get("name") or target.get("label") or (target.text or "").strip()
+
+          patterns = {
+              "diskusage_tree_views": re.compile(r"TreeView|ItemRow|SizeBar"),
+              "folder_usage_projection": re.compile(r"FolderUsage.*(?:name|childrenOptional)"),
+              "diskusage_formatting": re.compile(r"formatBytes|formatPercent"),
+              "swiftui_outline_list": re.compile(
+                  r"OutlineGroup|SwiftUI.*(?:List|Outline)|NSOutlineView|NSTableView", re.I
+              ),
+              "swiftui_attribute_graph": re.compile(r"AttributeGraph|AG::|ViewGraph|GraphHost"),
+              "text_layout": re.compile(r"CoreText|CTLine|NSText|TextLayout", re.I),
+          }
+
+          rows = list(root.iter("row"))
+          stacks = []
+          first_frames = collections.Counter()
+          all_frames = collections.Counter()
+          inclusive = collections.Counter()
+
+          for row in rows:
+              names = [name for name in (frame_name(frame) for frame in row.iter("frame")) if name]
+              if not names:
+                  continue
+
+              stacks.append(names)
+              first_frames[names[0]] += 1
+              all_frames.update(names)
+
+              joined = "\n".join(names)
+              for label, pattern in patterns.items():
+                  if pattern.search(joined):
+                      inclusive[label] += 1
+
+          total = len(stacks)
+          print(f"R610_PROFILE round={os.environ['PROFILE_ROUND']} time_profile_rows={len(rows)} stack_rows={total}")
+          for label in patterns:
+              count = inclusive[label]
+              share = (100.0 * count / total) if total else 0.0
+              print(f"R610_PROFILE_INCLUSIVE label={label} rows={count} share_pct={share:.2f}")
+
+          print("R610_PROFILE_TOP_FIRST_FRAMES")
+          for name, count in first_frames.most_common(60):
+              print(f"  {count:6d}  {name}")
+
+          print("R610_PROFILE_TOP_ALL_FRAMES")
+          for name, count in all_frames.most_common(100):
+              print(f"  {count:6d}  {name}")
+
+          if not stacks:
+              raise SystemExit("No symbolized Time Profiler stacks were exported")
+          PY
+          done
+
+      - name: Confirm profiling artifacts remain ephemeral
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          rm -f             /tmp/diskusage-r610-tree-profile-enabled             /tmp/diskusage-r610-tree-profile-ready             /tmp/diskusage-r610-tree-profile-start
+
+          echo "research_status:"
+          git status --short
+          test -z "$(git status --short)"
+
+          echo "R6.10 Tree Time Profiler traces/XML/logs/DerivedData remained under RUNNER_TEMP only."
