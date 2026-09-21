@@ -668,7 +668,10 @@ extension FolderUsageTests {
             atPath: "/tmp/diskusage-r611-candidate-enabled"
         )
         let variant = candidate ? "candidate" : "baseline"
-        let invocation = ProcessInfo.processInfo.environment["R611_INVOCATION"] ?? "unknown"
+        let invocation = ProcessInfo.processInfo.environment["R611_INVOCATION"]
+            ?? (try? String(contentsOfFile: "/tmp/diskusage-r611-invocation", encoding: .utf8)
+                .trimmingCharacters(in: .whitespacesAndNewlines))
+            ?? "unknown"
 
         try await r611RecordIdleHeartbeat(
             variant: variant,
