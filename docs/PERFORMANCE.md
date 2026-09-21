@@ -379,6 +379,51 @@ Actual SwiftUI rendering and interaction were intentionally outside this slice. 
 
 Raw result logs, DerivedData, temporary markers, and the research workflow/tests remained under runner temporary storage or on the closed research branch and are absent from the clean production branch.
 
+### R6.10 large-snapshot SwiftUI interaction responsiveness
+
+R6.10 exercised the unchanged production `TreeView` and `SunburstView` through real AppKit-delivered keyboard/mouse interaction against deterministic large in-memory snapshots. The exact production baseline remained `0cda06c0ba11f6808abcbe675f14fc8f9eb76d7d`; research PR #120 changed only temporary tests/workflows and is intentionally kept out of production.
+
+Final interaction evidence was collected at exact research head `4b1ac25fe3eec2fe90e9bcb7663a026187e5744b` in workflow `35597760914`, job `106326520765`. Fixture construction and sorting occurred before measured interaction intervals. Structural checks passed for:
+
+- Tree: 128,700 nodes;
+- Sunburst: 131,156 nodes, total size 262,080;
+- Sunburst presentation: 148 ordinary segments + 64 aggregates = 212 visual segments;
+- repeated Tree expansion/navigation/selection and Sunburst selection/navigation/leaf hit-testing.
+
+The same-run idle heartbeat p95 was 0.212 ms before and 0.115 ms after. Five repeated interaction rounds produced:
+
+| Interaction | Duration median | Duration max | Median of heartbeat p95 | Worst heartbeat max |
+| --- | ---: | ---: | ---: | ---: |
+| Tree initial host/layout/display | 0.522787 s | 0.647015 s | 526.350 ms | 720.666 ms |
+| Tree expand level 1 | 0.122993 s | 0.169176 s | 118.601 ms | 152.676 ms |
+| Tree expand level 2 | 0.130959 s | 0.196135 s | 125.612 ms | 189.069 ms |
+| Tree expand level 3 | 0.124108 s | 0.141094 s | 116.758 ms | 136.179 ms |
+| Tree parent/left navigation | 0.000586 s | 0.000639 s | 0.090 ms | 2.188 ms |
+| Sunburst initial host/layout/display | 0.040063 s | 0.046990 s | 47.211 ms | 66.281 ms |
+| Sunburst ready/select | 0.189813 s | 0.236225 s | 54.726 ms | 101.865 ms |
+| Sunburst navigation level 1 | 0.053062 s | 0.073308 s | 25.111 ms | 39.487 ms |
+| Sunburst navigation level 2 | 0.016921 s | 0.018947 s | 8.042 ms | 11.274 ms |
+| Sunburst leaf selection | 0.015429 s | 0.016455 s | 0.105 ms | 0.846 ms |
+
+Unlike the R6.9 presentation-state measurements, Tree host/expansion work therefore shows a repeated main-actor stall that is far above the same-run idle heartbeat. Sunburst remains materially lighter for the tested presentation shape.
+
+Because the Tree stall repeated, R6.10 collected targeted Time Profiler evidence before selecting any optimization. Exact-head workflow `35597760873`, job `106326517723`, produced three successful 10-second captures with 9,700 / 9,570 / 9,521 symbolized stack rows. Per-stack inclusive presence was stable:
+
+- `OutlineListCoordinator.diffRows(of:to:)`: 47.31% / 47.58% / 48.86%;
+- `OutlineListCoordinator.update(...)` / `withSelectionUpdateGuard`: 49.25% / 49.23% / 51.07%;
+- `ModifiedViewList.applyNodes` / `DynamicViewList.WrappedList.applyNodes`: 28.29% / 29.40% / 30.50%;
+- AttributeGraph update/input machinery: 32.07% / 30.96% / 30.51%;
+- AppKit `NSView` layout: 63.39% / 64.24% / 61.80%;
+- app `TreeView` / `ItemRow` / `SizeBar`: 2.87% / 2.79% / 2.69%;
+- `FolderUsage` projection: 0.06% / 0.06% / 0.04%;
+- DiskUsage formatting: 0.30% / 0.34% / 0.32%.
+
+These categories overlap because they report whether a symbol category is present anywhere in a sampled stack; they are not additive CPU percentages. Raw frame-occurrence counts are likewise not CPU percentages.
+
+The measured hotspot is therefore specifically the SwiftUI `List` + `OutlineGroup` update/diff/layout path, centered on `OutlineListCoordinator` and framework layout/AttributeGraph machinery rather than obvious DiskUsage row formatting or `FolderUsage` projection work. R6.10 does **not** justify a speculative custom Tree, virtualization architecture, cache/index, scanner change, or broad UI rewrite.
+
+Decision: open narrow follow-up #121 to test the smallest production change that can reduce the measured Tree outline diff/update/layout cost while preserving selection/navigation correctness. R6.10 itself retains no production runtime change. Raw traces/XML/logs/DerivedData and the research-only workflow/tests remain ephemeral or on the unmerged research branch and are absent from the clean final production diff.
+
 ### Allocations
 
 Use Allocations with disposable data to inspect peak/retained memory across:
