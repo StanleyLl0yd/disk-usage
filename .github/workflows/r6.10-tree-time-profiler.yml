@@ -87,9 +87,12 @@ jobs:
 
             app_pid=""
             for _ in {1..300}; do
-              app_pid="$(pgrep -x DiskUsage | tail -n 1 || true)"
-              if [[ -n "$app_pid" && -f /tmp/diskusage-r610-tree-profile-ready ]]; then
-                break
+              if [[ -f /tmp/diskusage-r610-tree-profile-ready ]]; then
+                app_pid="$(tr -d '[:space:]' </tmp/diskusage-r610-tree-profile-ready)"
+                if [[ "$app_pid" =~ ^[0-9]+$ ]] && kill -0 "$app_pid" 2>/dev/null; then
+                  break
+                fi
+                app_pid=""
               fi
               if ! kill -0 "$test_pid" 2>/dev/null; then
                 break
@@ -97,8 +100,8 @@ jobs:
               sleep 0.1
             done
 
-            if [[ -z "$app_pid" || ! -f /tmp/diskusage-r610-tree-profile-ready ]]; then
-              echo "::error::Tree profiling test host did not reach the ready handshake in round ${round}."
+            if [[ -z "$app_pid" ]]; then
+              echo "::error::Tree profiling test host did not publish a live PID in round ${round}."
               cat "$test_log" || true
               wait "$test_pid" || true
               exit 1
