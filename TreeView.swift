@@ -144,6 +144,7 @@ struct ItemRow: View {
     let isSelected: Bool
     let isTreeFocused: Bool
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isHovered = false
 
     private var ratio: Double {
@@ -216,8 +217,8 @@ struct ItemRow: View {
         }
         .contentShape(Rectangle())
         .onHover { isHovered = $0 }
-        .animation(.easeOut(duration: 0.12), value: isHovered)
-        .animation(.easeOut(duration: 0.12), value: isSelected)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: isHovered)
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: isSelected)
     }
 }
 
