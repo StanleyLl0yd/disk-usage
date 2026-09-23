@@ -4,6 +4,42 @@
     "" : {
 
     },
+    "accessibility.scanMenu" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Start Scan" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Начать сканирование" } }
+      }
+    },
+    "accessibility.sort" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Sort" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Сортировка" } }
+      }
+    },
+    "accessibility.sunburst.back" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Back" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Назад" } }
+      }
+    },
+    "accessibility.sunburst.navigateHint" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Select and open folder" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Выбрать и открыть папку" } }
+      }
+    },
+    "accessibility.sunburst.root" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Root" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Корень" } }
+      }
+    },
+    "accessibility.sunburst.selectHint" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Select item" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Выбрать элемент" } }
+      }
+    },
     "alert.cancel" : {
       "localizations" : {
         "en" : { "stringUnit" : { "state" : "translated", "value" : "Cancel" } },
