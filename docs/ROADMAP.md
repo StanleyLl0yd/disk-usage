@@ -383,7 +383,7 @@ This exception did not itself mark R5 complete and does not complete the R7 rele
 
 # R6 — Large-scale resilience and measured optimization
 
-**Status: IN PROGRESS**
+**Status: COMPLETE**
 
 R6 is evidence-driven. It must not become speculative performance engineering.
 ## Scope
@@ -557,20 +557,7 @@ R6.11 tested two research-only native Tree hypotheses against the unchanged prod
 
 The evidence therefore does not identify a small production change that materially reduces the measured framework-heavy outline cost. At the tested 128,700-node synthetic Tree scale, the remaining stall is explicitly **accepted** for R6 rather than traded for a speculative custom Tree, virtualization layer, cache/index, scanner change, or broader UI rewrite. A larger Tree architecture should be reconsidered only if new product-level evidence shows that the current native behavior is unacceptable enough to justify the added interaction, accessibility, selection, and maintenance risk.
 
-Then continue profiling representative large synthetic or disposable filesystem trees and identify actual bottlenecks in:
-
-- enumeration;
-- resource-value reads;
-- Node construction;
-- `FolderUsage` conversion;
-- memory retention;
-- result publication;
-- tree expansion/navigation;
-- sunburst preparation/rendering;
-- search/largest-file indexing introduced by R5;
-- repeated scan/cancel/rescan cycles.
-
-Possible optimizations such as incremental result presentation, bounded indexes, alternative internal tree construction, or progressive visualization may be introduced only when measurements justify them and correctness semantics remain explicit.
+The separate repository-wide R6 exit review (#126) rechecked the complete current repository after R6.1–R6.11. Against the fully audited R5 exit baseline, 46 of 50 tracked files remained byte-identical and the four R6-touched files were directly re-reviewed. All planned R6 measurement surfaces are covered, the only retained production optimizations are the narrow R6.3 and R6.6 scanner changes, research-only candidates and profiling artifacts remain outside production, release/security invariants remain intact, and no remaining R6 runtime, correctness, safety, privacy, or architecture blocker was found.
 
 ## R6 exit criteria
 
@@ -632,4 +619,4 @@ These are not assumed future stages.
 
 **R5 — Core productivity workflow is complete.** R5.1–R5.5 are implemented and verified, the full repository-wide exit review passed, final exact-main verification is green, and release-tag immutability is enforced for `v*` while the published `v0.1.0-alpha.1` remains bound to its verified source commit.
 
-**R6 — Large-scale resilience and measured optimization is in progress.** R6.1–R6.11 are complete. R6.11 rejected two narrow native Tree/update candidates after repeated A/B evidence failed to show a reproducible material improvement, and explicitly accepted the remaining framework-heavy `List` + `OutlineGroup` cost at the tested 128,700-node synthetic scale. The next step is the R6 master exit review; no larger Tree architecture change is justified without new product-level evidence.
+**R6 — Large-scale resilience and measured optimization is complete.** R6.1–R6.11 are implemented/measured and verified, the separate full repository-wide exit review passed, the two retained scanner optimizations remain narrow and evidence-backed, rejected Search/Tree candidates remain out of production, and the remaining framework-heavy native Tree cost is explicitly accepted at the tested 128,700-node synthetic scale. **R7 — Release-quality product polish remains planned and has not started.**
