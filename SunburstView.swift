@@ -226,12 +226,7 @@ struct SunburstView: View {
         if let item = segment.item {
             segmentVisual(segment, centerPoint: centerPoint)
                 .onTapGesture {
-                    selectedPath = item.path
-                    if segment.canNavigate {
-                        updateNavigation {
-                            navigation.append(item.path)
-                        }
-                    }
+                    activateSegment(segment, item: item)
                 }
                 .folderContextMenu(
                     item,
@@ -240,8 +235,39 @@ struct SunburstView: View {
                     onCopyPath: onCopyPath,
                     onDelete: onDelete
                 )
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(Text(displayName(for: segment)))
+                .accessibilityValue(Text(segmentAccessibilityValue(for: segment)))
+                .accessibilityHint(
+                    Text(
+                        String(
+                            localized: segment.canNavigate
+                                ? "accessibility.sunburst.navigateHint"
+                                : "accessibility.sunburst.selectHint",
+                            defaultValue: segment.canNavigate
+                                ? "Select and open folder"
+                                : "Select item"
+                        )
+                    )
+                )
+                .accessibilityAddTraits(.isButton)
+                .accessibilityAction {
+                    activateSegment(segment, item: item)
+                }
         } else {
             segmentVisual(segment, centerPoint: centerPoint)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(Text(displayName(for: segment)))
+                .accessibilityValue(Text(segmentAccessibilityValue(for: segment)))
+        }
+    }
+
+    private func activateSegment(_ segment: RenderableSegment, item: FolderUsage) {
+        selectedPath = item.path
+        if segment.canNavigate {
+            updateNavigation {
+                navigation.append(item.path)
+            }
         }
     }
 
@@ -296,7 +322,11 @@ struct SunburstView: View {
     }
 
     private func segmentHelpText(for segment: RenderableSegment) -> String {
-        "\(displayName(for: segment))\n\(formatBytes(segment.size)) · \(formatPercent(segment.size, of: current.total))"
+        "\(displayName(for: segment))\n\(segmentAccessibilityValue(for: segment))"
+    }
+
+    private func segmentAccessibilityValue(for segment: RenderableSegment) -> String {
+        "\(formatBytes(segment.size)) · \(formatPercent(segment.size, of: current.total))"
     }
 
     private func displayName(for segment: RenderableSegment) -> String {
@@ -348,6 +378,9 @@ struct SunburstView: View {
                 Image(systemName: "chevron.left").font(.system(size: 14, weight: .semibold))
             }
             .buttonStyle(.bordered)
+            .accessibilityLabel(
+                Text(String(localized: "accessibility.sunburst.back", defaultValue: "Back"))
+            )
             .disabled(resolvedPath.isEmpty)
 
             ScrollView(.horizontal, showsIndicators: false) {
@@ -358,12 +391,16 @@ struct SunburstView: View {
                         Text(verbatim: "/")
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel(
+                        Text(String(localized: "accessibility.sunburst.root", defaultValue: "Root"))
+                    )
                     .foregroundStyle(resolvedPath.isEmpty ? ZenDesign.Colors.primaryText : ZenDesign.Colors.secondaryText)
 
                     ForEach(Array(resolvedPath.enumerated()), id: \.element.path) { index, item in
                         Image(systemName: "chevron.right")
                             .font(.caption2)
                             .foregroundStyle(ZenDesign.Colors.mutedText)
+                            .accessibilityHidden(true)
                         Button(item.name) {
                             updateNavigation {
                                 navigation = Array(navigation.prefix(index + 1))
