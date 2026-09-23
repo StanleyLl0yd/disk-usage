@@ -45,7 +45,8 @@ Run the `DiskUsage` shared scheme to build the app and execute the regression te
 - **R3 — Unified selection, navigation, and polished Tree view is complete.**
 - **R4 — Sunburst 2.0: DiskUsage visual identity is complete.** All five R4 slices are implemented and verified, and the separate master exit review found no remaining R4 gap.
 - **R5 — Core productivity workflow is complete.** R5.1–R5.5 are implemented and verified, the repository-wide exit review passed, and release tags `v*` are protected against update/deletion with the published `v0.1.0-alpha.1` still bound to its verified source commit.
-- **R6 — Large-scale resilience and measured optimization is complete.** R6.1–R6.11 measured scanner, memory, derived presentation, publication, and real SwiftUI interaction at representative large synthetic/disposable scales; the evidence-driven runtime changes were kept narrow, rejected candidates stayed out of production, and the separate repository-wide exit review found no remaining R6 blocker. **R7 — Release-quality product polish remains planned and has not started.** See [`docs/ROADMAP.md`](docs/ROADMAP.md).
+- **R6 — Large-scale resilience and measured optimization is complete.** R6.1–R6.11 measured scanner, memory, derived presentation, publication, and real SwiftUI interaction at representative large synthetic/disposable scales; the evidence-driven runtime changes were kept narrow, rejected candidates stayed out of production, and the separate repository-wide exit review found no remaining R6 blocker.
+- **R7 — Release-quality product polish is in progress.** The current work starts with concrete accessibility and Reduce Motion polish while preserving the verified R1–R6 behavior and unsigned-alpha release policy. See [`docs/ROADMAP.md`](docs/ROADMAP.md).
 - Version `1.0.0` is reserved for release readiness after the planned product stages are complete and verified.
 
 ## Contributing
