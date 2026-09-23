@@ -238,18 +238,7 @@ struct SunburstView: View {
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(Text(displayName(for: segment)))
                 .accessibilityValue(Text(segmentAccessibilityValue(for: segment)))
-                .accessibilityHint(
-                    Text(
-                        String(
-                            localized: segment.canNavigate
-                                ? "accessibility.sunburst.navigateHint"
-                                : "accessibility.sunburst.selectHint",
-                            defaultValue: segment.canNavigate
-                                ? "Select and open folder"
-                                : "Select item"
-                        )
-                    )
-                )
+                .accessibilityHint(Text(segmentAccessibilityHint(for: segment)))
                 .accessibilityAddTraits(.isButton)
                 .accessibilityAction {
                     activateSegment(segment, item: item)
@@ -327,6 +316,19 @@ struct SunburstView: View {
 
     private func segmentAccessibilityValue(for segment: RenderableSegment) -> String {
         "\(formatBytes(segment.size)) · \(formatPercent(segment.size, of: current.total))"
+    }
+
+    private func segmentAccessibilityHint(for segment: RenderableSegment) -> String {
+        if segment.canNavigate {
+            return String(
+                localized: "accessibility.sunburst.navigateHint",
+                defaultValue: "Select and open folder"
+            )
+        }
+        return String(
+            localized: "accessibility.sunburst.selectHint",
+            defaultValue: "Select item"
+        )
     }
 
     private func displayName(for segment: RenderableSegment) -> String {
