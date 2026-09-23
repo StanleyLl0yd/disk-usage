@@ -446,7 +446,7 @@ struct ContentView: View {
                     }
                     .help(String(localized: "status.initial", defaultValue: "Choose a folder or start a scan."))
                     .accessibilityLabel(
-                        Text(String(localized: "status.initial", defaultValue: "Choose a folder or start a scan."))
+                        Text(String(localized: "accessibility.scanMenu", defaultValue: "Start Scan"))
                     )
                 }
             }
@@ -666,12 +666,16 @@ struct ContentView: View {
     private var treeControls: some View {
         HStack {
             if !isLargestFilesMode {
-                Picker("", selection: $sortOption) {
+                Picker(
+                    String(localized: "accessibility.sort", defaultValue: "Sort"),
+                    selection: $sortOption
+                ) {
                     ForEach(SortOption.allCases) { option in
                         Text(option.title).tag(option)
                     }
                 }
                 .pickerStyle(.segmented)
+                .labelsHidden()
                 .frame(width: 200)
             }
 
@@ -700,6 +704,7 @@ struct ContentView: View {
             Image(systemName: "folder.badge.questionmark")
                 .font(.system(size: 48))
                 .foregroundStyle(ZenDesign.Colors.mutedText)
+                .accessibilityHidden(true)
             Text(String(localized: "status.initial", defaultValue: "Choose a folder or start a scan."))
                 .font(.title3)
                 .foregroundStyle(ZenDesign.Colors.secondaryText)
@@ -723,6 +728,7 @@ struct ContentView: View {
             Image(systemName: "xmark.circle")
                 .font(.system(size: 48))
                 .foregroundStyle(ZenDesign.Colors.mutedText)
+                .accessibilityHidden(true)
             Text(String(localized: "status.cancelled", defaultValue: "Cancelled."))
                 .font(.title3)
                 .foregroundStyle(ZenDesign.Colors.secondaryText)
@@ -735,6 +741,7 @@ struct ContentView: View {
             Image(systemName: "folder")
                 .font(.system(size: 48))
                 .foregroundStyle(ZenDesign.Colors.mutedText)
+                .accessibilityHidden(true)
             Text(
                 String(
                     localized: "status.finished.empty",
@@ -752,6 +759,7 @@ struct ContentView: View {
             Image(systemName: "doc")
                 .font(.system(size: 48))
                 .foregroundStyle(ZenDesign.Colors.mutedText)
+                .accessibilityHidden(true)
             Text(
                 String(
                     localized: "largestFiles.empty",
@@ -783,6 +791,7 @@ struct ContentView: View {
             HStack(spacing: ZenDesign.Spacing.small) {
                 Image(systemName: "lock.fill")
                     .foregroundStyle(ZenDesign.Colors.mutedText)
+                    .accessibilityHidden(true)
                 Text(
                     String(
                         format: String(
@@ -853,6 +862,7 @@ struct SelectedItemDetail: View {
                 Image(systemName: item.isFile ? "doc" : "folder")
                     .foregroundStyle(item.isFile ? ZenDesign.Colors.secondaryText : ZenDesign.Colors.accent)
                     .frame(width: 16)
+                    .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: ZenDesign.Spacing.compact) {
                     Text(item.name)
@@ -980,6 +990,7 @@ struct DiskInfoBar: View {
             Image(systemName: "internaldrive.fill")
                 .font(.system(size: 14))
                 .foregroundStyle(ZenDesign.Colors.secondaryText)
+                .accessibilityHidden(true)
 
             GeometryReader { geometry in
                 ZStack(alignment: .leading) {
@@ -990,6 +1001,7 @@ struct DiskInfoBar: View {
                 }
             }
             .frame(height: 8)
+            .accessibilityHidden(true)
             .frame(maxWidth: 180)
 
             HStack(spacing: ZenDesign.Spacing.compact) {
