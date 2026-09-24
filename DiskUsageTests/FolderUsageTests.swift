@@ -477,6 +477,37 @@ final class FolderUsageTests: XCTestCase {
         XCTAssertEqual(presentation?.visualSegmentCount, 148)
     }
 
+    func testSunburstKeyboardNavigationMovesAndWrapsVisibleSegments() {
+        let ids = ["a", "b", "c"]
+
+        XCTAssertEqual(
+            SunburstKeyboardNavigation.movedID(in: ids, from: "a", by: 1),
+            "b"
+        )
+        XCTAssertEqual(
+            SunburstKeyboardNavigation.movedID(in: ids, from: "c", by: 1),
+            "a"
+        )
+        XCTAssertEqual(
+            SunburstKeyboardNavigation.movedID(in: ids, from: "a", by: -1),
+            "c"
+        )
+    }
+
+    func testSunburstKeyboardNavigationHandlesEmptyAndStaleCursor() {
+        XCTAssertNil(
+            SunburstKeyboardNavigation.movedID(in: [], from: nil, by: 1)
+        )
+        XCTAssertEqual(
+            SunburstKeyboardNavigation.movedID(
+                in: ["a", "b", "c"],
+                from: "missing",
+                by: 1
+            ),
+            "b"
+        )
+    }
+
     func testFormatBytesUsesNextUnitAtExactBoundary() {
         XCTAssertEqual(formatBytes(1024), "1.0 KB")
     }

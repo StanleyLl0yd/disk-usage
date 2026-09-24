@@ -1,6 +1,23 @@
 import SwiftUI
 import Combine
 
+nonisolated enum SunburstKeyboardNavigation {
+    static func movedID(
+        in segmentIDs: [String],
+        from currentID: String?,
+        by offset: Int
+    ) -> String? {
+        guard !segmentIDs.isEmpty else { return nil }
+
+        let currentIndex = currentID
+            .flatMap { segmentIDs.firstIndex(of: $0) }
+            ?? 0
+        let count = segmentIDs.count
+        let nextIndex = ((currentIndex + offset) % count + count) % count
+        return segmentIDs[nextIndex]
+    }
+}
+
 @MainActor
 final class SunburstPresentationState: ObservableObject {
     @Published private(set) var model = SunburstPresentation.empty
@@ -100,6 +117,8 @@ struct SunburstView: View {
     @StateObject private var presentation = SunburstPresentationState()
     @State private var navigation: [String] = []
     @State private var hoveredSegmentID: String?
+    @State private var keyboardFocusedSegmentID: String?
+    @FocusState private var isSunburstFocused: Bool
 
     private let levels = 4, center: CGFloat = 70, ring: CGFloat = 45
 
@@ -127,6 +146,26 @@ struct SunburstView: View {
             + presentation.model.aggregates.map(RenderableSegment.init)
     }
 
+    private var keyboardSegments: [RenderableSegment] {
+        renderableSegments.filter { $0.item != nil }
+    }
+
+    private var effectiveKeyboardFocusedSegmentID: String? {
+        guard isSunburstFocused else { return nil }
+
+        if let keyboardFocusedSegmentID,
+           keyboardSegments.contains(where: { $0.id == keyboardFocusedSegmentID }) {
+            return keyboardFocusedSegmentID
+        }
+
+        if let selectedPath,
+           let selected = keyboardSegments.first(where: { $0.item?.path == selectedPath }) {
+            return selected.id
+        }
+
+        return keyboardSegments.first?.id
+    }
+
     private var isTransitioningPresentation: Bool {
         presentation.isPreparing && presentation.model.visualSegmentCount > 0
     }
@@ -147,6 +186,11 @@ struct SunburstView: View {
         if let hoveredSegmentID,
            let hovered = renderableSegments.first(where: { $0.id == hoveredSegmentID }) {
             return (displayName(for: hovered), hovered.size)
+        }
+
+        if let keyboardFocusedSegmentID = effectiveKeyboardFocusedSegmentID,
+           let focused = renderableSegments.first(where: { $0.id == keyboardFocusedSegmentID }) {
+            return (displayName(for: focused), focused.size)
         }
 
         guard let selectedPath else { return nil }
@@ -189,6 +233,26 @@ struct SunburstView: View {
             .opacity(presentationOpacity)
             .allowsHitTesting(!presentation.isPreparing)
             .accessibilityHidden(presentation.isPreparing)
+            .focusable()
+            .focused($isSunburstFocused)
+            .onKeyPress(.leftArrow) {
+                moveKeyboardFocus(by: -1)
+            }
+            .onKeyPress(.upArrow) {
+                moveKeyboardFocus(by: -1)
+            }
+            .onKeyPress(.rightArrow) {
+                moveKeyboardFocus(by: 1)
+            }
+            .onKeyPress(.downArrow) {
+                moveKeyboardFocus(by: 1)
+            }
+            .onKeyPress(.return, phases: .down) { _ in
+                activateKeyboardFocusedSegment()
+            }
+            .onKeyPress(.space, phases: .down) { _ in
+                activateKeyboardFocusedSegment()
+            }
             .animation(presentationAnimation, value: isTransitioningPresentation)
         }
         .frame(minWidth: 400, minHeight: 400)
@@ -207,14 +271,22 @@ struct SunburstView: View {
         }
         .onChange(of: navigation) { _, _ in
             hoveredSegmentID = nil
+            keyboardFocusedSegmentID = nil
             preparePresentation()
         }
         .onChange(of: snapshotRevision) { _, _ in
             hoveredSegmentID = nil
+            keyboardFocusedSegmentID = nil
             reconcileNavigationAndPrepare()
+        }
+        .onChange(of: isSunburstFocused) { _, focused in
+            if !focused {
+                keyboardFocusedSegmentID = nil
+            }
         }
         .onDisappear {
             hoveredSegmentID = nil
+            keyboardFocusedSegmentID = nil
             presentation.cancel()
         }
     }
@@ -274,16 +346,26 @@ struct SunburstView: View {
         )
         let isSelected = segment.item.map { $0.path == selectedPath } ?? false
         let isHovered = hoveredSegmentID == segment.id
+        let isKeyboardFocused = effectiveKeyboardFocusedSegmentID == segment.id
 
         return arc.fill(color.opacity(segmentFillOpacity(
             isAggregate: segment.isAggregate,
             isSelected: isSelected,
-            isHovered: isHovered
+            isHovered: isHovered,
+            isKeyboardFocused: isKeyboardFocused
         )))
         .overlay(
             arc.stroke(
-                segmentStrokeColor(isSelected: isSelected, isHovered: isHovered),
-                lineWidth: segmentStrokeWidth(isSelected: isSelected, isHovered: isHovered)
+                segmentStrokeColor(
+                    isSelected: isSelected,
+                    isHovered: isHovered,
+                    isKeyboardFocused: isKeyboardFocused
+                ),
+                lineWidth: segmentStrokeWidth(
+                    isSelected: isSelected,
+                    isHovered: isHovered,
+                    isKeyboardFocused: isKeyboardFocused
+                )
             )
         )
         .contentShape(arc)
@@ -304,6 +386,36 @@ struct SunburstView: View {
 
     private func segmentAccessibilityValue(for segment: RenderableSegment) -> String {
         "\(formatBytes(segment.size)), \(formatPercent(segment.size, of: current.total))"
+    }
+
+    private func moveKeyboardFocus(by offset: Int) -> KeyPress.Result {
+        guard isSunburstFocused, !presentation.isPreparing else { return .ignored }
+
+        let segments = keyboardSegments
+        let segmentIDs = segments.map(\.id)
+        guard let nextID = SunburstKeyboardNavigation.movedID(
+            in: segmentIDs,
+            from: effectiveKeyboardFocusedSegmentID,
+            by: offset
+        ) else {
+            return .ignored
+        }
+
+        keyboardFocusedSegmentID = nextID
+        return .handled
+    }
+
+    private func activateKeyboardFocusedSegment() -> KeyPress.Result {
+        guard isSunburstFocused,
+              !presentation.isPreparing,
+              let focusedID = effectiveKeyboardFocusedSegmentID,
+              let segment = keyboardSegments.first(where: { $0.id == focusedID }),
+              let item = segment.item else {
+            return .ignored
+        }
+
+        activate(segment, item: item)
+        return .handled
     }
 
     private func updateHover(segmentID: String, hovering: Bool) {
@@ -405,14 +517,26 @@ struct SunburstView: View {
         .padding(.horizontal)
     }
 
-    private func segmentFillOpacity(isAggregate: Bool, isSelected: Bool, isHovered: Bool) -> Double {
-        if isSelected || isHovered {
+    private func segmentFillOpacity(
+        isAggregate: Bool,
+        isSelected: Bool,
+        isHovered: Bool,
+        isKeyboardFocused: Bool
+    ) -> Double {
+        if isSelected || isHovered || isKeyboardFocused {
             return 1
         }
         return isAggregate ? 0.72 : 0.9
     }
 
-    private func segmentStrokeColor(isSelected: Bool, isHovered: Bool) -> Color {
+    private func segmentStrokeColor(
+        isSelected: Bool,
+        isHovered: Bool,
+        isKeyboardFocused: Bool
+    ) -> Color {
+        if isKeyboardFocused {
+            return ZenDesign.Colors.accent
+        }
         if isSelected {
             return ZenDesign.Colors.accent.opacity(0.95)
         }
@@ -422,7 +546,14 @@ struct SunburstView: View {
         return ZenDesign.Colors.surface.opacity(colorScheme == .dark ? 0.70 : 0.92)
     }
 
-    private func segmentStrokeWidth(isSelected: Bool, isHovered: Bool) -> CGFloat {
+    private func segmentStrokeWidth(
+        isSelected: Bool,
+        isHovered: Bool,
+        isKeyboardFocused: Bool
+    ) -> CGFloat {
+        if isKeyboardFocused {
+            return 2.6
+        }
         if isSelected {
             return 2
         }
