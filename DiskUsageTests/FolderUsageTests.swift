@@ -1,4 +1,6 @@
+import AppKit
 import Foundation
+import SwiftUI
 import XCTest
 @testable import DiskUsage
 
@@ -508,6 +510,90 @@ final class FolderUsageTests: XCTestCase {
         )
     }
 
+    @MainActor
+    func testR74ProductionViewsLayoutAcrossSupportedWindowSizes() throws {
+        let firstLeaf = FolderUsage(path: "/layout/first/a.dat", size: 64, isFile: true)
+        let secondLeaf = FolderUsage(path: "/layout/first/b.dat", size: 32, isFile: true)
+        let firstFolder = FolderUsage(
+            path: "/layout/first",
+            size: firstLeaf.size + secondLeaf.size,
+            children: [firstLeaf, secondLeaf]
+        )
+        let secondLeafGroup = (0..<4).map { index in
+            FolderUsage(
+                path: "/layout/second/file-\(index).dat",
+                size: Int64(16 + index),
+                isFile: true
+            )
+        }
+        let secondFolder = FolderUsage(
+            path: "/layout/second",
+            size: secondLeafGroup.reduce(Int64(0)) { $0 + $1.size },
+            children: secondLeafGroup
+        )
+        let items = [firstFolder, secondFolder]
+        let totalSize = items.reduce(Int64(0)) { $0 + $1.size }
+
+        let sizes = [
+            CGSize(width: 800, height: 600),
+            CGSize(width: 1_000, height: 720),
+            CGSize(width: 1_440, height: 900)
+        ]
+
+        for size in sizes {
+            try assertR74HostedLayout(
+                AnyView(
+                    ContentView(viewModel: DiskScannerViewModel())
+                        .environmentObject(AppSettings.shared)
+                ),
+                label: "shell",
+                size: size,
+                minimumSize: CGSize(width: 800, height: 600)
+            )
+
+            try assertR74HostedLayout(
+                AnyView(
+                    TreeView(
+                        items: items,
+                        totalSize: totalSize,
+                        restricted: [],
+                        canRescan: true,
+                        isSearchMode: false,
+                        isSearchPreparing: false,
+                        searchQuery: .constant(""),
+                        selectedPath: .constant(nil),
+                        onShowInFinder: { _ in },
+                        onCopyPath: { _ in },
+                        onDelete: { _ in },
+                        onOpenFullDiskAccess: {},
+                        onRescan: {}
+                    )
+                ),
+                label: "tree",
+                size: size,
+                minimumSize: CGSize(width: 1, height: 1),
+                requireVisibleScrollView: true
+            )
+
+            try assertR74HostedLayout(
+                AnyView(
+                    SunburstView(
+                        items: items,
+                        totalSize: totalSize,
+                        snapshotRevision: 1,
+                        selectedPath: .constant(nil),
+                        onShowInFinder: { _ in },
+                        onCopyPath: { _ in },
+                        onDelete: { _ in }
+                    )
+                ),
+                label: "sunburst",
+                size: size,
+                minimumSize: CGSize(width: 400, height: 400)
+            )
+        }
+    }
+
     func testFormatBytesUsesNextUnitAtExactBoundary() {
         XCTAssertEqual(formatBytes(1024), "1.0 KB")
     }
@@ -619,6 +705,113 @@ final class FolderUsageTests: XCTestCase {
             }
             return FolderUsage(path: rootPath, size: 2_048, children: children)
         }
+    }
+
+    @MainActor
+    private func assertR74HostedLayout(
+        _ rootView: AnyView,
+        label: String,
+        size: CGSize,
+        minimumSize: CGSize,
+        requireVisibleScrollView: Bool = false
+    ) throws {
+        let frame = NSRect(origin: .zero, size: size)
+        let window = NSWindow(
+            contentRect: frame,
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+        window.isReleasedWhenClosed = false
+
+        let hostingView = NSHostingView(rootView: rootView)
+        hostingView.frame = frame
+        hostingView.autoresizingMask = [.width, .height]
+        window.contentView = hostingView
+        window.setContentSize(size)
+        hostingView.frame = NSRect(origin: .zero, size: size)
+
+        hostingView.layoutSubtreeIfNeeded()
+        RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.05))
+        hostingView.layoutSubtreeIfNeeded()
+        hostingView.displayIfNeeded()
+
+        XCTAssertGreaterThanOrEqual(
+            hostingView.bounds.width,
+            minimumSize.width,
+            "\(label) width collapsed at \(Int(size.width))x\(Int(size.height))"
+        )
+        XCTAssertGreaterThanOrEqual(
+            hostingView.bounds.height,
+            minimumSize.height,
+            "\(label) height collapsed at \(Int(size.width))x\(Int(size.height))"
+        )
+        XCTAssertFalse(
+            hostingView.subviews.isEmpty,
+            "\(label) produced no hosted AppKit subtree at \(Int(size.width))x\(Int(size.height))"
+        )
+
+        if requireVisibleScrollView {
+            XCTAssertTrue(
+                hasR74VisibleScrollView(in: hostingView),
+                "\(label) has no non-zero native scroll region at \(Int(size.width))x\(Int(size.height))"
+            )
+        }
+
+        let nativeScale = window.backingScaleFactor
+        XCTAssertGreaterThan(nativeScale, 0)
+
+        let scale = CGFloat(2)
+        let bitmap = try makeR74Bitmap(of: hostingView, scale: scale)
+        XCTAssertEqual(bitmap.pixelsWide, Int((size.width * scale).rounded()))
+        XCTAssertEqual(bitmap.pixelsHigh, Int((size.height * scale).rounded()))
+        XCTAssertGreaterThan(
+            bitmap.colorAt(x: bitmap.pixelsWide / 2, y: bitmap.pixelsHigh / 2)?.alphaComponent ?? 0,
+            0,
+            "\(label) supplementary 2x render has a transparent center"
+        )
+
+        print(
+            "R7.4 layout \(label) logical=\(Int(size.width))x\(Int(size.height)) "
+                + "nativeBackingScale=\(String(format: "%.1f", Double(nativeScale))) "
+                + "supplementalRenderScale=2.0"
+        )
+
+        window.contentView = nil
+        window.close()
+    }
+
+    @MainActor
+    private func hasR74VisibleScrollView(in view: NSView) -> Bool {
+        if let scrollView = view as? NSScrollView,
+           scrollView.bounds.width > 0,
+           scrollView.bounds.height > 0 {
+            return true
+        }
+        return view.subviews.contains { hasR74VisibleScrollView(in: $0) }
+    }
+
+    @MainActor
+    private func makeR74Bitmap(of view: NSView, scale: CGFloat) throws -> NSBitmapImageRep {
+        let pixelsWide = max(1, Int((view.bounds.width * scale).rounded()))
+        let pixelsHigh = max(1, Int((view.bounds.height * scale).rounded()))
+        let bitmap = try XCTUnwrap(
+            NSBitmapImageRep(
+                bitmapDataPlanes: nil,
+                pixelsWide: pixelsWide,
+                pixelsHigh: pixelsHigh,
+                bitsPerSample: 8,
+                samplesPerPixel: 4,
+                hasAlpha: true,
+                isPlanar: false,
+                colorSpaceName: .deviceRGB,
+                bytesPerRow: 0,
+                bitsPerPixel: 0
+            )
+        )
+        bitmap.size = view.bounds.size
+        view.cacheDisplay(in: view.bounds, to: bitmap)
+        return bitmap
     }
 
     private func nodeCount(_ items: [FolderUsage]) -> Int {
