@@ -188,6 +188,7 @@ struct SunburstView: View {
             }
             .opacity(presentationOpacity)
             .allowsHitTesting(!presentation.isPreparing)
+            .accessibilityHidden(presentation.isPreparing)
             .animation(presentationAnimation, value: isTransitioningPresentation)
         }
         .frame(minWidth: 400, minHeight: 400)
@@ -226,12 +227,7 @@ struct SunburstView: View {
         if let item = segment.item {
             segmentVisual(segment, centerPoint: centerPoint)
                 .onTapGesture {
-                    selectedPath = item.path
-                    if segment.canNavigate {
-                        updateNavigation {
-                            navigation.append(item.path)
-                        }
-                    }
+                    activate(segment, item: item)
                 }
                 .folderContextMenu(
                     item,
@@ -240,8 +236,18 @@ struct SunburstView: View {
                     onCopyPath: onCopyPath,
                     onDelete: onDelete
                 )
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(Text(displayName(for: segment)))
+                .accessibilityValue(Text(segmentAccessibilityValue(for: segment)))
+                .accessibilityAddTraits(.isButton)
+                .accessibilityAction {
+                    activate(segment, item: item)
+                }
         } else {
             segmentVisual(segment, centerPoint: centerPoint)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(Text(displayName(for: segment)))
+                .accessibilityValue(Text(segmentAccessibilityValue(for: segment)))
         }
     }
 
@@ -285,6 +291,19 @@ struct SunburstView: View {
             updateHover(segmentID: segment.id, hovering: hovering)
         }
         .help(segmentHelpText(for: segment))
+    }
+
+    private func activate(_ segment: RenderableSegment, item: FolderUsage) {
+        selectedPath = item.path
+        if segment.canNavigate {
+            updateNavigation {
+                navigation.append(item.path)
+            }
+        }
+    }
+
+    private func segmentAccessibilityValue(for segment: RenderableSegment) -> String {
+        "\(formatBytes(segment.size)), \(formatPercent(segment.size, of: current.total))"
     }
 
     private func updateHover(segmentID: String, hovering: Bool) {
@@ -349,6 +368,7 @@ struct SunburstView: View {
             }
             .buttonStyle(.bordered)
             .disabled(resolvedPath.isEmpty)
+            .accessibilityLabel(Text(String(localized: "accessibility.sunburst.back", defaultValue: "Back")))
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: ZenDesign.Spacing.compact) {
@@ -359,11 +379,13 @@ struct SunburstView: View {
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(resolvedPath.isEmpty ? ZenDesign.Colors.primaryText : ZenDesign.Colors.secondaryText)
+                    .accessibilityLabel(Text(String(localized: "accessibility.sunburst.root", defaultValue: "Root")))
 
                     ForEach(Array(resolvedPath.enumerated()), id: \.element.path) { index, item in
                         Image(systemName: "chevron.right")
                             .font(.caption2)
                             .foregroundStyle(ZenDesign.Colors.mutedText)
+                            .accessibilityHidden(true)
                         Button(item.name) {
                             updateNavigation {
                                 navigation = Array(navigation.prefix(index + 1))

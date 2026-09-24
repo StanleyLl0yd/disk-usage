@@ -4,6 +4,30 @@
     "" : {
 
     },
+    "accessibility.scan" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Scan" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Сканировать" } }
+      }
+    },
+    "accessibility.sort" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Sort items" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Сортировка элементов" } }
+      }
+    },
+    "accessibility.sunburst.back" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Back" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Назад" } }
+      }
+    },
+    "accessibility.sunburst.root" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Root" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Корень" } }
+      }
+    },
     "alert.cancel" : {
       "localizations" : {
         "en" : { "stringUnit" : { "state" : "translated", "value" : "Cancel" } },
