@@ -247,10 +247,10 @@ struct SunburstView: View {
             .onKeyPress(.downArrow) {
                 moveKeyboardFocus(by: 1)
             }
-            .onKeyPress(.return) {
+            .onKeyPress(.return, phases: .down) { _ in
                 activateKeyboardFocusedSegment()
             }
-            .onKeyPress(.space) {
+            .onKeyPress(.space, phases: .down) { _ in
                 activateKeyboardFocusedSegment()
             }
             .animation(presentationAnimation, value: isTransitioningPresentation)
