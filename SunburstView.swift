@@ -1,6 +1,23 @@
 import SwiftUI
 import Combine
 
+nonisolated enum SunburstKeyboardNavigation {
+    static func movedID(
+        in segmentIDs: [String],
+        from currentID: String?,
+        by offset: Int
+    ) -> String? {
+        guard !segmentIDs.isEmpty else { return nil }
+
+        let currentIndex = currentID
+            .flatMap { segmentIDs.firstIndex(of: $0) }
+            ?? 0
+        let count = segmentIDs.count
+        let nextIndex = ((currentIndex + offset) % count + count) % count
+        return segmentIDs[nextIndex]
+    }
+}
+
 @MainActor
 final class SunburstPresentationState: ObservableObject {
     @Published private(set) var model = SunburstPresentation.empty
@@ -375,13 +392,16 @@ struct SunburstView: View {
         guard isSunburstFocused, !presentation.isPreparing else { return .ignored }
 
         let segments = keyboardSegments
-        guard !segments.isEmpty else { return .ignored }
+        let segmentIDs = segments.map(\.id)
+        guard let nextID = SunburstKeyboardNavigation.movedID(
+            in: segmentIDs,
+            from: effectiveKeyboardFocusedSegmentID,
+            by: offset
+        ) else {
+            return .ignored
+        }
 
-        let currentIndex = effectiveKeyboardFocusedSegmentID
-            .flatMap { focusedID in segments.firstIndex(where: { $0.id == focusedID }) }
-            ?? 0
-        let nextIndex = (currentIndex + offset + segments.count) % segments.count
-        keyboardFocusedSegmentID = segments[nextIndex].id
+        keyboardFocusedSegmentID = nextID
         return .handled
     }
 
