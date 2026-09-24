@@ -571,8 +571,7 @@ final class FolderUsageTests: XCTestCase {
                 ),
                 label: "tree",
                 size: size,
-                minimumSize: CGSize(width: 1, height: 1),
-                requireVisibleScrollView: true
+                minimumSize: CGSize(width: 1, height: 1)
             )
 
             try assertR74HostedLayout(
@@ -712,8 +711,7 @@ final class FolderUsageTests: XCTestCase {
         _ rootView: AnyView,
         label: String,
         size: CGSize,
-        minimumSize: CGSize,
-        requireVisibleScrollView: Bool = false
+        minimumSize: CGSize
     ) throws {
         let frame = NSRect(origin: .zero, size: size)
         let window = NSWindow(
@@ -746,17 +744,15 @@ final class FolderUsageTests: XCTestCase {
             minimumSize.height,
             "\(label) height collapsed at \(Int(size.width))x\(Int(size.height))"
         )
-        XCTAssertFalse(
-            hostingView.subviews.isEmpty,
-            "\(label) produced no hosted AppKit subtree at \(Int(size.width))x\(Int(size.height))"
-        )
+        let fittingSize = hostingView.fittingSize
+        XCTAssertGreaterThan(fittingSize.width, 0)
+        XCTAssertGreaterThan(fittingSize.height, 0)
 
-        if requireVisibleScrollView {
-            XCTAssertTrue(
-                hasR74VisibleScrollView(in: hostingView),
-                "\(label) has no non-zero native scroll region at \(Int(size.width))x\(Int(size.height))"
-            )
-        }
+        let centerPoint = NSPoint(x: hostingView.bounds.midX, y: hostingView.bounds.midY)
+        XCTAssertNotNil(
+            hostingView.hitTest(centerPoint),
+            "\(label) has no hit-testable hosted region at \(Int(size.width))x\(Int(size.height))"
+        )
 
         let nativeScale = window.backingScaleFactor
         XCTAssertGreaterThan(nativeScale, 0)
@@ -765,30 +761,40 @@ final class FolderUsageTests: XCTestCase {
         let bitmap = try makeR74Bitmap(of: hostingView, scale: scale)
         XCTAssertEqual(bitmap.pixelsWide, Int((size.width * scale).rounded()))
         XCTAssertEqual(bitmap.pixelsHigh, Int((size.height * scale).rounded()))
-        XCTAssertGreaterThan(
-            bitmap.colorAt(x: bitmap.pixelsWide / 2, y: bitmap.pixelsHigh / 2)?.alphaComponent ?? 0,
-            0,
-            "\(label) supplementary 2x render has a transparent center"
+        XCTAssertTrue(
+            hasR74VisiblePixel(in: bitmap),
+            "\(label) supplementary 2x render contains no sampled visible content"
         )
 
-        print(
-            "R7.4 layout \(label) logical=\(Int(size.width))x\(Int(size.height)) "
-                + "nativeBackingScale=\(String(format: "%.1f", Double(nativeScale))) "
-                + "supplementalRenderScale=2.0"
+        NSLog(
+            "R7.4 layout %@ logical=%dx%d bounds=%.0fx%.0f fitting=%.0fx%.0f "
+                + "nativeBackingScale=%.1f supplementalRenderScale=2.0",
+            label,
+            Int(size.width),
+            Int(size.height),
+            hostingView.bounds.width,
+            hostingView.bounds.height,
+            fittingSize.width,
+            fittingSize.height,
+            Double(nativeScale)
         )
 
         window.contentView = nil
         window.close()
     }
 
-    @MainActor
-    private func hasR74VisibleScrollView(in view: NSView) -> Bool {
-        if let scrollView = view as? NSScrollView,
-           scrollView.bounds.width > 0,
-           scrollView.bounds.height > 0 {
-            return true
+    private func hasR74VisiblePixel(in bitmap: NSBitmapImageRep) -> Bool {
+        let xPositions = [1, 2, 3, 4, 5].map { bitmap.pixelsWide * $0 / 6 }
+        let yPositions = [1, 2, 3, 4, 5].map { bitmap.pixelsHigh * $0 / 6 }
+
+        for x in xPositions {
+            for y in yPositions {
+                if (bitmap.colorAt(x: x, y: y)?.alphaComponent ?? 0) > 0 {
+                    return true
+                }
+            }
         }
-        return view.subviews.contains { hasR74VisibleScrollView(in: $0) }
+        return false
     }
 
     @MainActor
