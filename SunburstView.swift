@@ -188,6 +188,7 @@ struct SunburstView: View {
             }
             .opacity(presentationOpacity)
             .allowsHitTesting(!presentation.isPreparing)
+            .accessibilityHidden(presentation.isPreparing)
             .animation(presentationAnimation, value: isTransitioningPresentation)
         }
         .frame(minWidth: 400, minHeight: 400)
