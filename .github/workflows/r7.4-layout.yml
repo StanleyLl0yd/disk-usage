@@ -1,0 +1,50 @@
+name: R7.4 Layout Evidence
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'DiskUsageTests/FolderUsageTests.swift'
+      - '.github/workflows/r7.4-layout.yml'
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  layout-evidence:
+    runs-on: macos-26
+    timeout-minutes: 15
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Select Xcode 26.6
+        run: sudo xcode-select -s /Applications/Xcode_26.6.app/Contents/Developer
+
+      - name: Run focused layout evidence
+        shell: bash
+        run: |
+          set +e
+          RESULT="$RUNNER_TEMP/r74-layout.xcresult"
+          xcodebuild \
+            -project DiskUsage.xcodeproj \
+            -scheme DiskUsage \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            -only-testing:DiskUsageTests/FolderUsageTests/testR74ProductionViewsLayoutAcrossSupportedWindowSizes \
+            -resultBundlePath "$RESULT" \
+            CODE_SIGNING_ALLOWED=NO \
+            test
+          status=$?
+
+          echo "=== R7.4 test summary ==="
+          xcrun xcresulttool get test-results summary --path "$RESULT" || true
+          echo "=== R7.4 test details ==="
+          xcrun xcresulttool get test-results tests --path "$RESULT" || true
+
+          exit "$status"
