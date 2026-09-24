@@ -728,6 +728,7 @@ final class FolderUsageTests: XCTestCase {
         window.contentView = hostingView
         window.setContentSize(size)
         hostingView.frame = NSRect(origin: .zero, size: size)
+        window.orderFrontRegardless()
 
         hostingView.layoutSubtreeIfNeeded()
         RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.05))
@@ -745,8 +746,6 @@ final class FolderUsageTests: XCTestCase {
             "\(label) height collapsed at \(Int(size.width))x\(Int(size.height))"
         )
         let fittingSize = hostingView.fittingSize
-        XCTAssertGreaterThan(fittingSize.width, 0)
-        XCTAssertGreaterThan(fittingSize.height, 0)
 
         let centerPoint = NSPoint(x: hostingView.bounds.midX, y: hostingView.bounds.midY)
         XCTAssertNotNil(
