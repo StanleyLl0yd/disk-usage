@@ -332,7 +332,6 @@ final class DiskScannerTests: XCTestCase {
     @MainActor
     func testSelectionReconcilePreservesPathAcrossSnapshotReplacement() {
         let oldChild = FolderUsage(path: "/scope/child", size: 100, isFile: true)
-        let oldParent = FolderUsage(path: "/scope", size: 100, children: [oldChild])
         let replacementChild = FolderUsage(path: "/scope/child", size: 80, isFile: true)
         let replacementParent = FolderUsage(path: "/scope", size: 80, children: [replacementChild])
         let selection = ItemSelectionState()
