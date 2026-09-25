@@ -27,6 +27,24 @@ func formatNumber(_ number: Int64) -> String {
     numberFormatter.string(from: NSNumber(value: number)) ?? "\(number)"
 }
 
+nonisolated func formatScannedFileCount(_ count: Int64, locale: Locale = .current) -> String {
+    let resource = LocalizedStringResource(
+        "progress.files",
+        defaultValue: "\(count) files",
+        locale: locale
+    )
+    return String(localized: resource)
+}
+
+nonisolated func formatRestrictedFolderCount(_ count: Int, locale: Locale = .current) -> String {
+    let resource = LocalizedStringResource(
+        "restricted.count",
+        defaultValue: "\(count) folders without access",
+        locale: locale
+    )
+    return String(localized: resource)
+}
+
 nonisolated struct ScanProgress: Equatable, Sendable {
     var filesScanned: Int64 = 0
     var bytesFound: Int64 = 0
