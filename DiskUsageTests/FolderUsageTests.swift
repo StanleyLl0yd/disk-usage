@@ -566,6 +566,7 @@ final class FolderUsageTests: XCTestCase {
         }
     }
 
+    @MainActor
     func testR75PluralCountsPreserveExistingNumberGrouping() {
         let count: Int64 = 1_234
         let grouped = formatNumber(count)
