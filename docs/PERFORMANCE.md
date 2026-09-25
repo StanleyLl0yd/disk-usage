@@ -469,6 +469,25 @@ The paired expansion result was candidate faster 3/6, median -0.38%, mean -2.65%
 
 Decision: reject both candidates and retain the unchanged production Tree. The remaining measured stall is dominated by SwiftUI/AppKit outline diff/update/layout machinery at the extreme synthetic scale, while app row/projection/formatting work remains small. R6 explicitly accepts this cost instead of introducing a custom Tree, speculative virtualization, cache/index, scanner change, or broader UI architecture. Revisit larger Tree architecture only if new product-level evidence justifies its interaction/accessibility/selection and maintenance trade-offs.
 
+### R7.4 window resize and high-DPI runtime evidence
+
+R7.4 verified the unchanged production layout against exact verified production base `1e08788262959bab460c201c742d4a5bd8cf3a53`. Research PR #137 is measurement-only and remains unmerged.
+
+At exact research head `3b7ea526e6f907a08e2230d8fcb22a4f0b7eea09`, focused workflow `36120392705`, job `108024249964`, hosted the current production `ContentView`, `TreeView`, and `SunburstView` through AppKit `NSHostingView` / `NSWindow` using only small in-memory synthetic `FolderUsage` data. The single focused test exercised every production surface at 800×600, 1000×720, and 1440×900 logical points.
+
+The runtime assertions required:
+
+- hosted bounds that respect the declared shell/Sunburst minimum geometry rather than collapsing;
+- a non-empty hit-testable hosted region;
+- a positive native AppKit window backing scale;
+- supplementary 2× bitmap output with the expected pixel dimensions;
+- visible sampled rendered content for Tree and Sunburst at 2×;
+- no crash, invalid geometry, stale presentation failure, or zero-sized primary analysis region across the tested sizes.
+
+`testR74ProductionViewsLayoutAcrossSupportedWindowSizes()` passed with 0 failures. A separate AppKit probe on the same GitHub macOS runner printed `nativeBackingScale=1.0`, so this CI environment does **not** provide physical Retina backing. The successful 2× bitmap path is therefore supplementary high-DPI rendering evidence only; it must not be described as native Retina-hardware coverage.
+
+Decision: **accept the current responsive layout unchanged**. The tested minimum and representative larger logical sizes showed no concrete clipping/collapse defect, so R7.4 retains no production layout change, framework, instrumentation, or permanent test/workflow harness. Research-only tests/workflows stay outside production.
+
 ### Allocations
 
 Use Allocations with disposable data to inspect peak/retained memory across:
