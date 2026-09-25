@@ -792,15 +792,7 @@ struct ContentView: View {
                 Image(systemName: "lock.fill")
                     .foregroundStyle(ZenDesign.Colors.mutedText)
                     .accessibilityHidden(true)
-                Text(
-                    String(
-                        format: String(
-                            localized: "restricted.count",
-                            defaultValue: "%d folders without access"
-                        ),
-                        viewModel.restricted.count
-                    )
-                )
+                Text(formatRestrictedFolderCount(viewModel.restricted.count))
                 .font(ZenDesign.Typography.detail)
                 .foregroundStyle(ZenDesign.Colors.secondaryText)
                 Spacer()
@@ -943,10 +935,7 @@ struct ProgressPanel: View {
 
             HStack(spacing: ZenDesign.Spacing.large) {
                 Label(
-                    String(
-                        format: String(localized: "progress.files", defaultValue: "%@ files"),
-                        formatNumber(progress.filesScanned)
-                    ),
+                    formatScannedFileCount(progress.filesScanned),
                     systemImage: "doc"
                 )
                 Label(formatBytes(progress.bytesFound), systemImage: "internaldrive")
