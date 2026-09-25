@@ -769,8 +769,8 @@ final class FolderUsageTests: XCTestCase {
             )
         }
 
-        NSLog(
-            "R7.4 layout %@ logical=%dx%d bounds=%.0fx%.0f fitting=%.0fx%.0f "
+        let evidence = String(
+            format: "R7.4 layout %@ logical=%dx%d bounds=%.0fx%.0f fitting=%.0fx%.0f "
                 + "nativeBackingScale=%.1f supplementalRenderScale=2.0",
             label,
             Int(size.width),
@@ -781,6 +781,8 @@ final class FolderUsageTests: XCTestCase {
             fittingSize.height,
             Double(nativeScale)
         )
+        FileHandle.standardError.write(Data((evidence + "\n").utf8))
+        NSLog("%@", evidence)
 
         window.contentView = nil
         window.close()
