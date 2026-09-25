@@ -571,14 +571,27 @@ final class FolderUsageTests: XCTestCase {
         let count: Int64 = 1_234
         let grouped = formatNumber(count)
 
+        let englishActual = formatScannedFileCount(count, locale: Locale(identifier: "en"))
+        let russianActual = formatScannedFileCount(count, locale: Locale(identifier: "ru"))
+        let englishExpected = "\(grouped) files"
+        let russianExpected = "\(grouped) файла"
+
+        NSLog(
+            "R7.5 grouping probe en actual='%@' expected='%@' ru actual='%@' expected='%@'",
+            englishActual,
+            englishExpected,
+            russianActual,
+            russianExpected
+        )
+
         XCTAssertEqual(
-            formatScannedFileCount(count, locale: Locale(identifier: "en")),
-            "\(grouped) files",
+            englishActual,
+            englishExpected,
             "Plural-aware English file count must preserve the existing grouped number presentation"
         )
         XCTAssertEqual(
-            formatScannedFileCount(count, locale: Locale(identifier: "ru")),
-            "\(grouped) файла",
+            russianActual,
+            russianExpected,
             "Plural-aware Russian file count must preserve the existing grouped number presentation"
         )
     }
