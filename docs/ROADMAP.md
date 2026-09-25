@@ -569,7 +569,7 @@ R6 is complete when the largest practical tested workloads have documented behav
 
 **Status: ACTIVE / UNSIGNED ALPHA EXCEPTION APPROVED**
 
-R7 is active. R7.1 accessibility/Reduce Motion and R7.2 Sunburst keyboard focus/activation are complete and exact-main verified. R7.3–R7.5 plus the separate full repository-wide R7 exit review remain. A narrow owner-approved unsigned alpha distribution exception is active after R5.3; it does not waive R7 polish, signing/notarization decisions, or R7 exit criteria.
+R7 is active. R7.1–R7.3 are complete and exact-main verified. R7.4 runtime resize/high-DPI verification found no layout defect and retains the current responsive layout unchanged. R7.5 plus the separate full repository-wide R7 exit review remain. A narrow owner-approved unsigned alpha distribution exception is active after R5.3; it does not waive R7 polish, signing/notarization decisions, or R7 exit criteria.
 
 ## Scope before binary release
 
@@ -621,4 +621,4 @@ These are not assumed future stages.
 
 **R6 — Large-scale resilience and measured optimization is complete.** R6.1–R6.11 are implemented/measured and verified, the separate full repository-wide exit review passed, the two retained scanner optimizations remain narrow and evidence-backed, rejected Search/Tree candidates remain out of production, and the remaining framework-heavy native Tree cost is explicitly accepted at the tested 128,700-node synthetic scale.
 
-**R7 — Release-quality product polish is active.** R7.1 accessibility/Reduce Motion and R7.2 Sunburst keyboard focus/activation are complete and exact-main verified. R7.3 status/build hygiene is the current slice; R7.4 resize/high-DPI verification and R7.5 final regression/visual-consistency work follow before the separate R7 exit review.
+**R7 — Release-quality product polish is active.** R7.1–R7.3 are complete and exact-main verified. R7.4 runtime resize/high-DPI evidence passed on the unchanged production views at 800×600, 1000×720, and 1440×900; the GitHub runner was native 1× and supplementary 2× rendering passed, so no production layout change is retained. R7.5 final regression/visual-consistency is the next product slice before the separate R7 exit review.
