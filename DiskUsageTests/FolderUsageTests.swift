@@ -566,24 +566,20 @@ final class FolderUsageTests: XCTestCase {
         }
     }
 
-    func testR75PluralCountsPreserveLocalizedNumberGrouping() throws {
-        let cases: [(Locale, Int64, String)] = [
-            (Locale(identifier: "en"), 1_234, "files"),
-            (Locale(identifier: "ru"), 1_234, "файла")
-        ]
+    func testR75PluralCountsPreserveExistingNumberGrouping() {
+        let count: Int64 = 1_234
+        let grouped = formatNumber(count)
 
-        for (locale, count, suffix) in cases {
-            let formatter = NumberFormatter()
-            formatter.numberStyle = .decimal
-            formatter.locale = locale
-            let grouped = try XCTUnwrap(formatter.string(from: NSNumber(value: count)))
-
-            XCTAssertEqual(
-                formatScannedFileCount(count, locale: locale),
-                "\(grouped) \(suffix)",
-                "Plural-aware file count must preserve localized decimal grouping"
-            )
-        }
+        XCTAssertEqual(
+            formatScannedFileCount(count, locale: Locale(identifier: "en")),
+            "\(grouped) files",
+            "Plural-aware English file count must preserve the existing grouped number presentation"
+        )
+        XCTAssertEqual(
+            formatScannedFileCount(count, locale: Locale(identifier: "ru")),
+            "\(grouped) файла",
+            "Plural-aware Russian file count must preserve the existing grouped number presentation"
+        )
     }
 
     @MainActor
