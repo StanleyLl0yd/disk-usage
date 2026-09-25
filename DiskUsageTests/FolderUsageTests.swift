@@ -512,6 +512,60 @@ final class FolderUsageTests: XCTestCase {
         XCTAssertEqual(formatBytes(1024), "1.0 KB")
     }
 
+    func testScannedFileCountUsesEnglishAndRussianPluralRules() {
+        let english = Locale(identifier: "en")
+        let russian = Locale(identifier: "ru")
+        let cases: [(Int64, String, String)] = [
+            (0, "0 files", "0 файлов"),
+            (1, "1 file", "1 файл"),
+            (2, "2 files", "2 файла"),
+            (5, "5 files", "5 файлов"),
+            (21, "21 files", "21 файл"),
+            (22, "22 files", "22 файла"),
+            (25, "25 files", "25 файлов")
+        ]
+
+        for (count, expectedEnglish, expectedRussian) in cases {
+            XCTAssertEqual(
+                formatScannedFileCount(count, locale: english),
+                expectedEnglish,
+                "Unexpected English file-count form for \(count)"
+            )
+            XCTAssertEqual(
+                formatScannedFileCount(count, locale: russian),
+                expectedRussian,
+                "Unexpected Russian file-count form for \(count)"
+            )
+        }
+    }
+
+    func testRestrictedFolderCountUsesEnglishAndRussianPluralRules() {
+        let english = Locale(identifier: "en")
+        let russian = Locale(identifier: "ru")
+        let cases: [(Int, String, String)] = [
+            (0, "0 folders without access", "0 папок без доступа"),
+            (1, "1 folder without access", "1 папка без доступа"),
+            (2, "2 folders without access", "2 папки без доступа"),
+            (5, "5 folders without access", "5 папок без доступа"),
+            (21, "21 folders without access", "21 папка без доступа"),
+            (22, "22 folders without access", "22 папки без доступа"),
+            (25, "25 folders without access", "25 папок без доступа")
+        ]
+
+        for (count, expectedEnglish, expectedRussian) in cases {
+            XCTAssertEqual(
+                formatRestrictedFolderCount(count, locale: english),
+                expectedEnglish,
+                "Unexpected English restricted-folder form for \(count)"
+            )
+            XCTAssertEqual(
+                formatRestrictedFolderCount(count, locale: russian),
+                expectedRussian,
+                "Unexpected Russian restricted-folder form for \(count)"
+            )
+        }
+    }
+
     @MainActor
     func testFullDiskAccessSettingsUsesExpectedRouteAndInjectedOpener() throws {
         let url = try XCTUnwrap(FullDiskAccessSettings.url)

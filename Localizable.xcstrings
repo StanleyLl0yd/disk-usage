@@ -168,14 +168,46 @@
     },
     "progress.files" : {
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "%@ files" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "%@ файлов" } }
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : { "stringUnit" : { "state" : "translated", "value" : "%lld file" } },
+              "other" : { "stringUnit" : { "state" : "translated", "value" : "%lld files" } }
+            }
+          }
+        },
+        "ru" : {
+          "variations" : {
+            "plural" : {
+              "one" : { "stringUnit" : { "state" : "translated", "value" : "%lld файл" } },
+              "few" : { "stringUnit" : { "state" : "translated", "value" : "%lld файла" } },
+              "many" : { "stringUnit" : { "state" : "translated", "value" : "%lld файлов" } },
+              "other" : { "stringUnit" : { "state" : "translated", "value" : "%lld файла" } }
+            }
+          }
+        }
       }
     },
     "restricted.count" : {
       "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "%d folders without access" } },
-        "ru" : { "stringUnit" : { "state" : "translated", "value" : "%d папок без доступа" } }
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : { "stringUnit" : { "state" : "translated", "value" : "%lld folder without access" } },
+              "other" : { "stringUnit" : { "state" : "translated", "value" : "%lld folders without access" } }
+            }
+          }
+        },
+        "ru" : {
+          "variations" : {
+            "plural" : {
+              "one" : { "stringUnit" : { "state" : "translated", "value" : "%lld папка без доступа" } },
+              "few" : { "stringUnit" : { "state" : "translated", "value" : "%lld папки без доступа" } },
+              "many" : { "stringUnit" : { "state" : "translated", "value" : "%lld папок без доступа" } },
+              "other" : { "stringUnit" : { "state" : "translated", "value" : "%lld папки без доступа" } }
+            }
+          }
+        }
       }
     },
     "restricted.hint" : {
