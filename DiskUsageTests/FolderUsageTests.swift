@@ -566,6 +566,26 @@ final class FolderUsageTests: XCTestCase {
         }
     }
 
+    func testR75PluralCountsPreserveLocalizedNumberGrouping() throws {
+        let cases: [(Locale, Int64, String)] = [
+            (Locale(identifier: "en"), 1_234, "files"),
+            (Locale(identifier: "ru"), 1_234, "файла")
+        ]
+
+        for (locale, count, suffix) in cases {
+            let formatter = NumberFormatter()
+            formatter.numberStyle = .decimal
+            formatter.locale = locale
+            let grouped = try XCTUnwrap(formatter.string(from: NSNumber(value: count)))
+
+            XCTAssertEqual(
+                formatScannedFileCount(count, locale: locale),
+                "\(grouped) \(suffix)",
+                "Plural-aware file count must preserve localized decimal grouping"
+            )
+        }
+    }
+
     @MainActor
     func testFullDiskAccessSettingsUsesExpectedRouteAndInjectedOpener() throws {
         let url = try XCTUnwrap(FullDiskAccessSettings.url)
