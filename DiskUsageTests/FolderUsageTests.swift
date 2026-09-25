@@ -522,7 +522,8 @@ final class FolderUsageTests: XCTestCase {
             (5, "5 files", "5 файлов"),
             (21, "21 files", "21 файл"),
             (22, "22 files", "22 файла"),
-            (25, "25 files", "25 файлов")
+            (25, "25 files", "25 файлов"),
+            (1_234, "1,234 files", "1\u{00A0}234 файла")
         ]
 
         for (count, expectedEnglish, expectedRussian) in cases {
@@ -549,7 +550,8 @@ final class FolderUsageTests: XCTestCase {
             (5, "5 folders without access", "5 папок без доступа"),
             (21, "21 folders without access", "21 папка без доступа"),
             (22, "22 folders without access", "22 папки без доступа"),
-            (25, "25 folders without access", "25 папок без доступа")
+            (25, "25 folders without access", "25 папок без доступа"),
+            (1_234, "1,234 folders without access", "1\u{00A0}234 папки без доступа")
         ]
 
         for (count, expectedEnglish, expectedRussian) in cases {
