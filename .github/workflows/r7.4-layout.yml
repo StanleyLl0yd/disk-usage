@@ -48,3 +48,8 @@ jobs:
           xcrun xcresulttool get test-results tests --path "$RESULT" || true
 
           exit "$status"
+
+      - name: Record runner backing scale
+        shell: bash
+        run: |
+          xcrun swift -e 'import AppKit; let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 800, height: 600), styleMask: [.borderless], backing: .buffered, defer: false); window.orderFrontRegardless(); print("R7.4 runner nativeBackingScale=\(window.backingScaleFactor)")'
