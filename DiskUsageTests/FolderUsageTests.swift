@@ -483,8 +483,7 @@ final class FolderUsageTests: XCTestCase {
 
         XCTAssertLessThanOrEqual(
             geometry.visibleOuterRadius(levels: 4),
-            min(size.width, size.height) / 2,
-            accuracy: 0.0001
+            min(size.width, size.height) / 2 + 0.0001
         )
         XCTAssertLessThan(geometry.centerRadius, SunburstGeometry.preferredCenterRadius)
         XCTAssertLessThan(geometry.ringWidth, SunburstGeometry.preferredRingWidth)
@@ -496,8 +495,7 @@ final class FolderUsageTests: XCTestCase {
 
         XCTAssertLessThanOrEqual(
             geometry.visibleOuterRadius(levels: 4),
-            min(size.width, size.height) / 2,
-            accuracy: 0.0001
+            min(size.width, size.height) / 2 + 0.0001
         )
     }
 
