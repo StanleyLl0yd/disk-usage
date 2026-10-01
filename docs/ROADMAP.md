@@ -567,9 +567,11 @@ R6 is complete when the largest practical tested workloads have documented behav
 
 # R7 — Release-quality product polish
 
-**Status: ACTIVE / UNSIGNED ALPHA EXCEPTION APPROVED**
+**Status: COMPLETE / UNSIGNED ALPHA EXCEPTION APPROVED**
 
-R7 is active. R7.1–R7.3 are complete and exact-main verified. R7.4 runtime resize/high-DPI verification found no layout defect and retains the current responsive layout unchanged. R7.5 plus the separate full repository-wide R7 exit review remain. A narrow owner-approved unsigned alpha distribution exception is active after R5.3; it does not waive R7 polish, signing/notarization decisions, or R7 exit criteria.
+R7.1–R7.5 are complete and verified. R7.1 established the accessibility/Reduce Motion baseline; R7.2 added Sunburst hardware-keyboard focus and activation; R7.3 synchronized product status and build hygiene; R7.4 verified resize/high-DPI behavior without finding a production layout defect; and R7.5 completed the final regression/visual-consistency pass while fixing plural-aware EN/RU count copy and covering locale-native grouping. The separate repository-wide R7 exit review (#142) found no remaining R7 runtime, correctness, safety, privacy, accessibility, localization, layout, release-integrity, or architecture blocker.
+
+The owner-approved unsigned alpha distribution exception remains unchanged. R7 completion does not introduce Developer ID signing/notarization and does not itself publish or authorize version 1.0.0; any binary/version release is a separate explicit product/release decision.
 
 ## Scope before binary release
 
@@ -621,4 +623,4 @@ These are not assumed future stages.
 
 **R6 — Large-scale resilience and measured optimization is complete.** R6.1–R6.11 are implemented/measured and verified, the separate full repository-wide exit review passed, the two retained scanner optimizations remain narrow and evidence-backed, rejected Search/Tree candidates remain out of production, and the remaining framework-heavy native Tree cost is explicitly accepted at the tested 128,700-node synthetic scale.
 
-**R7 — Release-quality product polish is active.** R7.1–R7.3 are complete and exact-main verified. R7.4 runtime resize/high-DPI evidence passed on the unchanged production views at 800×600, 1000×720, and 1440×900; the GitHub runner was native 1× and supplementary 2× rendering passed, so no production layout change is retained. R7.5 final regression/visual-consistency is the next product slice before the separate R7 exit review.
+**R7 — Release-quality product polish is complete.** R7.1–R7.5 are implemented and verified, the separate repository-wide exit review (#142) found no remaining R7 blocker, and all product-stage scope through R7 is complete under the current unsigned-alpha distribution policy. No later roadmap stage is started automatically. Version 1.0.0, signing/notarization, and any new binary-release action require a separate explicit owner decision.
