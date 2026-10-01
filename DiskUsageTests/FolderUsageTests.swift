@@ -569,6 +569,11 @@ final class FolderUsageTests: XCTestCase {
     }
 
     @MainActor
+    func testAppRestartConfigurationCreatesNewApplicationInstance() {
+        XCTAssertTrue(appRestartConfiguration().createsNewApplicationInstance)
+    }
+
+    @MainActor
     func testFullDiskAccessSettingsUsesExpectedRouteAndInjectedOpener() throws {
         let url = try XCTUnwrap(FullDiskAccessSettings.url)
         XCTAssertEqual(url.absoluteString, FullDiskAccessSettings.urlString)
