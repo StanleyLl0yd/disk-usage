@@ -164,12 +164,23 @@ struct SettingsView: View {
     }
 
     private func restartApp() {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/open")
-        process.arguments = [Bundle.main.bundleURL.path]
-        guard (try? process.run()) != nil else { return }
-        NSApplication.shared.terminate(nil)
+        NSWorkspace.shared.openApplication(
+            at: Bundle.main.bundleURL,
+            configuration: appRestartConfiguration()
+        ) { app, error in
+            guard app != nil, error == nil else { return }
+            Task { @MainActor in
+                NSApplication.shared.terminate(nil)
+            }
+        }
     }
+}
+
+@MainActor
+func appRestartConfiguration() -> NSWorkspace.OpenConfiguration {
+    let configuration = NSWorkspace.OpenConfiguration()
+    configuration.createsNewApplicationInstance = true
+    return configuration
 }
 
 #Preview {
