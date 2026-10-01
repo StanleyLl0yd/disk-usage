@@ -1,6 +1,40 @@
 import SwiftUI
 import Combine
 
+nonisolated struct SunburstGeometry: Equatable {
+    static let preferredCenterRadius: CGFloat = 70
+    static let preferredRingWidth: CGFloat = 45
+    static let maximumStrokeWidth: CGFloat = 2.6
+
+    let centerRadius: CGFloat
+    let ringWidth: CGFloat
+
+    static func fitted(to size: CGSize, levels: Int) -> SunburstGeometry {
+        let preferred = SunburstGeometry(
+            centerRadius: preferredCenterRadius,
+            ringWidth: preferredRingWidth
+        )
+        guard levels > 0 else { return preferred }
+
+        let availableRadius = max(0, min(size.width, size.height) / 2)
+        let preferredRawOuterRadius =
+            preferredCenterRadius + CGFloat(levels) * preferredRingWidth
+        let maximumRawOuterRadius =
+            max(0, availableRadius - maximumStrokeWidth / 2 + 1)
+        let scale = min(1, maximumRawOuterRadius / preferredRawOuterRadius)
+
+        return SunburstGeometry(
+            centerRadius: preferredCenterRadius * scale,
+            ringWidth: preferredRingWidth * scale
+        )
+    }
+
+    func visibleOuterRadius(levels: Int) -> CGFloat {
+        centerRadius + CGFloat(levels) * ringWidth - 1
+            + Self.maximumStrokeWidth / 2
+    }
+}
+
 nonisolated enum SunburstKeyboardNavigation {
     static func movedID(
         in segmentIDs: [String],
@@ -120,7 +154,7 @@ struct SunburstView: View {
     @State private var keyboardFocusedSegmentID: String?
     @FocusState private var isSunburstFocused: Bool
 
-    private let levels = 4, center: CGFloat = 70, ring: CGFloat = 45
+    private let levels = 4
 
     private var resolvedPath: [FolderUsage] {
         var candidates = items
@@ -208,12 +242,13 @@ struct SunburstView: View {
             breadcrumb
             GeometryReader { geo in
                 let c = CGPoint(x: geo.size.width / 2, y: geo.size.height / 2)
+                let geometry = SunburstGeometry.fitted(to: geo.size, levels: levels)
                 ZStack {
                     RoundedRectangle(cornerRadius: ZenDesign.Radius.medium, style: .continuous)
                         .fill(ZenDesign.Colors.surface.opacity(colorScheme == .dark ? 0.28 : 0.52))
 
                     ForEach(renderableSegments) { segment in
-                        renderedSegment(segment, centerPoint: c)
+                        renderedSegment(segment, centerPoint: c, geometry: geometry)
                     }
 
                     Circle()
@@ -222,11 +257,11 @@ struct SunburstView: View {
                             Circle()
                                 .strokeBorder(ZenDesign.Colors.separator.opacity(0.45), lineWidth: 1)
                         }
-                        .frame(width: center * 2, height: center * 2)
+                        .frame(width: geometry.centerRadius * 2, height: geometry.centerRadius * 2)
                         .position(c)
 
                     centerContent
-                        .frame(width: center * 1.8)
+                        .frame(width: geometry.centerRadius * 1.8)
                         .position(c)
                 }
             }
@@ -294,10 +329,11 @@ struct SunburstView: View {
     @ViewBuilder
     private func renderedSegment(
         _ segment: RenderableSegment,
-        centerPoint: CGPoint
+        centerPoint: CGPoint,
+        geometry: SunburstGeometry
     ) -> some View {
         if let item = segment.item {
-            segmentVisual(segment, centerPoint: centerPoint)
+            segmentVisual(segment, centerPoint: centerPoint, geometry: geometry)
                 .onTapGesture {
                     activate(segment, item: item)
                 }
@@ -316,7 +352,7 @@ struct SunburstView: View {
                     activate(segment, item: item)
                 }
         } else {
-            segmentVisual(segment, centerPoint: centerPoint)
+            segmentVisual(segment, centerPoint: centerPoint, geometry: geometry)
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(Text(displayName(for: segment)))
                 .accessibilityValue(Text(segmentAccessibilityValue(for: segment)))
@@ -325,12 +361,13 @@ struct SunburstView: View {
 
     private func segmentVisual(
         _ segment: RenderableSegment,
-        centerPoint: CGPoint
+        centerPoint: CGPoint,
+        geometry: SunburstGeometry
     ) -> some View {
         let arc = Arc(
             c: centerPoint,
-            r1: center + CGFloat(segment.level) * ring,
-            r2: center + CGFloat(segment.level + 1) * ring - 1,
+            r1: geometry.centerRadius + CGFloat(segment.level) * geometry.ringWidth,
+            r2: geometry.centerRadius + CGFloat(segment.level + 1) * geometry.ringWidth - 1,
             a1: segment.startAngle,
             a2: segment.endAngle
         )
