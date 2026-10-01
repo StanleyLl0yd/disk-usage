@@ -46,8 +46,8 @@ Run the `DiskUsage` shared scheme to build the app and execute the regression te
 - **R4 — Sunburst 2.0: DiskUsage visual identity is complete.** All five R4 slices are implemented and verified, and the separate master exit review found no remaining R4 gap.
 - **R5 — Core productivity workflow is complete.** R5.1–R5.5 are implemented and verified, the repository-wide exit review passed, and release tags `v*` are protected against update/deletion with the published `v0.1.0-alpha.1` still bound to its verified source commit.
 - **R6 — Large-scale resilience and measured optimization is complete.** R6.1–R6.11 measured scanner, memory, derived presentation, publication, and real SwiftUI interaction at representative large synthetic/disposable scales; the evidence-driven runtime changes were kept narrow, rejected candidates stayed out of production, and the separate repository-wide exit review found no remaining R6 blocker.
-- **R7 — Release-quality product polish is active.** R7.1–R7.3 are complete and exact-main verified. R7.4 resize/high-DPI runtime verification found no layout defect and retains the current responsive layout unchanged; R7.5 and the separate R7 exit review remain. See [`docs/ROADMAP.md`](docs/ROADMAP.md).
-- Version `1.0.0` is reserved for release readiness after the planned product stages are complete and verified.
+- **R7 — Release-quality product polish is complete.** R7.1–R7.5 are implemented and verified, and the separate repository-wide exit review found no remaining R7 blocker across accessibility, keyboard interaction, localization and copy, state/action wiring, resize/high-DPI evidence, regression coverage, safety, privacy, or release integrity. See [`docs/ROADMAP.md`](docs/ROADMAP.md).
+- Version `1.0.0` remains reserved for a separate explicit binary-release decision; R7 completion does not introduce Developer ID signing/notarization or change the current unsigned-alpha distribution policy.
 
 ## Contributing
 Pull requests and issues are welcome. For UI changes, include a short note or screenshot.
