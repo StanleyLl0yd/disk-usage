@@ -477,6 +477,43 @@ final class FolderUsageTests: XCTestCase {
         XCTAssertEqual(presentation?.visualSegmentCount, 148)
     }
 
+    func testSunburstGeometryFitsConstrainedSquareWithoutClippingFocusedStroke() {
+        let size = CGSize(width: 400, height: 400)
+        let geometry = SunburstGeometry.fitted(to: size, levels: 4)
+
+        XCTAssertLessThanOrEqual(
+            geometry.visibleOuterRadius(levels: 4),
+            min(size.width, size.height) / 2 + 0.0001
+        )
+        XCTAssertLessThan(geometry.centerRadius, SunburstGeometry.preferredCenterRadius)
+        XCTAssertLessThan(geometry.ringWidth, SunburstGeometry.preferredRingWidth)
+    }
+
+    func testSunburstGeometryUsesShorterDimensionForNonSquareSurface() {
+        let size = CGSize(width: 600, height: 320)
+        let geometry = SunburstGeometry.fitted(to: size, levels: 4)
+
+        XCTAssertLessThanOrEqual(
+            geometry.visibleOuterRadius(levels: 4),
+            min(size.width, size.height) / 2 + 0.0001
+        )
+    }
+
+    func testSunburstGeometryPreservesPreferredDimensionsWhenTheyFit() {
+        let geometry = SunburstGeometry.fitted(to: CGSize(width: 600, height: 600), levels: 4)
+
+        XCTAssertEqual(
+            geometry.centerRadius,
+            SunburstGeometry.preferredCenterRadius,
+            accuracy: 0.0001
+        )
+        XCTAssertEqual(
+            geometry.ringWidth,
+            SunburstGeometry.preferredRingWidth,
+            accuracy: 0.0001
+        )
+    }
+
     func testSunburstKeyboardNavigationMovesAndWrapsVisibleSegments() {
         let ids = ["a", "b", "c"]
 
