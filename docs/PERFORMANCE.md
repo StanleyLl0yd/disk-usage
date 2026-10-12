@@ -486,7 +486,9 @@ The runtime assertions required:
 
 `testR74ProductionViewsLayoutAcrossSupportedWindowSizes()` passed with 0 failures. A separate AppKit probe on the same GitHub macOS runner printed `nativeBackingScale=1.0`, so this CI environment does **not** provide physical Retina backing. The successful 2× bitmap path is therefore supplementary high-DPI rendering evidence only; it must not be described as native Retina-hardware coverage.
 
-Decision: **accept the current responsive layout unchanged**. The tested minimum and representative larger logical sizes showed no concrete clipping/collapse defect, so R7.4 retains no production layout change, framework, instrumentation, or permanent test/workflow harness. Research-only tests/workflows stay outside production.
+Historical R7.4 decision: **accept the layout unchanged based on the non-collapse/hit-test smoke assertions then executed**. Those checks did not validate Sunburst outer-ring containment. The R7.4 research harness remained unmerged and no production layout change was retained at that stage.
+
+**Post-R7 audit correction (#145 / PR #147, October 2026):** the fixed Sunburst center radius of 70 pt plus four 45 pt rings could extend to about 250.3 pt including keyboard-focus stroke, exceeding a constrained 400×400 logical-point surface's 200 pt half-side. The original R7.4 no-clipping inference was too broad. PR #147 subsequently fixed this confirmed defect with proportional geometry when constrained, preserving preferred geometry at larger sizes, and added tests for 400×400, 600×320 and 600×600. This correction does not add physical Retina coverage: the original runner backing scale was 1.0.
 
 ### Allocations
 
