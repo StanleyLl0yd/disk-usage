@@ -83,7 +83,7 @@ nonisolated enum SortOption: String, CaseIterable, Identifiable, Sendable {
 
 nonisolated enum TreePresentationPreprocessor {
     static func sorted(_ items: [FolderUsage], by option: SortOption) -> [FolderUsage]? {
-        guard !isCancelled else { return nil }
+        guard !Task.isCancelled else { return nil }
 
         var prepared: [FolderUsage] = []
         prepared.reserveCapacity(items.count)
@@ -92,12 +92,12 @@ nonisolated enum TreePresentationPreprocessor {
             prepared.append(sortedItem)
         }
 
-        guard !isCancelled else { return nil }
+        guard !Task.isCancelled else { return nil }
         return option.sorted(prepared)
     }
 
     private static func sorted(_ item: FolderUsage, by option: SortOption) -> FolderUsage? {
-        guard !isCancelled else { return nil }
+        guard !Task.isCancelled else { return nil }
 
         var children: [FolderUsage] = []
         children.reserveCapacity(item.children.count)
@@ -106,7 +106,7 @@ nonisolated enum TreePresentationPreprocessor {
             children.append(sortedChild)
         }
 
-        guard !isCancelled else { return nil }
+        guard !Task.isCancelled else { return nil }
         return FolderUsage(
             path: item.path,
             size: item.size,
@@ -115,11 +115,6 @@ nonisolated enum TreePresentationPreprocessor {
         )
     }
 
-    private static var isCancelled: Bool {
-        withUnsafeCurrentTask { task in
-            task?.isCancelled ?? false
-        }
-    }
 }
 
 nonisolated struct SunburstPresentation: Equatable, Sendable {
@@ -258,7 +253,7 @@ nonisolated enum SunburstPresentationPreprocessor {
         totalSize: Int64,
         levels: Int = 4
     ) -> SunburstPresentation? {
-        guard !isCancelled else { return nil }
+        guard !Task.isCancelled else { return nil }
         guard totalSize > 0, levels > 0 else {
             return SunburstPresentation(totalSize: totalSize, segments: [])
         }
@@ -310,7 +305,7 @@ nonisolated enum SunburstPresentationPreprocessor {
         context: BuildContext,
         output: inout BuildOutput
     ) -> Bool {
-        guard !isCancelled else { return false }
+        guard !Task.isCancelled else { return false }
         guard context.level < context.levels,
               context.parentTotalSize > 0,
               !items.isEmpty else { return true }
@@ -373,7 +368,7 @@ nonisolated enum SunburstPresentationPreprocessor {
         var aggregatePaletteIndex: Int?
 
         for (position, item) in sortedBySize(items).enumerated() {
-            guard !isCancelled else { return nil }
+            guard !Task.isCancelled else { return nil }
 
             let span = (endAngle - startAngle) * Double(item.size) / Double(parentTotalSize)
             let itemEndAngle = angle + span
@@ -469,9 +464,4 @@ nonisolated enum SunburstPresentationPreprocessor {
         }
     }
 
-    private static var isCancelled: Bool {
-        withUnsafeCurrentTask { task in
-            task?.isCancelled ?? false
-        }
-    }
 }
