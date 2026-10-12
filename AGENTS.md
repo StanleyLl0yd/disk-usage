@@ -340,7 +340,7 @@ The canonical platform baseline is:
 - minimum supported macOS 14.0;
 - pre-release marketing versions remain in the `0.x.y` range until R7 release readiness and an explicit production-release decision.
 
-The current project version is `0.1.0` with build number `1`. The owner-approved unsigned alpha exception does not mark R7 release readiness complete. Any platform-baseline or versioning change requires explicit project-owner review and synchronized updates to the Xcode project, CI, and both READMEs.
+The current project version is `0.1.0` with build number `1`. R7 release-quality product polish is complete, but that completion does not authorize version `1.0.0`, signed/notarized distribution, or a new release channel. Any platform-baseline or versioning change requires explicit project-owner review and synchronized updates to the Xcode project, CI, and both READMEs.
 
 Do not silently raise the deployment target.
 
