@@ -8,7 +8,10 @@ nonisolated struct FolderUsage: Identifiable, Hashable, Sendable {
 
     var id: String { path }
     var url: URL { URL(fileURLWithPath: path) }
-    var name: String { (path as NSString).lastPathComponent.isEmpty ? path : (path as NSString).lastPathComponent }
+    var name: String {
+        let lastComponent = (path as NSString).lastPathComponent
+        return lastComponent.isEmpty ? path : lastComponent
+    }
     var childrenOptional: [FolderUsage]? { children.isEmpty ? nil : children }
 
     init(path: String, size: Int64, isFile: Bool = false, children: [FolderUsage] = []) {

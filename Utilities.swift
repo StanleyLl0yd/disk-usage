@@ -72,7 +72,7 @@ nonisolated enum SortOption: String, CaseIterable, Identifiable, Sendable {
             case .sizeAsc:
                 return lhs.size != rhs.size ? lhs.size < rhs.size : lhs.path < rhs.path
             case .name:
-                let comparison = lhs.path.localizedCaseInsensitiveCompare(rhs.path)
+                let comparison = lhs.name.localizedCaseInsensitiveCompare(rhs.name)
                 return comparison == .orderedSame
                     ? lhs.path < rhs.path
                     : comparison == .orderedAscending

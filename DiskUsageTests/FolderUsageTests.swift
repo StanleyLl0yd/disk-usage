@@ -56,6 +56,22 @@ final class FolderUsageTests: XCTestCase {
         XCTAssertEqual(SortOption.name.sorted([lower, upper]).map(\.path), [upper.path, lower.path])
     }
 
+    func testNameSortUsesBasenameAcrossDirectoriesAndSearchResults() throws {
+        let zebra = FolderUsage(path: "/scope/a-parent/Zebra.txt", size: 10, isFile: true)
+        let apple = FolderUsage(path: "/scope/z-parent/Apple.txt", size: 20, isFile: true)
+
+        XCTAssertEqual(SortOption.name.sorted([zebra, apple]).map(\.path), [apple.path, zebra.path])
+
+        let sources = [
+            FolderUsage(path: "/scope/a-parent", size: 10, children: [zebra]),
+            FolderUsage(path: "/scope/z-parent", size: 20, children: [apple])
+        ]
+        let results = try XCTUnwrap(
+            SearchPresentationPreprocessor.matches(in: sources, query: ".txt", sortedBy: .name)
+        )
+        XCTAssertEqual(results.map(\.path), [apple.path, zebra.path])
+    }
+
     func testTreePresentationPreprocessorSortsEveryLevelWithoutChangingSource() {
         let small = FolderUsage(path: "/root/a/small", size: 10, isFile: true)
         let large = FolderUsage(path: "/root/a/large", size: 90, isFile: true)
