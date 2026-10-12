@@ -72,6 +72,26 @@ final class FolderUsageTests: XCTestCase {
         XCTAssertEqual(results.map(\.path), [apple.path, zebra.path])
     }
 
+    func testCancelledPresentationPreprocessorsExitWithoutPublishing() async {
+        let checks = await Task.detached { () -> [Bool] in
+            let file = FolderUsage(path: "/scope/cancelled.txt", size: 10, isFile: true)
+            withUnsafeCurrentTask { $0?.cancel() }
+
+            return [
+                TreePresentationPreprocessor.sorted([file], by: .name) == nil,
+                SearchPresentationPreprocessor.matches(
+                    in: [file], query: "cancelled", sortedBy: .name
+                ) == nil,
+                LargestFilesPresentationPreprocessor.largestFiles(in: [file]) == nil,
+                SunburstPresentationPreprocessor.presentation(
+                    for: [file], totalSize: 10
+                ) == nil
+            ]
+        }.value
+
+        XCTAssertEqual(checks, [true, true, true, true])
+    }
+
     func testTreePresentationPreprocessorSortsEveryLevelWithoutChangingSource() {
         let small = FolderUsage(path: "/root/a/small", size: 10, isFile: true)
         let large = FolderUsage(path: "/root/a/large", size: 90, isFile: true)

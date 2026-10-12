@@ -10,7 +10,7 @@ nonisolated enum LargestFilesPresentationPreprocessor {
         limit: Int = defaultLimit
     ) -> [FolderUsage]? {
         guard limit > 0 else { return [] }
-        guard !isCancelled else { return nil }
+        guard !Task.isCancelled else { return nil }
 
         var heap: [FolderUsage] = []
         heap.reserveCapacity(limit)
@@ -19,7 +19,7 @@ nonisolated enum LargestFilesPresentationPreprocessor {
             guard collectFiles(in: item, limit: limit, heap: &heap) else { return nil }
         }
 
-        guard !isCancelled else { return nil }
+        guard !Task.isCancelled else { return nil }
         return heap.sorted { isBetter($0, than: $1) }
     }
 
@@ -28,7 +28,7 @@ nonisolated enum LargestFilesPresentationPreprocessor {
         limit: Int,
         heap: inout [FolderUsage]
     ) -> Bool {
-        guard !isCancelled else { return false }
+        guard !Task.isCancelled else { return false }
 
         if item.isFile {
             retain(item, limit: limit, heap: &heap)
@@ -99,11 +99,6 @@ nonisolated enum LargestFilesPresentationPreprocessor {
         return lhs.path > rhs.path
     }
 
-    private static var isCancelled: Bool {
-        withUnsafeCurrentTask { task in
-            task?.isCancelled ?? false
-        }
-    }
 }
 
 nonisolated enum SearchPresentationPreprocessor {
@@ -114,14 +109,14 @@ nonisolated enum SearchPresentationPreprocessor {
     ) -> [FolderUsage]? {
         let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !query.isEmpty else { return [] }
-        guard !isCancelled else { return nil }
+        guard !Task.isCancelled else { return nil }
 
         var matches: [FolderUsage] = []
         for item in source {
             guard collectMatches(in: item, query: query, into: &matches) else { return nil }
         }
 
-        guard !isCancelled else { return nil }
+        guard !Task.isCancelled else { return nil }
         return option.sorted(matches)
     }
 
@@ -130,7 +125,7 @@ nonisolated enum SearchPresentationPreprocessor {
         query: String,
         into matches: inout [FolderUsage]
     ) -> Bool {
-        guard !isCancelled else { return false }
+        guard !Task.isCancelled else { return false }
 
         if item.name.localizedCaseInsensitiveContains(query)
             || item.path.localizedCaseInsensitiveContains(query) {
@@ -143,11 +138,6 @@ nonisolated enum SearchPresentationPreprocessor {
         return true
     }
 
-    private static var isCancelled: Bool {
-        withUnsafeCurrentTask { task in
-            task?.isCancelled ?? false
-        }
-    }
 }
 
 @MainActor
