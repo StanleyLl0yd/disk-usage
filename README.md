@@ -29,25 +29,25 @@ A fast, privacy-first disk space analyzer for macOS built with SwiftUI.
 2. Build and run.
 3. If scanning protected areas, grant **Full Disk Access** in System Settings → Privacy & Security.
 
-## Alpha builds
-The project owner approved unsigned alpha binary distribution before R5.4. Alpha artifacts are intentionally **not Developer ID signed and not notarized**, so macOS Gatekeeper may block a normal first launch.
+## Test builds
+The owner approved unsigned **numeric-only** test builds. The current requested test release is `v0.2.0` (app version `0.2.0`, build `2`); the version and tag contain no alpha/beta/rc suffix. GitHub may label the release as a prerelease to indicate that real-device acceptance remains outstanding.
 
-Each prerelease publishes a universal `arm64` + `x86_64` app archive, a DMG, and `SHA256SUMS`. Verify the downloaded artifact before opening it and do not disable Gatekeeper globally. See [`docs/RELEASE.md`](docs/RELEASE.md) for the testing policy and safe launch guidance.
+The app archive and DMG contain a universal `arm64` + `x86_64` app. Each published release also includes `SHA256SUMS`. Test binaries are **not Developer ID signed or notarized**, so macOS Gatekeeper may block a normal first launch. Verify the checksum first, and use only macOS's per-app override rather than disabling Gatekeeper globally. See [`docs/RELEASE.md`](docs/RELEASE.md).
 
-The first binary alpha, `v0.1.0-alpha.1`, is published from verified `main` commit `23355eeed05f777022a2f2aed19ccf90d6e55a27`, using app version `0.1.0` build `1`.
+The historic `v0.1.0-alpha.1` release remains bound to original commit `23355eeed05f777022a2f2aed19ccf90d6e55a27`; it does not contain the completed R5–R7 product.
 
 ## Verification
 Run the `DiskUsage` shared scheme to build the app and execute the regression tests. CI uses Xcode 26.6 as the canonical toolchain. Repeatable presentation-performance workloads and profiling guidance are documented in [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md).
 
 ## Status & Roadmap
-- Current app version: `0.1.0` (build `1`).
-- Distribution policy: source plus owner-approved unsigned alpha prereleases; signed/notarized binaries are not available yet.
+- Current app version: `0.2.0` (build `2`).
+- Distribution policy: source plus owner-approved unsigned numeric test releases; signed/notarized binaries are not available yet.
 - **R3 — Unified selection, navigation, and polished Tree view is complete.**
 - **R4 — Sunburst 2.0: DiskUsage visual identity is complete.** All five R4 slices are implemented and verified, and the separate master exit review found no remaining R4 gap.
 - **R5 — Core productivity workflow is complete.** R5.1–R5.5 are implemented and verified, the repository-wide exit review passed, and release tags `v*` are protected against update/deletion with the published `v0.1.0-alpha.1` still bound to its verified source commit.
 - **R6 — Large-scale resilience and measured optimization is complete.** R6.1–R6.11 measured scanner, memory, derived presentation, publication, and real SwiftUI interaction at representative large synthetic/disposable scales; the evidence-driven runtime changes were kept narrow, rejected candidates stayed out of production, and the separate repository-wide exit review found no remaining R6 blocker.
 - **R7 — Release-quality product polish is complete.** R7.1–R7.5 are implemented and verified, and the separate repository-wide exit review found no remaining R7 blocker across accessibility, keyboard interaction, localization and copy, state/action wiring, resize/high-DPI evidence, regression coverage, safety, privacy, or release integrity. See [`docs/ROADMAP.md`](docs/ROADMAP.md).
-- Version `1.0.0` remains reserved for a separate explicit binary-release decision; R7 completion does not introduce Developer ID signing/notarization or change the current unsigned-alpha distribution policy.
+- Version `1.0.0` remains reserved for a separate explicit production-release decision; the approved numeric test release does not introduce Developer ID signing/notarization.
 
 ## Contributing
 Pull requests and issues are welcome. For UI changes, include a short note or screenshot.
