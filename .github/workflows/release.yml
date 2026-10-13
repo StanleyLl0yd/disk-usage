@@ -1,4 +1,4 @@
-name: Prerelease
+name: Test Release
 
 on:
   pull_request:
@@ -15,7 +15,7 @@ on:
 permissions: {}
 
 concurrency:
-  group: prerelease-${{ github.workflow }}-${{ github.ref }}
+  group: test-release-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -35,23 +35,23 @@ jobs:
       - name: Select Xcode 26.6
         run: sudo xcode-select -s /Applications/Xcode_26.6.app/Contents/Developer
 
-      - name: Reject unapproved prerelease channels
+      - name: Reject version suffixes and reserved 1.0.0
         shell: bash
         run: |
           set -euo pipefail
           approved_tag="$(plutil -extract tag raw .release/request.json)"
-          version="${approved_tag%%-alpha.*}"
-          for channel in beta rc; do
-            request="$RUNNER_TEMP/rejected-${channel}.json"
+          for rejected_tag in "${approved_tag}-alpha.1" "${approved_tag}-beta.1" "${approved_tag}-rc.1" "v1.0.0"; do
+            safe_name="${rejected_tag//[^a-zA-Z0-9]/-}"
+            request="$RUNNER_TEMP/rejected-${safe_name}.json"
             cp .release/request.json "$request"
-            plutil -replace tag -string "${version}-${channel}.1" "$request"
-            if scripts/package_release.sh "$request" "$RUNNER_TEMP/rejected-${channel}"; then
-              echo "::error::Unsigned ${channel} prerelease unexpectedly passed validation."
+            plutil -replace tag -string "$rejected_tag" "$request"
+            if scripts/package_release.sh "$request" "$RUNNER_TEMP/rejected-${safe_name}"; then
+              echo "::error::Unapproved test-release tag ${rejected_tag} passed validation."
               exit 1
             fi
           done
 
-      - name: Verify unsigned prerelease package
+      - name: Verify unsigned numeric test package
         shell: bash
         run: |
           set -euo pipefail
@@ -137,7 +137,7 @@ jobs:
       - name: Select Xcode 26.6
         run: sudo xcode-select -s /Applications/Xcode_26.6.app/Contents/Developer
 
-      - name: Build and package unsigned prerelease
+      - name: Build and package unsigned numeric test release
         run: scripts/package_release.sh .release/request.json "$RUNNER_TEMP/release"
 
       - name: Read release request
@@ -197,9 +197,9 @@ jobs:
           cat > "$RUNNER_TEMP/release-notes.md" <<EOF
           ## DiskUsage ${version}
 
-          Early alpha build for real-world testing.
+          Test build for real-world macOS acceptance. The numeric version has no channel suffix; GitHub marks the release as a prerelease to distinguish it from a signed production release.
 
-          **Not Developer ID signed / not notarized:** these binaries intentionally have no Developer ID identity and are not notarized. macOS Gatekeeper may block a normal first launch. Do not disable Gatekeeper globally; follow the testing guidance in docs/RELEASE.md if you choose to run this alpha.
+          **Not Developer ID signed / not notarized:** these binaries intentionally have no Developer ID identity and are not notarized. macOS Gatekeeper may block a normal first launch. Do not disable Gatekeeper globally; follow the per-app testing guidance in docs/RELEASE.md.
 
           - macOS 14.0+
           - universal binary: arm64 + x86_64
@@ -207,7 +207,7 @@ jobs:
           - artifacts: app ZIP, DMG, and SHA256SUMS
           EOF
 
-      - name: Publish GitHub prerelease
+      - name: Publish GitHub test release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.request.outputs.tag }}

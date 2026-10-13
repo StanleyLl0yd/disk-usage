@@ -24,10 +24,11 @@ fi
 TAG="$(plutil -extract tag raw "$REQUEST_FILE")"
 BUILD="$(plutil -extract build raw "$REQUEST_FILE")"
 
-if [[ "$TAG" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)-alpha\.([1-9][0-9]*)$ ]]; then
+# Test releases use numeric 0.x.y tags; 1.0.0 is reserved for a separate decision.
+if [[ "$TAG" =~ ^v(0\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*))$ ]]; then
   VERSION="${BASH_REMATCH[1]}"
 else
-  echo "Unsupported alpha prerelease tag: $TAG" >&2
+  echo "Unsupported numeric test-release tag: $TAG" >&2
   exit 1
 fi
 

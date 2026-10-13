@@ -567,11 +567,11 @@ R6 is complete when the largest practical tested workloads have documented behav
 
 # R7 — Release-quality product polish
 
-**Status: COMPLETE / UNSIGNED ALPHA EXCEPTION APPROVED**
+**Status: COMPLETE / UNSIGNED NUMERIC TEST RELEASE APPROVED**
 
 R7.1–R7.5 are complete and verified. R7.1 established the accessibility/Reduce Motion baseline; R7.2 added Sunburst hardware-keyboard focus and activation; R7.3 synchronized product status and build hygiene; R7.4 verified resize/high-DPI smoke behavior within its tested scope (its missing Sunburst outer-ring containment check was discovered and fixed later in post-R7 audit #145 / PR #147); and R7.5 completed the final regression/visual-consistency pass while fixing plural-aware EN/RU count copy and covering locale-native grouping. The separate repository-wide R7 exit review (#142) found no remaining R7 runtime, correctness, safety, privacy, accessibility, localization, layout, release-integrity, or architecture blocker.
 
-The owner-approved unsigned alpha distribution exception remains unchanged. R7 completion does not introduce Developer ID signing/notarization and does not itself publish or authorize version 1.0.0; any binary/version release is a separate explicit product/release decision.
+A separate owner decision authorized an unsigned numeric-only test build `v0.2.0` (app `0.2.0`, build `2`) after R7 and the subsequent repository-wide audit. GitHub may mark it as a prerelease without adding a channel suffix to its version. This does not introduce Developer ID signing/notarization or authorize production version 1.0.0.
 
 ## Scope before binary release
 
@@ -623,4 +623,4 @@ These are not assumed future stages.
 
 **R6 — Large-scale resilience and measured optimization is complete.** R6.1–R6.11 are implemented/measured and verified, the separate full repository-wide exit review passed, the two retained scanner optimizations remain narrow and evidence-backed, rejected Search/Tree candidates remain out of production, and the remaining framework-heavy native Tree cost is explicitly accepted at the tested 128,700-node synthetic scale.
 
-**R7 — Release-quality product polish is complete.** R7.1–R7.5 are implemented and verified, the separate repository-wide exit review (#142) found no remaining R7 blocker, and all product-stage scope through R7 is complete under the current unsigned-alpha distribution policy. No later roadmap stage is started automatically. Version 1.0.0, signing/notarization, and any new binary-release action require a separate explicit owner decision.
+**R7 — Release-quality product polish is complete.** R7.1–R7.5 are implemented and verified, the separate repository-wide exit review (#142) found no remaining R7 blocker, and all product-stage scope through R7 is complete under the current unsigned-alpha distribution policy. No later roadmap stage is started automatically. Production version 1.0.0 and signing/notarization still require a separate explicit owner decision; the numeric test build `v0.2.0` is independently approved for real-device acceptance.

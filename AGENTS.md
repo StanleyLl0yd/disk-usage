@@ -300,9 +300,9 @@ Do not weaken or bypass a required security gate merely to make a pull request m
 
 ## Release integrity
 
-DiskUsage is developed source-first and also has an explicit project-owner-approved unsigned alpha distribution path. The current alpha path intentionally uses no Developer ID identity, notarization, signing secrets, or privileged signing credentials.
+DiskUsage is developed source-first and has an explicit project-owner-approved unsigned numeric test-release distribution path. It uses no Developer ID identity, notarization, signing secrets, or privileged signing credentials. GitHub prerelease metadata may distinguish test artifacts without appending a channel suffix to the version.
 
-For owner-approved unsigned alpha releases:
+For owner-approved unsigned numeric test releases:
 
 - build artifacts only from an exact verified `main` commit;
 - bind artifacts to the exact release tag and source commit;
@@ -312,7 +312,7 @@ For owner-approved unsigned alpha releases:
 - keep release publishing isolated from ordinary pull-request workflows and use least-privilege permissions;
 - do not introduce signing or notarization secrets under the unsigned-alpha exception.
 
-Do not expand the unsigned-alpha exception into signed/notarized production distribution, automatic updates, signing secrets, or additional release channels without explicit project-owner approval.
+Do not expand the numeric unsigned-test exception into signed/notarized production distribution, automatic updates, signing secrets, or additional release channels without explicit project-owner approval.
 
 When signed or notarized binary releases are introduced:
 
@@ -338,9 +338,9 @@ The canonical platform baseline is:
 - Swift 6 language mode;
 - Xcode 26.6 stable for CI and canonical verification;
 - minimum supported macOS 14.0;
-- pre-release marketing versions remain in the `0.x.y` range until R7 release readiness and an explicit production-release decision.
+- owner-approved test release tags and app versions use strictly numeric `0.x.y` values (no alpha/beta/rc suffix), until an explicit production-release decision.
 
-The current project version is `0.1.0` with build number `1`. R7 release-quality product polish is complete, but that completion does not authorize version `1.0.0`, signed/notarized distribution, or a new release channel. Any platform-baseline or versioning change requires explicit project-owner review and synchronized updates to the Xcode project, CI, and both READMEs.
+The owner-approved numeric test release has project version `0.2.0` and build number `2`, with tag `v0.2.0`. R7 release-quality product polish is complete, but this test release does not authorize version `1.0.0`, signed/notarized distribution, or another release channel. Any further platform-baseline or versioning change requires explicit project-owner review and synchronized updates to the Xcode project, CI, and both READMEs.
 
 Do not silently raise the deployment target.
 
