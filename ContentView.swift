@@ -626,18 +626,15 @@ struct ContentView: View {
 
     private var workspaceHeader: some View {
         VStack(alignment: .leading, spacing: ZenDesign.Spacing.small) {
-            HStack(spacing: ZenDesign.Spacing.large) {
-                Text(viewModel.targetDescription)
-                    .font(ZenDesign.Typography.section)
-                    .foregroundStyle(ZenDesign.Colors.primaryText)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+            Text(viewModel.targetDescription)
+                .font(ZenDesign.Typography.section)
+                .foregroundStyle(ZenDesign.Colors.primaryText)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .frame(maxWidth: .infinity, alignment: .leading)
 
-                if viewModel.diskInfo.totalCapacity > 0 {
-                    DiskInfoBar(diskInfo: viewModel.diskInfo)
-                        .frame(maxWidth: 520)
-                }
+            if viewModel.diskInfo.totalCapacity > 0 {
+                DiskInfoBar(diskInfo: viewModel.diskInfo)
             }
 
             if viewModel.lifecycle == .completed || viewModel.lifecycle == .cancelled {
@@ -780,11 +777,11 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: ZenDesign.Spacing.compact) {
             HStack(spacing: ZenDesign.Spacing.small) {
                 Image(systemName: "lock.fill")
-                    .foregroundStyle(ZenDesign.Colors.mutedText)
+                    .foregroundStyle(ZenDesign.Colors.warning)
                     .accessibilityHidden(true)
                 Text(formatRestrictedFolderCount(viewModel.restricted.count))
-                .font(ZenDesign.Typography.detail)
-                .foregroundStyle(ZenDesign.Colors.secondaryText)
+                    .font(ZenDesign.Typography.detail)
+                    .foregroundStyle(ZenDesign.Colors.primaryText)
                 Spacer()
             }
 
@@ -794,8 +791,8 @@ struct ContentView: View {
                     defaultValue: "Some locations could not be read. Full Disk Access is controlled by macOS System Settings. Enable it for DiskUsage, then rescan."
                 )
             )
-            .font(ZenDesign.Typography.micro)
-            .foregroundStyle(ZenDesign.Colors.mutedText)
+            .font(ZenDesign.Typography.detail)
+            .foregroundStyle(ZenDesign.Colors.secondaryText)
 
             RestrictedAccessActions(
                 canRescan: viewModel.canRescan,
@@ -806,7 +803,7 @@ struct ContentView: View {
         }
         .padding(.horizontal, ZenDesign.Spacing.medium)
         .padding(.vertical, ZenDesign.Spacing.small)
-        .background(ZenDesign.Colors.surface)
+        .background(ZenDesign.Colors.elevatedSurface)
         .clipShape(RoundedRectangle(cornerRadius: ZenDesign.Radius.medium, style: .continuous))
     }
 
@@ -839,44 +836,51 @@ struct SelectedItemDetail: View {
     let onDelete: (FolderUsage) -> Void
 
     var body: some View {
-        HStack(alignment: .center, spacing: ZenDesign.Spacing.large) {
-            HStack(alignment: .top, spacing: ZenDesign.Spacing.small) {
-                Image(systemName: item.isFile ? "doc" : "folder")
-                    .foregroundStyle(item.isFile ? ZenDesign.Colors.secondaryText : ZenDesign.Colors.accent)
-                    .frame(width: 16)
-                    .accessibilityHidden(true)
+        VStack(alignment: .leading, spacing: ZenDesign.Spacing.small) {
+            HStack(alignment: .top, spacing: ZenDesign.Spacing.large) {
+                HStack(alignment: .top, spacing: ZenDesign.Spacing.small) {
+                    Image(systemName: item.isFile ? "doc" : "folder")
+                        .foregroundStyle(item.isFile ? ZenDesign.Colors.secondaryText : ZenDesign.Colors.accent)
+                        .frame(width: 16)
+                        .accessibilityHidden(true)
 
-                VStack(alignment: .leading, spacing: ZenDesign.Spacing.compact) {
-                    Text(item.name)
-                        .font(ZenDesign.Typography.section)
+                    VStack(alignment: .leading, spacing: ZenDesign.Spacing.compact) {
+                        Text(item.name)
+                            .font(ZenDesign.Typography.section)
+                            .foregroundStyle(ZenDesign.Colors.primaryText)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+
+                        Text(item.path)
+                            .font(ZenDesign.Typography.detail)
+                            .foregroundStyle(ZenDesign.Colors.secondaryText)
+                            .textSelection(.enabled)
+                            .lineLimit(2)
+                            .truncationMode(.middle)
+                            .help(item.path)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                VStack(alignment: .trailing, spacing: ZenDesign.Spacing.compact) {
+                    Text(formatBytes(item.size))
+                        .font(ZenDesign.Typography.detail)
+                        .fontWeight(.medium)
                         .foregroundStyle(ZenDesign.Colors.primaryText)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
+                        .monospacedDigit()
+                        .fixedSize(horizontal: true, vertical: false)
 
-                    Text(item.path)
-                        .font(ZenDesign.Typography.micro)
-                        .foregroundStyle(ZenDesign.Colors.mutedText)
-                        .textSelection(.enabled)
-                        .fixedSize(horizontal: false, vertical: true)
+                    Text(formatPercent(item.size, of: totalSize))
+                        .font(ZenDesign.Typography.detail)
+                        .foregroundStyle(ZenDesign.Colors.secondaryText)
+                        .monospacedDigit()
+                        .fixedSize(horizontal: true, vertical: false)
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            VStack(alignment: .trailing, spacing: ZenDesign.Spacing.compact) {
-                Text(formatBytes(item.size))
-                    .font(ZenDesign.Typography.detail)
-                    .fontWeight(.medium)
-                    .foregroundStyle(ZenDesign.Colors.primaryText)
-                    .monospacedDigit()
-
-                Text(formatPercent(item.size, of: totalSize))
-                    .font(ZenDesign.Typography.micro)
-                    .foregroundStyle(ZenDesign.Colors.mutedText)
-                    .monospacedDigit()
-            }
-            .frame(minWidth: 76, alignment: .trailing)
 
             HStack(spacing: ZenDesign.Spacing.compact) {
+                Spacer(minLength: 0)
+
                 Button {
                     onShowInFinder(item)
                 } label: {
@@ -907,6 +911,7 @@ struct SelectedItemDetail: View {
             }
             .buttonStyle(.bordered)
             .controlSize(.small)
+            .fixedSize(horizontal: true, vertical: false)
         }
         .padding(.horizontal, ZenDesign.Spacing.medium)
         .padding(.vertical, ZenDesign.Spacing.small)
@@ -953,7 +958,7 @@ struct DiskInfoBar: View {
 
     private var usedRatio: Double {
         guard diskInfo.totalCapacity > 0 else { return 0 }
-        return Double(diskInfo.usedSpace) / Double(diskInfo.totalCapacity)
+        return min(1, max(0, Double(diskInfo.usedSpace) / Double(diskInfo.totalCapacity)))
     }
 
     private var barColor: Color {
@@ -965,11 +970,36 @@ struct DiskInfoBar: View {
     }
 
     var body: some View {
-        HStack(spacing: ZenDesign.Spacing.medium) {
-            Image(systemName: "internaldrive.fill")
-                .font(.system(size: 14))
-                .foregroundStyle(ZenDesign.Colors.secondaryText)
-                .accessibilityHidden(true)
+        VStack(alignment: .leading, spacing: ZenDesign.Spacing.small) {
+            HStack(spacing: ZenDesign.Spacing.medium) {
+                Image(systemName: "internaldrive.fill")
+                    .font(.system(size: 14))
+                    .foregroundStyle(ZenDesign.Colors.secondaryText)
+                    .accessibilityHidden(true)
+
+                Text(verbatim: "\(formatBytes(diskInfo.usedSpace)) / \(formatBytes(diskInfo.totalCapacity))")
+                    .fontWeight(.medium)
+                    .foregroundStyle(ZenDesign.Colors.primaryText)
+                    .fixedSize(horizontal: true, vertical: false)
+
+                Text(String(format: "(%.0f%%)", diskInfo.usedPercent))
+                    .foregroundStyle(ZenDesign.Colors.secondaryText)
+                    .fixedSize(horizontal: true, vertical: false)
+
+                Spacer(minLength: ZenDesign.Spacing.small)
+
+                HStack(spacing: ZenDesign.Spacing.compact) {
+                    Text(String(localized: "disk.free", defaultValue: "Free:"))
+                        .foregroundStyle(ZenDesign.Colors.secondaryText)
+                    Text(formatBytes(diskInfo.freeSpace))
+                        .fontWeight(.medium)
+                        .foregroundStyle(ZenDesign.Colors.primaryText)
+                }
+                .fixedSize(horizontal: true, vertical: false)
+            }
+            .font(ZenDesign.Typography.detail)
+            .monospacedDigit()
+            .lineLimit(1)
 
             GeometryReader { geometry in
                 ZStack(alignment: .leading) {
@@ -980,30 +1010,7 @@ struct DiskInfoBar: View {
                 }
             }
             .frame(height: 8)
-            .frame(maxWidth: 180)
             .accessibilityHidden(true)
-
-            HStack(spacing: ZenDesign.Spacing.compact) {
-                Text(formatBytes(diskInfo.usedSpace))
-                    .fontWeight(.medium)
-                Text("/")
-                    .foregroundStyle(ZenDesign.Colors.secondaryText)
-                Text(formatBytes(diskInfo.totalCapacity))
-                    .foregroundStyle(ZenDesign.Colors.secondaryText)
-                Text(String(format: "(%.0f%%)", diskInfo.usedPercent))
-                    .foregroundStyle(ZenDesign.Colors.secondaryText)
-            }
-            .font(ZenDesign.Typography.detail)
-            .monospacedDigit()
-
-            HStack(spacing: ZenDesign.Spacing.compact) {
-                Text(String(localized: "disk.free", defaultValue: "Free:"))
-                    .foregroundStyle(ZenDesign.Colors.secondaryText)
-                Text(formatBytes(diskInfo.freeSpace))
-                    .fontWeight(.medium)
-            }
-            .font(ZenDesign.Typography.detail)
-            .monospacedDigit()
         }
     }
 }
