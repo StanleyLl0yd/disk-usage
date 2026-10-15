@@ -423,6 +423,7 @@ final class FolderUsageTests: XCTestCase {
         XCTAssertLessThanOrEqual(lightRoot.saturation, 0.5)
         XCTAssertGreaterThan(lightRoot.saturation, lightDeep.saturation)
         XCTAssertGreaterThan(lightRoot.brightness, lightDeep.brightness)
+        XCTAssertGreaterThan(lightRoot.brightness - lightDeep.brightness, 0.14)
         XCTAssertGreaterThan(darkRoot.brightness, lightRoot.brightness)
     }
 
@@ -547,6 +548,24 @@ final class FolderUsageTests: XCTestCase {
             geometry.ringWidth,
             SunburstGeometry.preferredRingWidth,
             accuracy: 0.0001
+        )
+    }
+
+    func testSunburstCenterDistinguishesTemporaryPointerPreviewFromSelection() {
+        XCTAssertEqual(
+            SunburstCenterSource.resolve(hasPointer: true, hasKeyboard: true, hasSelection: true),
+            .pointer
+        )
+        XCTAssertEqual(
+            SunburstCenterSource.resolve(hasPointer: false, hasKeyboard: true, hasSelection: true),
+            .keyboard
+        )
+        XCTAssertEqual(
+            SunburstCenterSource.resolve(hasPointer: false, hasKeyboard: false, hasSelection: true),
+            .selected
+        )
+        XCTAssertNil(
+            SunburstCenterSource.resolve(hasPointer: false, hasKeyboard: false, hasSelection: false)
         )
     }
 
