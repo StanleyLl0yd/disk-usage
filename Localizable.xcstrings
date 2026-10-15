@@ -366,6 +366,24 @@
         "ru" : { "stringUnit" : { "state" : "translated", "value" : "Перемещено в Корзину." } }
       }
     },
+    "sunburst.center.keyboard" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Keyboard focus" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Фокус клавиатуры" } }
+      }
+    },
+    "sunburst.center.pointer" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Under pointer" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Под указателем" } }
+      }
+    },
+    "sunburst.center.selected" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Selected" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Выбрано" } }
+      }
+    },
     "sunburst.other" : {
       "localizations" : {
         "en" : { "stringUnit" : { "state" : "translated", "value" : "Other" } },

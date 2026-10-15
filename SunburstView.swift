@@ -52,6 +52,20 @@ nonisolated enum SunburstKeyboardNavigation {
     }
 }
 
+// Distinguish temporary inspection from the persistent item selection.
+nonisolated enum SunburstCenterSource: Equatable {
+    case pointer
+    case keyboard
+    case selected
+
+    static func resolve(hasPointer: Bool, hasKeyboard: Bool, hasSelection: Bool) -> Self? {
+        if hasPointer { return .pointer }
+        if hasKeyboard { return .keyboard }
+        if hasSelection { return .selected }
+        return nil
+    }
+}
+
 @MainActor
 final class SunburstPresentationState: ObservableObject {
     @Published private(set) var model = SunburstPresentation.empty
@@ -216,25 +230,46 @@ struct SunburstView: View {
         return .easeInOut(duration: 0.2)
     }
 
-    private var focusedContent: (name: String, size: Int64)? {
-        if let hoveredSegmentID,
-           let hovered = renderableSegments.first(where: { $0.id == hoveredSegmentID }) {
-            return (displayName(for: hovered), hovered.size)
+    private var focusedContent: (name: String, size: Int64, source: SunburstCenterSource)? {
+        let hovered = hoveredSegmentID.flatMap { id in
+            renderableSegments.first(where: { $0.id == id })
+        }
+        let keyboard = effectiveKeyboardFocusedSegmentID.flatMap { id in
+            renderableSegments.first(where: { $0.id == id })
+        }
+        let selected: FolderUsage? = selectedPath.flatMap { path in
+            presentation.model.segments.first(where: { $0.item.path == path })?.item
+                ?? resolvedPath.last.flatMap { $0.path == path ? $0 : nil }
         }
 
-        if let keyboardFocusedSegmentID = effectiveKeyboardFocusedSegmentID,
-           let focused = renderableSegments.first(where: { $0.id == keyboardFocusedSegmentID }) {
-            return (displayName(for: focused), focused.size)
+        switch SunburstCenterSource.resolve(
+            hasPointer: hovered != nil,
+            hasKeyboard: keyboard != nil,
+            hasSelection: selected != nil
+        ) {
+        case .pointer:
+            guard let hovered else { return nil }
+            return (displayName(for: hovered), hovered.size, .pointer)
+        case .keyboard:
+            guard let keyboard else { return nil }
+            return (displayName(for: keyboard), keyboard.size, .keyboard)
+        case .selected:
+            guard let selected else { return nil }
+            return (selected.name, selected.size, .selected)
+        case nil:
+            return nil
         }
+    }
 
-        guard let selectedPath else { return nil }
-        if let selected = presentation.model.segments.first(where: { $0.item.path == selectedPath }) {
-            return (selected.item.name, selected.item.size)
+    private func centerSourceLabel(_ source: SunburstCenterSource) -> String {
+        switch source {
+        case .pointer:
+            String(localized: "sunburst.center.pointer", defaultValue: "Under pointer")
+        case .keyboard:
+            String(localized: "sunburst.center.keyboard", defaultValue: "Keyboard focus")
+        case .selected:
+            String(localized: "sunburst.center.selected", defaultValue: "Selected")
         }
-        if let root = resolvedPath.last, root.path == selectedPath {
-            return (root.name, root.size)
-        }
-        return nil
     }
 
     var body: some View {
@@ -269,6 +304,9 @@ struct SunburstView: View {
             .allowsHitTesting(!presentation.isPreparing)
             .accessibilityHidden(presentation.isPreparing)
             .focusable()
+            // The selected/keyboard segment already has a visible accent outline.
+            // Suppress the oversized macOS rectangular focus effect, not keyboard focus itself.
+            .focusEffectDisabled()
             .focused($isSunburstFocused)
             .onKeyPress(.leftArrow) {
                 moveKeyboardFocus(by: -1)
@@ -481,6 +519,9 @@ struct SunburstView: View {
     private var centerContent: some View {
         if let focusedContent {
             VStack(spacing: 3) {
+                Text(centerSourceLabel(focusedContent.source))
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(ZenDesign.Colors.secondaryText)
                 Text(focusedContent.name)
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(ZenDesign.Colors.primaryText)
@@ -580,7 +621,7 @@ struct SunburstView: View {
         if isHovered {
             return ZenDesign.Colors.accent.opacity(0.55)
         }
-        return ZenDesign.Colors.surface.opacity(colorScheme == .dark ? 0.70 : 0.92)
+        return ZenDesign.Colors.surface.opacity(colorScheme == .dark ? 0.90 : 0.96)
     }
 
     private func segmentStrokeWidth(
@@ -597,7 +638,7 @@ struct SunburstView: View {
         if isHovered {
             return 1.4
         }
-        return 0.8
+        return 1
     }
 
     private func breadcrumbColor(for item: FolderUsage, index: Int) -> Color {

@@ -163,10 +163,10 @@ nonisolated enum SunburstPalette {
 
         return SunburstTone(
             hue: hue(at: normalizedIndex),
-            saturation: max(0.26, 0.46 - depth * 0.045),
+            saturation: max(0.26, 0.48 - depth * 0.06),
             brightness: darkMode
-                ? max(0.70, 0.84 - depth * 0.035)
-                : max(0.62, 0.80 - depth * 0.05)
+                ? max(0.65, 0.86 - depth * 0.06)
+                : max(0.60, 0.82 - depth * 0.06)
         )
     }
 
