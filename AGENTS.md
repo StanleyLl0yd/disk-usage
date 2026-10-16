@@ -340,7 +340,7 @@ The canonical platform baseline is:
 - minimum supported macOS 14.0;
 - owner-approved test release tags and app versions use strictly numeric `0.x.y` values (no alpha/beta/rc suffix), until an explicit production-release decision.
 
-The owner-approved numeric test release has project version `0.2.0` and build number `2`, with tag `v0.2.0`. R7 release-quality product polish is complete, but this test release does not authorize version `1.0.0`, signed/notarized distribution, or another release channel. Any further platform-baseline or versioning change requires explicit project-owner review and synchronized updates to the Xcode project, CI, and both READMEs.
+Owner-approved unsigned numeric test releases include `v0.2.0` (app `0.2.0`, build `2`) and follow-up `v0.2.1` (app `0.2.1`, build `3`) for real-device UI acceptance after PRs #157 and #158. R7 release-quality product polish is complete, but this test release does not authorize version `1.0.0`, signed/notarized distribution, or another release channel. Any further platform-baseline or versioning change requires explicit project-owner review and synchronized updates to the Xcode project, CI, and both READMEs.
 
 Do not silently raise the deployment target.
 
