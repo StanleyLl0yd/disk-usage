@@ -1,6 +1,6 @@
 # Unsigned numeric test releases
 
-DiskUsage uses numeric-only `0.x.y` version and tag identifiers for owner-approved test builds. The current release request is **`v0.2.0`**, app version **`0.2.0`**, build **`2`**. No alpha, beta, rc, or other channel suffix is appended to a new version number. The GitHub Release is marked as a **prerelease** to show that real-device acceptance is still pending, not to encode a channel into the version.
+DiskUsage uses numeric-only `0.x.y` version and tag identifiers for owner-approved test builds. The current release request is **`v0.2.1`**, app version **`0.2.1`**, build **`3`**. No alpha, beta, rc, or other channel suffix is appended to a new version number. The GitHub Release is marked as a **prerelease** to show that real-device acceptance is still pending, not to encode a channel into the version.
 
 R1–R7 and the post-R7 audit are complete. This is a **test distribution**, not a signed/notarized production `1.0.0` release.
 
@@ -12,8 +12,8 @@ The release is built from an exact, fully verified `main` commit using Xcode 26.
 
 Each release publishes:
 
-- `DiskUsage-0.2.0.app.zip`: universal `arm64` + `x86_64` app archive
-- `DiskUsage-0.2.0.dmg`: app and Applications shortcut
+- `DiskUsage-0.2.1.app.zip`: universal `arm64` + `x86_64` app archive
+- `DiskUsage-0.2.1.dmg`: app and Applications shortcut
 - `SHA256SUMS`: SHA-256 digests of the ZIP and DMG
 
 ## Verify a downloaded build
@@ -46,8 +46,14 @@ These checks require a real Mac and are not covered merely by a successful GitHu
 - Switch English/Russian, check plural count formatting, restart from Settings and verify state recovery.
 - Record crashes, permission-related failures, visual clipping and unexpected filesystem changes.
 
-Report findings against exact `v0.2.0` and the release source SHA, with macOS version and Mac architecture.
+Report findings against exact `v0.2.1` and the release source SHA, with macOS version and Mac architecture.
 
-## Historical release
+## Test focus for 0.2.1
+
+Verify the post-0.2.0 UI refinements from PRs #157 and #158 in addition to the real-device acceptance checklist in issue #155: the disk capacity bar at 800×600, complete Finder/Copy Path/Move to Trash button labels, readable restricted-location warnings in light/dark mode, and Sunburst focus, hover inspection, keyboard navigation, and ring contrast. The previous `v0.2.0` binaries are immutable and must not be mistaken for the revised interface.
+
+## Historical releases
+
+The previous `v0.2.0` test release was built from `2206edab4e445773db45bfc4e85f893d53f0a169` (version `0.2.0`, build `2`). It predates the #157/#158 screenshot-driven UI fixes.
 
 The previously published `v0.1.0-alpha.1` is an immutable historical binary built from `23355eeed05f777022a2f2aed19ccf90d6e55a27` (version `0.1.0`, build `1`). It is not a substitute for testing the current R7-complete product.

@@ -30,9 +30,11 @@ A fast, privacy-first disk space analyzer for macOS built with SwiftUI.
 3. If scanning protected areas, grant **Full Disk Access** in System Settings → Privacy & Security.
 
 ## Test builds
-The owner approved unsigned **numeric-only** test builds. The current requested test release is `v0.2.0` (app version `0.2.0`, build `2`); the version and tag contain no alpha/beta/rc suffix. GitHub may label the release as a prerelease to indicate that real-device acceptance remains outstanding.
+The owner approved unsigned **numeric-only** test builds. The current requested test release is `v0.2.1` (app version `0.2.1`, build `3`); the version and tag contain no alpha/beta/rc suffix. GitHub may label the release as a prerelease to indicate that real-device acceptance remains outstanding.
 
 The app archive and DMG contain a universal `arm64` + `x86_64` app. Each published release also includes `SHA256SUMS`. Test binaries are **not Developer ID signed or notarized**, so macOS Gatekeeper may block a normal first launch. Verify the checksum first, and use only macOS's per-app override rather than disabling Gatekeeper globally. See [`docs/RELEASE.md`](docs/RELEASE.md).
+
+The previous `v0.2.0` test release remains immutable and does not contain the UI refinements delivered by PRs #157 and #158. The `v0.2.1` test build includes those changes and is intended for real-Mac acceptance (issue #155).
 
 The historic `v0.1.0-alpha.1` release remains bound to original commit `23355eeed05f777022a2f2aed19ccf90d6e55a27`; it does not contain the completed R5–R7 product.
 
@@ -40,7 +42,7 @@ The historic `v0.1.0-alpha.1` release remains bound to original commit `23355eee
 Run the `DiskUsage` shared scheme to build the app and execute the regression tests. CI uses Xcode 26.6 as the canonical toolchain. Repeatable presentation-performance workloads and profiling guidance are documented in [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md).
 
 ## Status & Roadmap
-- Current app version: `0.2.0` (build `2`).
+- Current app version: `0.2.1` (build `3`).
 - Distribution policy: source plus owner-approved unsigned numeric test releases; signed/notarized binaries are not available yet.
 - **R3 — Unified selection, navigation, and polished Tree view is complete.**
 - **R4 — Sunburst 2.0: DiskUsage visual identity is complete.** All five R4 slices are implemented and verified, and the separate master exit review found no remaining R4 gap.
